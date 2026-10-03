@@ -234,13 +234,22 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
     test("evaluateRiskSecurityTriage rates technical risks", async () => {
       const mockClient: ExpertJudgeClient = {
         evaluate: async () => ({
-          answers: { risk_security_triage: { score: 2.5 } },
+          answers: { risk_security_triage: { score: 1.0 } },
         }),
       };
 
       const res = await evaluateRiskSecurityTriage("Context about auth tokens", mockClient);
-      expect(res.score).toBe(2.5);
+      expect(res.score).toBe(1.0);
       expect(res.acceptable).toBe(true);
+
+      const mockFailClient: ExpertJudgeClient = {
+        evaluate: async () => ({
+          answers: { risk_security_triage: { score: 2.5 } },
+        }),
+      };
+      const failRes = await evaluateRiskSecurityTriage("Context about auth tokens", mockFailClient);
+      expect(failRes.score).toBe(2.5);
+      expect(failRes.acceptable).toBe(false);
     });
   });
 

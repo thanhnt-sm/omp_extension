@@ -207,4 +207,128 @@ describe("Phase 3: OMP Extension Interception Bridge", () => {
     expect(cancelledReason).toBeDefined();
     expect(cancelledReason).toContain("Gate 1 Micro-Check");
   });
+
+  test("intercepts ask tool, automatically evaluates decision with TypeSafe, and attaches verdict to human prompt", async () => {
+    const { handlers } = createMockPi();
+    const interceptor = handlers.tool_call![0];
+
+    const originalFetch = globalThis.fetch;
+    const calls: { url: string; body: Record<string, unknown> }[] = [];
+    globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(init?.body?.toString() || "{}");
+      calls.push({ url: url.toString(), body });
+      return new Response(
+        JSON.stringify({
+          answers: {
+            risk_posture: { score: 1.0, confidence: 1.0 },
+            decision_clarity: { noul: 0.95 },
+          },
+        })
+      );
+    }) as unknown as typeof fetch;
+
+    try {
+      const askParams = {
+        i: "Database selection",
+        questions: [
+          {
+            id: "db",
+            header: "Database?",
+            question: "Choose a database for storage",
+            options: [{ label: "SQLite" }, { label: "Postgres" }],
+          },
+        ],
+      };
+
+      let cancelled = false;
+      const askEvent: MockEvent = {
+        tool: "ask",
+        params: askParams,
+        cancel: () => {
+          cancelled = true;
+        },
+      };
+
+      await interceptor(askEvent, { cwd: process.cwd() });
+      expect(cancelled).toBe(false);
+      expect(calls.length).toBe(1);
+      expect(calls[0].url).toContain("/v1/systemone");
+      expect(askParams.questions[0].question).toContain("🛡️ [TypeSafe System One Verdict]");
+      expect(askParams.questions[0].question).toContain("Risk: Low (1.0/3)");
+      expect(askParams.questions[0].header).toContain("[Low Risk]");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("handles ask tool gracefully when TypeSafe is unconfigured or offline (fail-open to human)", async () => {
+    const { handlers } = createMockPi();
+    const interceptor = handlers.tool_call![0];
+
+    const originalKey = process.env.TYPESAFE_API_KEY;
+    delete process.env.TYPESAFE_API_KEY;
+
+    try {
+      const askParams = {
+        i: "Proceed without key",
+        questions: [
+          {
+            id: "proceed",
+            question: "Do you want to proceed?",
+          },
+        ],
+      };
+
+      let cancelled = false;
+      const askEvent: MockEvent = {
+        tool: "ask",
+        params: askParams,
+        cancel: () => {
+          cancelled = true;
+        },
+      };
+
+      await interceptor(askEvent, { cwd: process.cwd() });
+      expect(cancelled).toBe(false);
+      expect(askParams.questions[0].question).toContain("TypeSafe System One: Evaluation offline");
+    } finally {
+      if (originalKey === undefined) {
+        delete process.env.TYPESAFE_API_KEY;
+      } else {
+        process.env.TYPESAFE_API_KEY = originalKey;
+      }
+    }
+  });
+
+  test("handles ask tool gracefully when TypeSafe returns evaluation error", async () => {
+    const { handlers } = createMockPi();
+    const interceptor = handlers.tool_call![0];
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      return new Response(JSON.stringify({ error: "internal_server_error" }), { status: 500 });
+    }) as unknown as typeof fetch;
+
+    try {
+      const askParams = {
+        i: "Database selection with error",
+        questions: [{ id: "db", question: "Pick a DB" }],
+      };
+
+      let cancelled = false;
+      const askEvent: MockEvent = {
+        tool: "ask",
+        params: askParams,
+        cancel: () => {
+          cancelled = true;
+        },
+      };
+
+      await interceptor(askEvent, { cwd: process.cwd() });
+      expect(cancelled).toBe(false);
+      expect(askParams.questions[0].question).toContain("TypeSafe System One: Evaluation unavailable");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });
