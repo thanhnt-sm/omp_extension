@@ -26,6 +26,7 @@ export interface DualGateVerificationResult {
   gate1: Gate1Result;
   gate2?: Gate2Result;
   reasons: string[];
+  remediation?: string;
   escalateToUser?: boolean;
 }
 
@@ -140,6 +141,54 @@ export function constructGateQuestions(criteria: string[]): Record<string, GateQ
   };
 }
 
+export interface RemediationOptions {
+  taskId?: string;
+  criteria?: string[];
+  testCommand?: string;
+}
+
+/**
+ * Dumb model fallback protocol: generates explicit step-by-step remediation instructions
+ * wrapped in strict XML tags, instructing the model to treat them as immutable constraints.
+ */
+export function generateFallbackRemediation(
+  reasons: string[],
+  options?: RemediationOptions
+): string {
+  const reasonLines = reasons.map((r) => `    <reason>${r}</reason>`).join("\n");
+  const taskTag = options?.taskId ? `  <task_id>${options.taskId}</task_id>` : "";
+  const criteriaTag =
+    options?.criteria && options.criteria.length > 0
+      ? `  <target_criteria>\n${options.criteria.map((c) => `    <criterion>${c}</criterion>`).join("\n")}\n  </target_criteria>`
+      : "";
+
+  return [
+    "<remediation>",
+    "  <instruction>",
+    "    The task verification gate rejected completion. You MUST treat the following directives as immutable constraints and execute the action items below to resolve the rejection.",
+    "  </instruction>",
+    "  <immutable_constraints>",
+    "    <constraint>Do NOT delete, comment out, or weaken existing tests or assertions to pass verification.</constraint>",
+    "    <constraint>Do NOT touch or modify files under .claude or Claude configuration.</constraint>",
+    "    <constraint>All automated tests must pass with exit code 0 before task completion.</constraint>",
+    "    <constraint>Preserve all planned deliverables and do not reduce project scope.</constraint>",
+    "  </immutable_constraints>",
+    taskTag,
+    criteriaTag,
+    "  <failure_reasons>",
+    reasonLines,
+    "  </failure_reasons>",
+    "  <action_items>",
+    "    <step>1. Address the specific failure reasons listed above without deleting assertions.</step>",
+    "    <step>2. Run testCommand locally to confirm zero test failures and clean exit code 0.</step>",
+    "    <step>3. Re-verify the implementation against planned task criteria before attempting completion.</step>",
+    "  </action_items>",
+    "</remediation>",
+  ]
+    .filter((line) => line.length > 0)
+    .join("\n");
+}
+
 /**
  * Default network client for Gate 2 semantic evaluation.
  */
@@ -220,6 +269,11 @@ export async function verifyTaskCompletion(
       approved: false,
       gate1,
       reasons: gate1.reasons,
+      remediation: generateFallbackRemediation(gate1.reasons, {
+        taskId: context.taskId,
+        criteria: evidence.criteria,
+        testCommand: context.testCommand,
+      }),
       escalateToUser: false,
     };
   }
@@ -250,6 +304,11 @@ export async function verifyTaskCompletion(
         escalateToUser: true,
       },
       reasons: [errorMsg],
+      remediation: generateFallbackRemediation([errorMsg], {
+        taskId: context.taskId,
+        criteria: evidence.criteria,
+        testCommand: context.testCommand,
+      }),
       escalateToUser: true,
     };
   }
@@ -296,6 +355,13 @@ export async function verifyTaskCompletion(
       escalateToUser: false,
     },
     reasons,
+    remediation: !approved
+      ? generateFallbackRemediation(reasons, {
+          taskId: context.taskId,
+          criteria: evidence.criteria,
+          testCommand: context.testCommand,
+        })
+      : undefined,
     escalateToUser: false,
   };
 }

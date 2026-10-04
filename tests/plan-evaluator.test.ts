@@ -5,6 +5,7 @@ import {
   evaluatePlanDraft,
   type PlanEvaluationInput,
   type PlanJudgeClient,
+  preEvaluationTriage,
 } from "../src/plan-evaluator";
 
 describe("Phase 2: Plan-Time Quality Elevation Engine", () => {
@@ -48,7 +49,8 @@ describe("Phase 2: Plan-Time Quality Elevation Engine", () => {
 
     const input: PlanEvaluationInput = {
       planTitle: "Robust Rate Limiter",
-      planContent: "Implement token bucket rate limiter with 100% test coverage and boundary validation.",
+      planContent:
+        "1. Step 1: Implement token bucket rate limiter in src/rate-limiter.ts with 100% test coverage and boundary validation.\nVerification: bun test tests/rate-limiter.test.ts",
       attempt: 1,
     };
 
@@ -74,7 +76,8 @@ describe("Phase 2: Plan-Time Quality Elevation Engine", () => {
 
     const input: PlanEvaluationInput = {
       planTitle: "Quick feature",
-      planContent: "Just add a simple function without error handling.",
+      planContent:
+        "1. Step 1: Just add a simple function in src/quick.ts without error handling.\nVerification: bun test tests/quick.test.ts",
       attempt: 1,
     };
 
@@ -98,7 +101,8 @@ describe("Phase 2: Plan-Time Quality Elevation Engine", () => {
 
     const input: PlanEvaluationInput = {
       planTitle: "Untestable plan",
-      planContent: "Do some refactoring. Verification: test manually.",
+      planContent:
+        "1. Step 1: Do some refactoring in src/refactor.ts.\nVerification: test manually.",
       attempt: 1,
     };
 
@@ -122,7 +126,8 @@ describe("Phase 2: Plan-Time Quality Elevation Engine", () => {
 
     const input: PlanEvaluationInput = {
       planTitle: "Reduced scope plan",
-      planContent: "Skip 3 requested requirements to save time.",
+      planContent:
+        "1. Step 1: Skip 3 requested requirements in src/scope.ts to save time.\nVerification: bun test tests/scope.test.ts",
       attempt: 1,
     };
 
@@ -168,7 +173,8 @@ describe("Phase 2: Plan-Time Quality Elevation Engine", () => {
 
     const input: PlanEvaluationInput = {
       planTitle: "Persistently bad plan",
-      planContent: "Incomplete draft",
+      planContent:
+        "1. Step 1: Incomplete draft in src/bad.ts.\nVerification: bun test tests/bad.test.ts",
       attempt: 3,
     };
 
@@ -180,3 +186,63 @@ describe("Phase 2: Plan-Time Quality Elevation Engine", () => {
     expect(result.feedback).toContain("Task actionability");
   });
 });
+
+  describe("PreEvaluationTriage: Structural Integrity Guard", () => {
+    test("rejects plan without target files or paths", () => {
+      const emptyPlan = "# Feature Plan\n1. Do some stuff.\n2. Do some other stuff.\nVerification: manual check.";
+      const result = preEvaluationTriage(emptyPlan);
+      expect(result.valid).toBe(false);
+      expect(result.reasons.some((r) => r.toLowerCase().includes("file") || r.toLowerCase().includes("path"))).toBe(true);
+    });
+
+    test("rejects plan with floating forward dependencies or nonexistent steps", () => {
+      const brokenDepPlan = `# Implementation Plan
+1. Step 1: Update src/auth.ts (depends on Step 4).
+2. Step 2: Update src/config.ts.
+Verification: bun test`;
+      const result = preEvaluationTriage(brokenDepPlan);
+      expect(result.valid).toBe(false);
+      expect(result.reasons.some((r) => r.toLowerCase().includes("depend") || r.toLowerCase().includes("step"))).toBe(true);
+    });
+
+    test("rejects plan missing verification or test strategy", () => {
+      const noVerificationPlan = `# Implementation Plan
+1. Step 1: Update src/auth.ts.
+2. Step 2: Update src/routes.ts.`;
+      const result = preEvaluationTriage(noVerificationPlan);
+      expect(result.valid).toBe(false);
+      expect(result.reasons.some((r) => r.toLowerCase().includes("verification") || r.toLowerCase().includes("test"))).toBe(true);
+    });
+
+    test("approves well-structured plan with files, valid step flow, and verification", () => {
+      const goodPlan = `# Implementation Plan
+1. Step 1: Update src/auth.ts with token validation.
+2. Step 2: Update src/routes.ts to use auth middleware (depends on Step 1).
+Verification: Run bun test tests/auth.test.ts.`;
+      const result = preEvaluationTriage(goodPlan);
+      expect(result.valid).toBe(true);
+      expect(result.reasons.length).toBe(0);
+    });
+
+    test("evaluatePlanDraft short-circuits on triage failure without calling judgeClient", async () => {
+      let judgeCalled = false;
+      const mockClient: PlanJudgeClient = {
+        evaluatePlan: async () => {
+          judgeCalled = true;
+          return { answers: {} };
+        },
+      };
+
+      const input: PlanEvaluationInput = {
+        planTitle: "Vague Plan",
+        planContent: "Just do things without files or verification.",
+        attempt: 1,
+      };
+
+      const result = await evaluatePlanDraft(input, mockClient);
+      expect(result.approved).toBe(false);
+      expect(result.triagePassed).toBe(false);
+      expect(judgeCalled).toBe(false);
+      expect(result.reasons.some((r) => r.includes("Structural triage"))).toBe(true);
+    });
+  });

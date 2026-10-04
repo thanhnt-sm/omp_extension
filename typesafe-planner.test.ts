@@ -49,7 +49,7 @@ describe("TypeSafe Planner Integration", () => {
     restoreScope = createEnvScope({ TYPESAFE_API_KEY: "test_key" });
   });
 
-  test("Phase 1: Module Loading - halts execution if typesafe-policy-client.cjs is missing", async () => {
+  test("Phase 1: Module Loading - catches missing typesafe-policy-client.cjs gracefully without fatal throw", async () => {
     // We mock os.homedir to return a fake path so the module cannot be found
     const realHomedir = os.homedir();
     const policyFilePath = path.join(realHomedir, ".claude", "mcp", "typesafe", "typesafe-policy-client.cjs");
@@ -62,14 +62,14 @@ describe("TypeSafe Planner Integration", () => {
       registerExtension(piMock as unknown as Parameters<typeof registerExtension>[0]);
       expect(toolExecute).toBeDefined();
 
-      // Call execute. It should throw an error because the policy module fails to load.
-      let didThrow = false;
-      try {
-        await toolExecute("call_1", {
-          state: "untrusted",
-          questions: { "q1": { type: "choice", instructions: "escalate", criteria: ["auto", "review"] } }
-        }, new AbortController().signal, undefined, { cwd: "/fake/project" });
-      } catch (err) {
+      // Call execute. It should gracefully catch the missing module and return a clean error result
+            let didThrow = false;
+      const res = await toolExecute("call_1", {
+        state: "untrusted",
+        questions: { "q1": { type: "choice", instructions: "escalate", criteria: ["auto", "review"] } }
+      }, new AbortController().signal, undefined, { cwd: "/fake/project" });
+      const err = new Error(res.content?.[0]?.text || "");
+      if (res.isError) {
         didThrow = true;
         if (err instanceof Error) {
           expect(err.message).toContain("Failed to load typesafe-policy-client.cjs");

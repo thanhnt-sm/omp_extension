@@ -76,6 +76,33 @@ The extension includes a 100% deterministic test suite covering unit tests, adve
 bun test
 ```
 
+### 4. Evidence-Gated Completion (EGC) Extension Setup
+The workspace provides a standalone Evidence-Gated Completion extension (`src/egc.ts`) for strict deterministic task verification:
+
+1. **Initialize Contract**:
+   Run the `/egc init` command in your OMP agent session to generate a `.omp/egc.json` template in the workspace:
+   ```bash
+   /egc init
+   ```
+2. **Edit Contract**:
+   Configure verification commands, required tasks, and holdout suites in `.omp/egc.json`. Contract creation should be done by the user or planning model, not the executor agent.
+3. **User Approval & Lock**:
+   Before the agent can be bound by EGC, the user must review and approve the contract:
+   ```bash
+   /egc lock
+   ```
+   Alternatively, set the environment variable `EGC_TRUST_CONTRACT=1` for automated CI/CD environments.
+4. **Run with OMP**:
+   ```bash
+   omp --extension ./src/egc.ts
+   ```
+5. **Commands**:
+   - `/egc status`: View task ledger, verification evidence, and completion status.
+   - `/egc lint`: Validate the active contract rules against lint checks.
+   - `/egc lock`: Pin and approve the current contract SHA.
+   - `/egc approve <id>` / `/egc reset <id>`: Human override to approve or reset a specific task.
+   - `/egc selftest`: Test TypeSafe semantic judgment connectivity.
+
 ---
 
 ## 📁 Repository Structure
@@ -87,8 +114,9 @@ bun test
 │   ├── evidence-collector.ts    # Deterministic OS state collection & Claude isolation
 │   ├── payload-safety.ts        # Egress redaction & payload bound enforcement (<=32KB)
 │   ├── plan-evaluator.ts        # Plan-time quality elevation engine
-│   └── verification-gate.ts     # Micro/Macro gate execution
-├── tests/                       # 16 comprehensive test suites (108+ tests)
+│   ├── verification-gate.ts     # Micro/Macro gate execution
+│   └── egc.ts                   # Evidence-Gated Completion (EGC) standalone extension
+├── tests/                       # Comprehensive test suites (18 suites, 123+ tests)
 ├── plans/                       # Architectural execution blueprints & compliance specs
 ├── docs/journals/               # Historical ADRs & technical change logs
 ├── typesafe-planner.ts          # Core OMP Extension entrypoint & hook bridge

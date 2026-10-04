@@ -21,8 +21,8 @@ The change is purely typing and object shape adjustment within `typesafe-planner
 4. Modify its return statement to: `return { content: [{ type: "text", text: \`TypeSafe error: ${code}\` }], isError: true };`
 
 ## Success Criteria
-- [ ] `ExtensionToolResult` successfully compiles with the new property.
-- [ ] All calls to `shortError` return an object containing `isError: true`.
+- [x] `ExtensionToolResult` successfully compiles with the new property.
+- [x] All calls to `shortError` return an object containing `isError: true`.
 
 ## Risk Assessment
 - **Risk:** The OMP extension runtime might not fully parse or utilize the `isError` flag yet.

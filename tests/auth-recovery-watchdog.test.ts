@@ -69,6 +69,7 @@ describe("Phase 2: Dynamic Auth Recovery and Key Watchdog", () => {
       // First call -> reaches upstream, returns 401 unauthorized
       const result1 = await judgeTool!.execute("call1", params, undefined, undefined, { cwd: process.cwd() });
       expect(result1.content[0].text).toBe("TypeSafe error: unauthorized");
+      expect(result1.isError).toBe(true);
       expect(fetchCallCount).toBe(1);
 
       // Verify operator warning was sent with display: true

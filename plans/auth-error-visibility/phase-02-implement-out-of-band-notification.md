@@ -20,8 +20,8 @@ Utilize OMP's `ExtensionAPI.sendMessage` method. By setting `{ display: true }`,
 3. Add a non-blocking call: `pi.sendMessage({ type: "text", text: "🚨 [TypeSafe] API Key is invalid or expired. The safety gatekeeper is DISABLED!" }, { display: true }).catch(() => {});`
 
 ## Success Criteria
-- [ ] A 401/403 response triggers the out-of-band message.
-- [ ] The message bypasses the LLM and appears directly to the user.
+- [x] A 401/403 response triggers the out-of-band message.
+- [x] The message bypasses the LLM and appears directly to the user.
 
 ## Risk Assessment
 - **Risk:** If `pi.sendMessage` throws, it could crash the tool execution unexpectedly.

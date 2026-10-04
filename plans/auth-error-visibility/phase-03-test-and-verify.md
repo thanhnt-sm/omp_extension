@@ -16,9 +16,9 @@ Verify that the Dual-Channel Notification strategy successfully exposes credenti
 6. Assert that the returned object from the tool execution contains `isError: true`.
 
 ## Success Criteria
-- [ ] Mock `sendMessage` captures the intended red alert.
-- [ ] Tool execution does not throw an unhandled exception.
-- [ ] Tool return object has `isError: true`.
+- [x] Mock `sendMessage` captures the intended red alert.
+- [x] Tool execution does not throw an unhandled exception.
+- [x] Tool return object has `isError: true`.
 
 ## Related Code Files
 - Create: Throwaway JS eval script during verification.

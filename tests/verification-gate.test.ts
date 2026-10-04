@@ -5,6 +5,7 @@ import {
   verifyTaskCompletion,
   type GateJudgeClient,
   type TaskVerificationContext,
+  generateFallbackRemediation,
 } from "../src/verification-gate";
 import type { TaskEvidenceResult } from "../src/evidence-collector";
 
@@ -159,5 +160,82 @@ describe("Phase 3: Execution Compliance & Dual Verification Gate", () => {
     expect(result.approved).toBe(false);
     expect(result.escalateToUser).toBe(true);
     expect(result.reasons.some((r) => r.includes("fail-closed escalation"))).toBe(true);
+  });
+
+  describe("Dumb Model Fallback Protocol (XML Remediation Injection)", () => {
+    test("generates strict XML-wrapped remediation instructions when Gate 1 fails", async () => {
+      const mockJudge: GateJudgeClient = {
+        evaluateGate: async () => ({ answers: {} }),
+      };
+
+      const context: TaskVerificationContext = {
+        taskId: "task-failing-tests",
+        testCommand: "bun -e \"process.exit(1)\"",
+      };
+
+      const result = await verifyTaskCompletion(context, mockJudge);
+      expect(result.approved).toBe(false);
+      expect(result.remediation).toBeDefined();
+      expect(result.remediation).toContain("<remediation>");
+      expect(result.remediation).toContain("</remediation>");
+      expect(result.remediation).toContain("<immutable_constraints>");
+      expect(result.remediation).toContain("Test suite failed with exit code 1");
+      expect(result.remediation).toContain("immutable constraints");
+    });
+
+    test("generates strict XML-wrapped remediation instructions when Gate 2 fails", async () => {
+      const mockJudge: GateJudgeClient = {
+        evaluateGate: async () => ({
+          answers: {
+            meets_criteria: { noul: 0.3 },
+            plan_drift: { choice: "no_drift" },
+            claude_account_untouched: { noul: 1.0 },
+          },
+        }),
+      };
+
+      const context: TaskVerificationContext = {
+        taskId: "task-criteria-failed",
+        testCommand: "bun -e \"process.exit(0)\"",
+      };
+
+      const result = await verifyTaskCompletion(context, mockJudge);
+      expect(result.approved).toBe(false);
+      expect(result.remediation).toBeDefined();
+      expect(result.remediation).toContain("<remediation>");
+      expect(result.remediation).toContain("<failure_reasons>");
+      expect(result.remediation).toContain("meets_criteria");
+    });
+
+    test("does not generate remediation when verification succeeds", async () => {
+      const mockJudge: GateJudgeClient = {
+        evaluateGate: async () => ({
+          answers: {
+            meets_criteria: { noul: 0.95 },
+            plan_drift: { choice: "no_drift" },
+            claude_account_untouched: { noul: 1.0 },
+          },
+        }),
+      };
+
+      const context: TaskVerificationContext = {
+        taskId: "task-success",
+        testCommand: "bun -e \"process.exit(0)\"",
+      };
+
+      const result = await verifyTaskCompletion(context, mockJudge);
+      expect(result.approved).toBe(true);
+      expect(result.remediation).toBeUndefined();
+    });
+
+    test("generateFallbackRemediation constructs valid XML structure", () => {
+      const reasons = ["Test failure", "Scope deviation"];
+      const xml = generateFallbackRemediation(reasons, { taskId: "task-xyz" });
+      expect(xml.startsWith("<remediation>")).toBe(true);
+      expect(xml.endsWith("</remediation>")).toBe(true);
+      expect(xml).toContain("<reason>Test failure</reason>");
+      expect(xml).toContain("<reason>Scope deviation</reason>");
+      expect(xml).toContain("<task_id>task-xyz</task_id>");
+    });
   });
 });

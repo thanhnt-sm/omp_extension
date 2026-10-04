@@ -1,7 +1,7 @@
 ---
 title: "Auth Error Visibility Enhancement"
 description: ""
-status: pending
+status: completed
 priority: P2
 effort: 
 tags: []
@@ -20,6 +20,6 @@ TBD.
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 1 | [Update Interfaces](./phase-01-update-interfaces.md) | Pending |
-| 2 | [Implement Out-of-band Notification](./phase-02-implement-out-of-band-notification.md) | Pending |
-| 3 | [Test and Verify](./phase-03-test-and-verify.md) | Pending |
+| 1 | [Update Interfaces](./phase-01-update-interfaces.md) | Completed |
+| 2 | [Implement Out-of-band Notification](./phase-02-implement-out-of-band-notification.md) | Completed |
+| 3 | [Test and Verify](./phase-03-test-and-verify.md) | Completed |

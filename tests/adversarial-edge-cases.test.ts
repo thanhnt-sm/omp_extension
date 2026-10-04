@@ -6,6 +6,7 @@ import { withScopedEnv } from "./helpers/test-env-harness";
 interface ExtensionToolResult {
   content: Array<{ type: "text"; text: string }>;
   details?: unknown;
+  isError?: boolean;
 }
 
 interface RegisteredToolDef {
@@ -292,7 +293,8 @@ describe("TypeSafe Adversarial Edge Cases & Live Security Matrix (14 Scenarios)"
   test("Case 12 (High): Live TypeSafe Plan Draft Elevation (Usage registered)", async () => {
     const res = await registeredTools.typesafe_elevate_plan.execute("call-live-plan", {
       planTitle: "Zero-Trust Encryption Migration",
-      planContent: "Implement AES-256-GCM encryption for all at-rest database fields with automated key rotation and KMS integration.",
+      planContent:
+        "1. Step 1: Implement AES-256-GCM encryption in src/crypto.ts for all at-rest database fields with automated key rotation and KMS integration.\nVerification: bun test tests/crypto.test.ts",
       attempt: 1
     });
 
@@ -349,6 +351,7 @@ describe("TypeSafe Adversarial Edge Cases & Live Security Matrix (14 Scenarios)"
     );
 
     expect(res.content[0].text).toBe("TypeSafe error: timeout");
+    expect(res.isError).toBe(true);
   });
   test("Case 5 (Critical): Auth Revocation (401/403) enters fail-closed disabled state", async () => {
     await withScopedEnv(
@@ -366,6 +369,7 @@ describe("TypeSafe Adversarial Edge Cases & Live Security Matrix (14 Scenarios)"
         });
 
         expect(res.content[0].text).toBe("TypeSafe error: unauthorized");
+        expect(res.isError).toBe(true);
 
         // Subsequent call should immediately fail-closed without network call
         const res2 = await registeredTools.typesafe_judge.execute("call-bad-auth-2", {

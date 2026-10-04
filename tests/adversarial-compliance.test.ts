@@ -77,7 +77,8 @@ diff --git a/tests/auth.test.ts b/tests/auth.test.ts
 
     const planInput = {
       planTitle: "Reduced Scope Plan",
-      planContent: "We skip transactions and rollbacks to complete quickly.",
+      planContent:
+        "1. Step 1: Skip transactions and rollbacks in src/db.ts to complete quickly.\nVerification: bun test tests/db.test.ts",
       attempt: 1,
     };
 
@@ -191,7 +192,8 @@ diff --git a/tests/auth.test.ts b/tests/auth.test.ts
     const planResult = await evaluatePlanDraft(
       {
         planTitle: "Secure Auth Token Storage",
-        planContent: "Comprehensive plan with boundary checks, timeout handling, and test suites.",
+        planContent:
+          "1. Step 1: Implement secure auth token storage in src/auth-token.ts with boundary checks and timeout handling.\nVerification: bun test tests/auth.test.ts",
         attempt: 1,
       },
       planJudge

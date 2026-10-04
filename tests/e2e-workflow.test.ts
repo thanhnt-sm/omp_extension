@@ -20,7 +20,8 @@ describe("Phase 4: End-to-End Workflow & OMP Integration", () => {
     const planResult = await evaluatePlanDraft(
       {
         planTitle: "Production Token Cache",
-        planContent: "Implement memory-efficient LRU cache with TTL expiration and comprehensive error handling.",
+        planContent:
+          "1. Step 1: Implement memory-efficient LRU cache in src/cache.ts with TTL expiration and comprehensive error handling.\nVerification: bun test tests/cache.test.ts",
         attempt: 1,
       },
       planJudge
