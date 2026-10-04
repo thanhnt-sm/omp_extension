@@ -63,19 +63,13 @@ describe("TypeSafe Planner Integration", () => {
       expect(toolExecute).toBeDefined();
 
       // Call execute. It should gracefully catch the missing module and return a clean error result
-            let didThrow = false;
-      const res = await toolExecute("call_1", {
+            const res = await toolExecute("call_1", {
         state: "untrusted",
         questions: { "q1": { type: "choice", instructions: "escalate", criteria: ["auto", "review"] } }
       }, new AbortController().signal, undefined, { cwd: "/fake/project" });
-      const err = new Error(res.content?.[0]?.text || "");
-      if (res.isError) {
-        didThrow = true;
-        if (err instanceof Error) {
-          expect(err.message).toContain("Failed to load typesafe-policy-client.cjs");
-        }
-      }
-      expect(didThrow).toBe(true);
+
+      expect(res.isError).toBe(true);
+      expect(res.content[0].text).toBe("TypeSafe error: policy_client_missing");
     } finally {
       if (moved) {
         try {
