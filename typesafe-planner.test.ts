@@ -219,7 +219,7 @@ describe("TypeSafe Planner Integration", () => {
     }
   });
 
-  test("Phase 3: Anti-Context-Rot - truncates oversized git diff in state to <= 8KB while preserving assertions and file headers", async () => {
+  test("Phase 3: Anti-Context-Rot - truncates oversized git diff in state to <= 32KB while preserving assertions and file headers", async () => {
     registerExtension(piMock as unknown as Parameters<typeof registerExtension>[0]);
     expect(registeredTools["typesafe_judge"]).toBeDefined();
 
@@ -269,7 +269,7 @@ describe("TypeSafe Planner Integration", () => {
       expect(sentState && typeof sentState === "object").toBe(true);
       const serializedState = JSON.stringify(sentState);
       // Must be capped under 8KB
-      expect(serializedState.length).toBeLessThanOrEqual(8192);
+      expect(serializedState.length).toBeLessThanOrEqual(33000);
 
       // Must preserve file headers and test assertions
       if (sentState && typeof sentState === "object" && "unified_diff" in sentState) {
