@@ -1,0 +1,24 @@
+{
+  "name": "omp-typesafe-extension",
+  "version": "1.0.0",
+  "description": "TypeSafe System One planner, verification gate, and human-decision interception extension for oh-my-pi (omp)",
+  "type": "module",
+  "main": "typesafe-planner.ts",
+  "scripts": {
+    "test": "bun test"
+  },
+  "keywords": [
+    "oh-my-pi",
+    "omp",
+    "typesafe",
+    "system-one",
+    "ai-agent",
+    "evaluation",
+    "verification-gate"
+  ],
+  "author": "thanhnt-sm",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}
