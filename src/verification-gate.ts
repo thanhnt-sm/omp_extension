@@ -84,7 +84,7 @@ export function checkDeterministicPreconditions(evidence: TaskEvidenceResult): G
 
   // 3. Assertion deletion / test evasion check
   const deletedAssertions =
-    /(?:^|\n)-\s*(?:expect\(|assert\(|assert\.[a-zA-Z]+\()/m.test(evidence.gitDiff);
+    /(?:^|\n)-[ \t]*(?:expect\(|assert\(|assert\.[a-zA-Z]+\()/m.test(evidence.gitDiff);
   if (deletedAssertions) {
     reasons.push("Test evasion detected: git diff contains deleted assertions (expect/assert). Deleting tests to fake completion is prohibited.");
   }

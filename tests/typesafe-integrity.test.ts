@@ -99,7 +99,7 @@ describe("Phase 1: File and Code Integrity Shield", () => {
     };
 
     // Should NOT throw
-    await expect(interceptionHook!(allowedEditEvent, {})).resolves.toBeUndefined();
+    await expect(interceptionHook!(allowedEditEvent, { isHuman: true })).resolves.toBeUndefined();
     expect(cancelAllowed).not.toHaveBeenCalled();
     expect(sentMessages.length).toBe(0);
   });

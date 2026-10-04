@@ -123,13 +123,18 @@ export async function runTaskMicroCheck(evidence: MicroCheckEvidence): Promise<M
   }
 
   const assertionDeleted =
-    /(?:^|\n)-\s*(?:expect\(|assert\(|assert\.[a-zA-Z]+\()/m.test(evidence.gitDiff);
+    /(?:^|\n)-[ \t]*(?:expect\(|assert\(|assert\.[a-zA-Z]+\()/m.test(evidence.gitDiff);
   if (assertionDeleted) {
     reasons.push("Test evasion detected: git diff contains deleted assertions (expect/assert). Deleting tests to fake completion is prohibited.");
   }
+  const hasGitEvidence = (evidence.gitStatus?.trim().length ?? 0) > 0 || (evidence.gitDiff?.trim().length ?? 0) > 0;
+  const hasTestEvidence = evidence.testExitCode !== null || (evidence.testOutput?.trim().length ?? 0) > 0;
+  const zeroEvidence = !hasGitEvidence && !hasTestEvidence;
+  if (zeroEvidence) {
+    reasons.push("Zero evidence: no test execution or git modifications observed for task completion.");
+  }
 
-  const passed = claudeSafe && testPassed && !assertionDeleted;
-
+  const passed = claudeSafe && testPassed && !assertionDeleted && !zeroEvidence;
   return {
     passed,
     reasons,
