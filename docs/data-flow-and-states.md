@@ -58,6 +58,7 @@ stateDiagram-v2
         [*] --> CheckOSDiff
         CheckOSDiff --> CheckTestExitCode
         CheckTestExitCode --> CheckAssertionStripping
+        CheckAssertionStripping --> [*]
     }
 
     GATE_1_EVAL --> REJECTED_REMEDIATION: Gate 1 Preconditions Failed
@@ -67,6 +68,7 @@ stateDiagram-v2
         [*] --> SendSystemOnePayload
         SendSystemOnePayload --> EvaluateMeetsCriteria
         EvaluateMeetsCriteria --> EvaluateIsolation
+        EvaluateIsolation --> [*]
     }
 
     GATE_2_EVAL --> REJECTED_REMEDIATION: Probability < 0.70

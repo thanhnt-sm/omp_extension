@@ -15,7 +15,7 @@ flowchart TD
     end
 
     subgraph Verification Pipeline
-        CompletionGate --> Gate1[Gate 1: Deterministic Micro-Check <150ms]
+        CompletionGate --> Gate1[Gate 1: Deterministic Micro-Check]
         Gate1 -->|Pass| Gate2[Gate 2: Semantic Macro-Check TypeSafe System One]
         Gate1 -->|Fail| Remediation[XML Fallback Remediation Engine]
         Gate2 -->|Fail| Remediation
