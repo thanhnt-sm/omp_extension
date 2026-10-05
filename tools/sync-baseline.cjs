@@ -85,9 +85,10 @@ function getFilesRecursive(dir, baseRel = "") {
 const filesToDeploy = [
   "typesafe-planner.ts",
   "typesafe-planner.test.ts",
-  "docs/typesafe-operations.md",
+  "README.md",
   "package.json",
   "tsconfig.json",
+  ...getFilesRecursive(path.join(WORKSPACE_DIR, "docs"), "docs"),
   ...getFilesRecursive(path.join(WORKSPACE_DIR, "src"), "src"),
   ...getFilesRecursive(path.join(WORKSPACE_DIR, "tests"), "tests"),
 ];
