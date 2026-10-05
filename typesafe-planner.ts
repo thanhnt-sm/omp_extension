@@ -268,6 +268,7 @@ const DISABLED_RESULT: ExtensionToolResult = {
   content: [{ type: "text", text: "TypeSafe disabled" }],
 };
 const PROTECTED_INTEGRITY_PATTERNS = [
+  "src/debate-evaluator.ts",
   "typesafe-planner.ts",
   "models.yml",
   "typesafe-policy-client.cjs",
@@ -1058,7 +1059,7 @@ export default function (pi: ExtensionAPI): void {
     const redactModule = loadRedactModule();
     if (!redactModule) return DISABLED_RESULT;
 
-    const outgoing = { state: validParams.state, questions: validParams.questions, model: "jev-latest" };
+    const outgoing = { state: validParams.state, questions: validParams.questions, model: params.model || "jev-latest" };
     let prepared: typeof outgoing;
     try {
       prepared = redactModule.preparePayload(outgoing, { maxBytes: MAX_BODY_BYTES, apiKey }) as typeof outgoing;
@@ -1173,6 +1174,44 @@ export default function (pi: ExtensionAPI): void {
     ctx?: unknown
   ): ExpertJudgeClient & PlanJudgeClient & GateJudgeClient {
     return {
+      async evaluateDebate(params: {
+        state: string;
+        questions: Record<string, TypeSafeQuestion>;
+        model?: string;
+      }) {
+        const targetModel = params.model || process.env.TYPESAFE_PREDICT_MODEL || "jev-latest";
+        const res = await executeTypeSafe(
+          {
+            state: params.state,
+            questions: params.questions,
+            model: targetModel,
+          },
+          apiKey,
+          signal,
+          ctx
+        );
+
+        if (res.details && typeof res.details === "object" && "answers" in res.details) {
+          return {
+            answers: res.details.answers as Record<string, { score: number; verdict?: string }>,
+            modelUsed: targetModel,
+          };
+        }
+
+        try {
+          const text = res.content?.[0]?.text;
+          if (text && text.startsWith("{")) {
+            const parsed = JSON.parse(text);
+            if (parsed && typeof parsed === "object" && parsed.answers) {
+              return { answers: parsed.answers, modelUsed: targetModel };
+            }
+          }
+          return { error: text || "TypeSafe debate evaluation failed", modelUsed: targetModel };
+        } catch {
+          return { error: res.content?.[0]?.text || "TypeSafe debate evaluation failed", modelUsed: targetModel };
+        }
+      },
+
       async evaluate(params: {
         state: string;
         questions: Record<string, ExpertJudgeQuestion>;
