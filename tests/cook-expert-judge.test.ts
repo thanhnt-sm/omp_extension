@@ -94,7 +94,7 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
   });
 
   describe("Cadence 2: runPhaseMacroCheck & Tri-Role Evaluation", () => {
-    test("approves phase when criteria met (>=0.70) and no drift", async () => {
+    test("approves phase when criteria met (>=0.80) and no drift", async () => {
       const mockClient: ExpertJudgeClient = {
         evaluate: async () => ({
           answers: {
@@ -121,7 +121,7 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
       expect(res.scopeChoice).toBe("HOLD");
     });
 
-    test("rejects phase when meets_criteria < 0.70", async () => {
+    test("rejects phase when meets_criteria < 0.80", async () => {
       const mockClient: ExpertJudgeClient = {
         evaluate: async () => ({
           answers: {
@@ -142,7 +142,7 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
 
       const res = await runPhaseMacroCheck(ctx, mockClient);
       expect(res.approved).toBe(false);
-      expect(res.reasons.some((r) => r.includes("0.70") || r.includes("criteria"))).toBe(true);
+      expect(res.reasons.some((r) => r.includes("0.80") || r.includes("threshold"))).toBe(true);
     });
 
     test("rejects phase when architectural drift is detected", async () => {
@@ -263,7 +263,7 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
       });
 
       expect(scorecard).toContain("TypeSafe System One Verification Scorecard");
-      expect(scorecard).toContain("Meets Plan Deliverables: P = 0.95 (Threshold >= 0.70)");
+      expect(scorecard).toContain("Meets Plan Deliverables: P = 0.95 (Threshold >= 0.80)");
       expect(scorecard).toContain("Architectural Drift:     None (Strict adherence)");
       expect(scorecard).toContain("Scope Mode:              HOLD (All requirements covered)");
       expect(scorecard).toContain("Expert Evaluator:        Approved (Confidence 0.92)");

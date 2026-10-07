@@ -1,6 +1,6 @@
 import { preparePayloadSafe, isSecretInKey } from "./payload-safety";
 import { encloseUntrusted } from "./xml-enclosure";
-
+import { resolveAutoApprovalThreshold } from "./verification-gate";
 export interface MicroCheckEvidence {
   gitStatus: string;
   gitDiff: string;
@@ -8,6 +8,8 @@ export interface MicroCheckEvidence {
   testOutput: string;
   cleanWorkingTree: boolean;
   nonGitFallbackUsed?: boolean;
+  taskDoneProven?: boolean;
+  todoCompleted?: boolean;
 }
 
 export interface MicroCheckResult {
@@ -134,8 +136,13 @@ export async function runTaskMicroCheck(evidence: MicroCheckEvidence): Promise<M
   if (zeroEvidence) {
     reasons.push("Zero evidence: no test execution or git modifications observed for task completion.");
   }
+  if (evidence.taskDoneProven === false || evidence.todoCompleted === false) {
+    reasons.push(
+      "Task completion precondition failed: agent must prove task and todo items are completed before invoking TypeSafe judge."
+    );
+  }
 
-  const passed = claudeSafe && testPassed && !assertionDeleted && !zeroEvidence;
+  const passed = claudeSafe && testPassed && !assertionDeleted && !zeroEvidence && evidence.taskDoneProven !== false && evidence.todoCompleted !== false;
   return {
     passed,
     reasons,
@@ -240,9 +247,10 @@ export async function runPhaseMacroCheck(
   }
   let approved = true;
 
-  if (meetsCriteriaNoul < 0.7) {
+  const threshold = resolveAutoApprovalThreshold();
+  if (meetsCriteriaNoul < threshold) {
     approved = false;
-    reasons.push(`Implementation score P=${meetsCriteriaNoul.toFixed(2)} is below required threshold 0.70.`);
+    reasons.push(`Implementation score P=${meetsCriteriaNoul.toFixed(2)} is below required threshold ${threshold.toFixed(2)}.`);
   }
 
   if (driftChoice !== "no_drift") {
@@ -402,11 +410,12 @@ export function generateVerificationScorecard(results: {
       ? "Justified additions"
       : "Requirements dropped";
 
+  const threshold = resolveAutoApprovalThreshold();
   return [
     "┌─────────────────────────────────────────────────────────┐",
     "│ TypeSafe System One Verification Scorecard              │",
     "├─────────────────────────────────────────────────────────┤",
-    `│ Meets Plan Deliverables: P = ${results.meetsCriteriaNoul.toFixed(2)} (Threshold >= 0.70)   │`,
+    `│ Meets Plan Deliverables: P = ${results.meetsCriteriaNoul.toFixed(2)} (Threshold >= ${threshold.toFixed(2)})   │`,
     `│ Architectural Drift:     ${driftLabel.padEnd(28)}│`,
     `│ Scope Mode:              ${results.scopeChoice} (${scopeDesc})│`,
     `│ Expert Evaluator:        Approved (Confidence ${results.expertConfidence.toFixed(2)})     │`,

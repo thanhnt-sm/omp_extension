@@ -238,4 +238,89 @@ describe("Phase 3: Execution Compliance & Dual Verification Gate", () => {
       expect(xml).toContain("<task_id>task-xyz</task_id>");
     });
   });
+
+  describe("Autonomous Auto-Approval & Proof-of-Completion Invariants", () => {
+    test("Gate 1 blocks completion if agent fails to prove task or todo completion", async () => {
+      let judgeCalled = false;
+      const mockJudge: GateJudgeClient = {
+        evaluateGate: async () => {
+          judgeCalled = true;
+          return {
+            answers: {
+              meets_criteria: { noul: 0.99 },
+              plan_drift: { choice: "no_drift" },
+              claude_account_untouched: { noul: 1.0 },
+            },
+          };
+        },
+      };
+
+      const context: TaskVerificationContext = {
+        taskId: "unproven-task",
+        testCommand: "bun -e \"process.exit(0)\"",
+        taskDoneProven: false,
+        todoCompleted: false,
+      };
+
+      const result = await verifyTaskCompletion(context, mockJudge);
+      expect(result.approved).toBe(false);
+      expect(result.gate1.passed).toBe(false);
+      expect(judgeCalled).toBe(false);
+      expect(result.reasons.some((r) => r.includes("proof") || r.includes("todo") || r.includes("precondition"))).toBe(true);
+    });
+
+    test("Gate 2 auto-approval threshold defaults to 80% (0.80)", async () => {
+      delete process.env.TYPESAFE_AUTO_APPROVAL_THRESHOLD;
+
+      const mockJudge: GateJudgeClient = {
+        evaluateGate: async () => ({
+          answers: {
+            meets_criteria: { noul: 0.75 },
+            plan_drift: { choice: "no_drift" },
+            claude_account_untouched: { noul: 1.0 },
+          },
+        }),
+      };
+
+      const context: TaskVerificationContext = {
+        taskId: "threshold-default-check",
+        testCommand: "bun -e \"process.exit(0)\"",
+        taskDoneProven: true,
+        todoCompleted: true,
+      };
+
+      const result = await verifyTaskCompletion(context, mockJudge);
+      expect(result.approved).toBe(false);
+      expect(result.reasons.some((r) => r.includes("0.80") || r.includes("threshold"))).toBe(true);
+    });
+
+    test("Gate 2 auto-approves completely without prompting user when score >= configurable threshold", async () => {
+      process.env.TYPESAFE_AUTO_APPROVAL_THRESHOLD = "70";
+      try {
+        const mockJudge: GateJudgeClient = {
+          evaluateGate: async () => ({
+            answers: {
+              meets_criteria: { noul: 0.75 },
+              plan_drift: { choice: "no_drift" },
+              claude_account_untouched: { noul: 1.0 },
+            },
+          }),
+        };
+
+        const context: TaskVerificationContext = {
+          taskId: "custom-threshold-pass",
+          testCommand: "bun -e \"process.exit(0)\"",
+          taskDoneProven: true,
+          todoCompleted: true,
+        };
+
+        const result = await verifyTaskCompletion(context, mockJudge);
+        expect(result.approved).toBe(true);
+        expect(result.gate2?.passed).toBe(true);
+        expect(result.escalateToUser).toBe(false);
+      } finally {
+        delete process.env.TYPESAFE_AUTO_APPROVAL_THRESHOLD;
+      }
+    });
+  });
 });

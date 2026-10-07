@@ -62,6 +62,21 @@ export interface TaskVerificationContext {
   testCommand?: string;
   timeoutMs?: number;
   untrustedAgentClaim?: string;
+  taskDoneProven?: boolean;
+  todoCompleted?: boolean;
+}
+
+/**
+ * Resolves the configurable auto-approval threshold for TypeSafe evaluation.
+ * Defaults to 0.80 (80%) and can be customized via TYPESAFE_AUTO_APPROVAL_THRESHOLD.
+ */
+export function resolveAutoApprovalThreshold(): number {
+  const raw = process.env.TYPESAFE_AUTO_APPROVAL_THRESHOLD;
+  if (!raw || raw.trim() === "") return 0.80;
+  const parsed = parseFloat(raw.trim());
+  if (isNaN(parsed)) return 0.80;
+  const normalized = parsed > 1.0 ? parsed / 100 : parsed;
+  return Math.min(Math.max(normalized, 0), 1.0);
 }
 
 /**
@@ -92,8 +107,14 @@ export function checkDeterministicPreconditions(evidence: TaskEvidenceResult): G
   if (!astResult.isSafe) {
     reasons.push(...astResult.issues);
   }
+  // 4. Task & Todo completion proof check
+  if (evidence.taskDoneProven === false || evidence.todoCompleted === false) {
+    reasons.push(
+      "Task completion precondition failed: agent must prove task and todo items are completed before invoking TypeSafe judge."
+    );
+  }
 
-  const passed = claudeSafe && testPassed && astResult.isSafe;
+  const passed = claudeSafe && testPassed && astResult.isSafe && evidence.taskDoneProven !== false && evidence.todoCompleted !== false;
   return {
     passed,
     reasons,
@@ -260,8 +281,9 @@ export async function verifyTaskCompletion(
     testCommand: context.testCommand,
     timeoutMs: context.timeoutMs,
     untrustedAgentState: context.untrustedAgentClaim,
+    taskDoneProven: context.taskDoneProven,
+    todoCompleted: context.todoCompleted,
   });
-
   // 2. Execute Gate 1 (deterministic, zero token)
   const gate1 = checkDeterministicPreconditions(evidence);
   if (!gate1.passed) {
@@ -317,9 +339,10 @@ export async function verifyTaskCompletion(
   const reasons: string[] = [];
 
   const meetsCriteriaNoul = answers.meets_criteria?.noul;
-  if (meetsCriteriaNoul !== undefined && meetsCriteriaNoul < 0.70) {
+  const threshold = resolveAutoApprovalThreshold();
+  if (meetsCriteriaNoul !== undefined && meetsCriteriaNoul < threshold) {
     reasons.push(
-      `Deliverable verification failed: meets_criteria probability (${meetsCriteriaNoul}) is below 0.70 threshold.`
+      `Deliverable verification failed: meets_criteria probability (${meetsCriteriaNoul}) is below ${threshold.toFixed(2)} threshold.`
     );
   }
 

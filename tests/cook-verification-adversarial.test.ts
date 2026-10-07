@@ -13,7 +13,7 @@ import { preparePayloadSafe } from "../src/payload-safety";
 
 describe("Phase 4: Adversarial Stress Test Matrix & Critical Verification", () => {
   test("Attack 1 (Superficial Completion): Stubs exit 0 but unmet plan requirements are blocked by Gate 2", async () => {
-    // Agent wrote stubs, tests exit 0, but judge evaluates criteria as unmet (0.42 < 0.70)
+    // Agent wrote stubs, tests exit 0, but judge evaluates criteria as unmet (0.42 < 0.80)
     const microEvidence: MicroCheckEvidence = {
       gitStatus: "M src/feature.ts",
       gitDiff: "+ function scaffold() { /* TODO */ }",
@@ -45,7 +45,7 @@ describe("Phase 4: Adversarial Stress Test Matrix & Critical Verification", () =
 
     const g2 = await runPhaseMacroCheck(ctx, mockJudge);
     expect(g2.approved).toBe(false);
-    expect(g2.reasons.some((r) => r.includes("0.70"))).toBe(true);
+    expect(g2.reasons.some((r) => r.includes("0.80"))).toBe(true);
   });
 
   test("Attack 2 (Unauthorized Scope Reduction): Scope reduction is rejected by Scope Arbiter", async () => {

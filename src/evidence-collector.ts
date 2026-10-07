@@ -17,6 +17,8 @@ export interface TaskEvidenceOptions {
   testCommand?: string;
   timeoutMs?: number;
   untrustedAgentState?: string;
+  taskDoneProven?: boolean;
+  todoCompleted?: boolean;
 }
 
 export interface TaskEvidenceResult {
@@ -27,6 +29,8 @@ export interface TaskEvidenceResult {
   criteria: string[];
   cleanWorkingTree: boolean;
   timestamp: string;
+  taskDoneProven?: boolean;
+  todoCompleted?: boolean;
 }
 
 /**
@@ -215,5 +219,7 @@ export async function collectTaskEvidence(
     criteria,
     cleanWorkingTree: gitStatus.length === 0,
     timestamp: new Date().toISOString(),
+    taskDoneProven: options.taskDoneProven,
+    todoCompleted: options.todoCompleted,
   };
 }
