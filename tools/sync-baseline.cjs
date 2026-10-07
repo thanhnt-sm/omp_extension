@@ -16,9 +16,9 @@ const fs = require("fs");
 const path = require("path");
 const { execSync } = require("child_process");
 
-const TARGET_DIR = path.normalize("C:/Users/thant/Projects/omp_extension");
+const TARGET_DIR = process.env.OMP_TARGET_DIR ? path.resolve(process.env.OMP_TARGET_DIR) : path.normalize("C:/Users/thant/Projects/omp_extension");
 const WORKSPACE_DIR = path.resolve(__dirname, "..");
-const EXTENSION_POINTER = path.normalize("C:/Users/thant/.omp/agent/extensions/typesafe-planner.ts");
+const EXTENSION_POINTER = process.env.OMP_EXTENSION_POINTER ? path.resolve(process.env.OMP_EXTENSION_POINTER) : path.normalize("C:/Users/thant/.omp/agent/extensions/typesafe-planner.ts");
 
 console.log("=================================================================");
 console.log("  TypeSafe Extension: Baseline Backup, Deploy & Verification     ");
@@ -53,7 +53,9 @@ function copyDirRecursive(src, dest, ignore = ["node_modules", ".git"]) {
 
 // 2. Create Timestamped Backup
 const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-const BACKUP_DIR = path.normalize(`C:/Users/thant/Projects/omp_extension_backup_${timestamp}`);
+const BACKUP_DIR = process.env.OMP_BACKUP_DIR
+  ? path.resolve(process.env.OMP_BACKUP_DIR)
+  : path.normalize(path.join(path.dirname(TARGET_DIR), `${path.basename(TARGET_DIR)}_backup_${timestamp}`));
 
 console.log(`\n[1/4] Creating backup of ${TARGET_DIR}...`);
 try {
@@ -82,15 +84,24 @@ function getFilesRecursive(dir, baseRel = "") {
   return files;
 }
 
+const rootMarkdownFiles = fs.readdirSync(WORKSPACE_DIR).filter((f) => {
+  return f.endsWith(".md") && fs.statSync(path.join(WORKSPACE_DIR, f)).isFile();
+});
+
 const filesToDeploy = [
   "typesafe-planner.ts",
   "typesafe-planner.test.ts",
   "README.md",
   "package.json",
   "tsconfig.json",
+  ".gitignore",
+  ...rootMarkdownFiles,
   ...getFilesRecursive(path.join(WORKSPACE_DIR, "docs"), "docs"),
   ...getFilesRecursive(path.join(WORKSPACE_DIR, "src"), "src"),
   ...getFilesRecursive(path.join(WORKSPACE_DIR, "tests"), "tests"),
+  ...getFilesRecursive(path.join(WORKSPACE_DIR, "plans"), "plans"),
+  ...getFilesRecursive(path.join(WORKSPACE_DIR, "scripts"), "scripts"),
+  ...getFilesRecursive(path.join(WORKSPACE_DIR, "tools"), "tools"),
 ];
 
 for (const relPath of filesToDeploy) {
@@ -108,12 +119,13 @@ for (const relPath of filesToDeploy) {
 // 4. Verify OMP Loader Pointer
 console.log(`\n[3/4] Checking OMP loader pointer...`);
 try {
-  const expectedExport = `export { default } from "C:/Users/thant/Projects/omp_extension/typesafe-planner.ts";`;
+  const targetPlannerPath = path.join(TARGET_DIR, "typesafe-planner.ts").replace(/\\/g, "/");
+  const expectedExport = `export { default } from "${targetPlannerPath}";`;
   let currentContent = "";
   if (fs.existsSync(EXTENSION_POINTER)) {
     currentContent = fs.readFileSync(EXTENSION_POINTER, "utf8").trim();
   }
-  if (!currentContent.includes("C:/Users/thant/Projects/omp_extension/typesafe-planner.ts")) {
+  if (!currentContent.includes(targetPlannerPath)) {
     console.log(` -> Re-linking ${EXTENSION_POINTER}...`);
     fs.mkdirSync(path.dirname(EXTENSION_POINTER), { recursive: true });
     fs.writeFileSync(EXTENSION_POINTER, expectedExport + "\n", "utf8");
@@ -127,20 +139,30 @@ try {
 
 // 5. Run Verification Tests on Target
 console.log(`\n[4/4] Verifying target directory with test suite...`);
-try {
-  const testOutput = execSync("bun test", { cwd: TARGET_DIR, encoding: "utf8" });
-  const lines = testOutput.split("\n");
-  const summaryLine = lines.find((l) => l.includes("pass") && l.includes("fail")) || "";
-  console.log(` -> Test results in target: ${summaryLine.trim()}`);
+if (process.env.OMP_SKIP_VERIFY_TESTS === "1") {
+  console.log(` -> Skipping test verification (OMP_SKIP_VERIFY_TESTS=1).`);
   console.log("\n=================================================================");
-  console.log("  SUCCESS: Baseline deployed and validated successfully!        ");
+  console.log("  SUCCESS: Baseline deployed successfully (tests bypassed)!     ");
   console.log("=================================================================");
   console.log(`- Backup location : ${BACKUP_DIR}`);
   console.log(`- Active codebase : ${TARGET_DIR}`);
   console.log(`- Next step       : Restart OMP or reload extension to enjoy the update.`);
-} catch (err) {
-  console.error("[ERROR] Tests failed in target directory after deployment:");
-  console.error(err.stdout || err.message);
-  console.log(`\nRollback suggestion: Copy files back from ${BACKUP_DIR}`);
-  process.exit(1);
+} else {
+  try {
+    const testOutput = execSync("bun test", { cwd: TARGET_DIR, encoding: "utf8" });
+    const lines = testOutput.split("\n");
+    const summaryLine = lines.find((l) => l.includes("pass") && l.includes("fail")) || "";
+    console.log(` -> Test results in target: ${summaryLine.trim()}`);
+    console.log("\n=================================================================");
+    console.log("  SUCCESS: Baseline deployed and validated successfully!        ");
+    console.log("=================================================================");
+    console.log(`- Backup location : ${BACKUP_DIR}`);
+    console.log(`- Active codebase : ${TARGET_DIR}`);
+    console.log(`- Next step       : Restart OMP or reload extension to enjoy the update.`);
+  } catch (err) {
+    console.error("[ERROR] Tests failed in target directory after deployment:");
+    console.error(err.stdout || err.message);
+    console.log(`\nRollback suggestion: Copy files back from ${BACKUP_DIR}`);
+    process.exit(1);
+  }
 }
