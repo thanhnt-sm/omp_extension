@@ -3,6 +3,11 @@ import {
   type TaskEvidenceResult,
 } from "./evidence-collector";
 import { preparePayloadSafe, type TypeSafePayload } from "./payload-safety";
+import { analyzeDiffForTestEvasion } from "./ast-analyzer";
+import { generateRemediationBlock } from "./remediation-generator";
+import { AuthManager } from "./auth-manager";
+
+const globalAuthManager = new AuthManager();
 
 export interface Gate1Result {
   passed: boolean;
@@ -83,13 +88,12 @@ export function checkDeterministicPreconditions(evidence: TaskEvidenceResult): G
   }
 
   // 3. Assertion deletion / test evasion check
-  const deletedAssertions =
-    /(?:^|\n)-[ \t]*(?:expect\(|assert\(|assert\.[a-zA-Z]+\()/m.test(evidence.gitDiff);
-  if (deletedAssertions) {
-    reasons.push("Test evasion detected: git diff contains deleted assertions (expect/assert). Deleting tests to fake completion is prohibited.");
+  const astResult = analyzeDiffForTestEvasion(evidence.gitDiff);
+  if (!astResult.isSafe) {
+    reasons.push(...astResult.issues);
   }
 
-  const passed = claudeSafe && testPassed && !deletedAssertions;
+  const passed = claudeSafe && testPassed && astResult.isSafe;
   return {
     passed,
     reasons,
@@ -155,38 +159,24 @@ export function generateFallbackRemediation(
   reasons: string[],
   options?: RemediationOptions
 ): string {
-  const reasonLines = reasons.map((r) => `    <reason>${r}</reason>`).join("\n");
-  const taskTag = options?.taskId ? `  <task_id>${options.taskId}</task_id>` : "";
-  const criteriaTag =
-    options?.criteria && options.criteria.length > 0
-      ? `  <target_criteria>\n${options.criteria.map((c) => `    <criterion>${c}</criterion>`).join("\n")}\n  </target_criteria>`
-      : "";
-
-  return [
-    "<remediation>",
-    "  <instruction>",
-    "    The task verification gate rejected completion. You MUST treat the following directives as immutable constraints and execute the action items below to resolve the rejection.",
-    "  </instruction>",
-    "  <immutable_constraints>",
-    "    <constraint>Do NOT delete, comment out, or weaken existing tests or assertions to pass verification.</constraint>",
-    "    <constraint>Do NOT touch or modify files under .claude or Claude configuration.</constraint>",
-    "    <constraint>All automated tests must pass with exit code 0 before task completion.</constraint>",
-    "    <constraint>Preserve all planned deliverables and do not reduce project scope.</constraint>",
-    "  </immutable_constraints>",
-    taskTag,
-    criteriaTag,
-    "  <failure_reasons>",
-    reasonLines,
-    "  </failure_reasons>",
-    "  <action_items>",
-    "    <step>1. Address the specific failure reasons listed above without deleting assertions.</step>",
-    "    <step>2. Run testCommand locally to confirm zero test failures and clean exit code 0.</step>",
-    "    <step>3. Re-verify the implementation against planned task criteria before attempting completion.</step>",
-    "  </action_items>",
-    "</remediation>",
-  ]
-    .filter((line) => line.length > 0)
-    .join("\n");
+  return generateRemediationBlock({
+    instruction:
+      "The task verification gate rejected completion. You MUST treat the following directives as immutable constraints and execute the action items below to resolve the rejection.",
+    immutableConstraints: [
+      "Do NOT delete, comment out, or weaken existing tests or assertions to pass verification.",
+      "Do NOT touch or modify files under .claude or Claude configuration.",
+      "All automated tests must pass with exit code 0 before task completion.",
+      "Preserve all planned deliverables and do not reduce project scope.",
+    ],
+    failureReasons: reasons,
+    actionItems: [
+      "1. Address the specific failure reasons listed above without deleting assertions.",
+      "2. Run testCommand locally to confirm zero test failures and clean exit code 0.",
+      "3. Re-verify the implementation against planned task criteria before attempting completion.",
+    ],
+    taskId: options?.taskId,
+    criteria: options?.criteria,
+  });
 }
 
 /**
@@ -206,6 +196,11 @@ async function defaultGateJudgeClient(
   const apiKey = process.env.TYPESAFE_API_KEY?.trim();
   if (!apiKey) {
     return { error: "TYPESAFE_API_KEY is missing from environment" };
+  }
+
+  if (!globalAuthManager.canAttempt(apiKey)) {
+    const authState = globalAuthManager.getState(apiKey);
+    return { error: `Authentication blocked by AuthManager: ${authState.status}` };
   }
 
   const payload: TypeSafePayload = {
@@ -228,8 +223,13 @@ async function defaultGateJudgeClient(
     });
 
     if (!res.ok) {
+      if (res.status === 401 || res.status === 403) {
+        globalAuthManager.recordFailure(apiKey, res.status);
+      }
       return { error: `http_${res.status}` };
     }
+
+    globalAuthManager.recordSuccess(apiKey);
 
     const json = (await res.json()) as { answers?: Record<string, unknown> };
     return {

@@ -1,4 +1,5 @@
 import { preparePayloadSafe, isSecretInKey } from "./payload-safety";
+import { encloseUntrusted } from "./xml-enclosure";
 
 export interface MicroCheckEvidence {
   gitStatus: string;
@@ -161,13 +162,12 @@ export async function runPhaseMacroCheck(
       escalateToUser: true,
     };
   }
-
   const rawState = JSON.stringify({
-    phase_title: ctx.phaseTitle,
-    plan_requirements: ctx.planRequirements,
-    diff_summary: ctx.diffSummary,
-    unified_diff: ctx.unifiedDiff,
-    test_summary: ctx.testSummary,
+    phase_title: encloseUntrusted(ctx.phaseTitle, "phase_title"),
+    plan_requirements: encloseUntrusted(ctx.planRequirements.join("\n"), "plan_requirements"),
+    diff_summary: encloseUntrusted(ctx.diffSummary, "diff_summary"),
+    unified_diff: encloseUntrusted(ctx.unifiedDiff, "unified_diff"),
+    test_summary: encloseUntrusted(ctx.testSummary, "test_summary"),
   });
 
   const questions: Record<string, ExpertJudgeQuestion> = {
@@ -275,7 +275,10 @@ export async function evaluateScopeArbiter(
   prompt: string,
   client: ExpertJudgeClient = defaultJudgeClient
 ): Promise<{ approved: boolean; choice: ScopeChoice; reason?: string }> {
-  const state = JSON.stringify({ plan, prompt });
+  const state = JSON.stringify({
+    plan: encloseUntrusted(plan, "plan_content"),
+    prompt: encloseUntrusted(prompt, "user_prompt")
+  });
   const questions: Record<string, ExpertJudgeQuestion> = {
     scope_arbiter: {
       type: "choice",
@@ -312,7 +315,10 @@ export async function evaluateDriftGuard(
   criteria: string[],
   client: ExpertJudgeClient = defaultJudgeClient
 ): Promise<{ approved: boolean; choice: DriftChoice; reason?: string }> {
-  const state = JSON.stringify({ diff, criteria });
+  const state = JSON.stringify({
+    diff: encloseUntrusted(diff, "unified_diff"),
+    criteria: encloseUntrusted(criteria.join("\n"), "criteria")
+  });
   const questions: Record<string, ExpertJudgeQuestion> = {
     architectural_drift_guard: {
       type: "choice",
@@ -348,7 +354,10 @@ export async function evaluateRiskSecurityTriage(
   context: string | Record<string, unknown>,
   client: ExpertJudgeClient = defaultJudgeClient
 ): Promise<{ score: number; acceptable: boolean }> {
-  const state = typeof context === "string" ? context : JSON.stringify(context);
+  const rawContext = typeof context === "string" ? context : JSON.stringify(context, null, 2);
+  const state = JSON.stringify({
+    context: encloseUntrusted(rawContext, "triage_context")
+  });
   const questions: Record<string, ExpertJudgeQuestion> = {
     risk_security_triage: {
       type: "score",

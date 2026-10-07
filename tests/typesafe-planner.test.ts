@@ -21,7 +21,7 @@ describe("Phase 5: Multi-Persona Pre-Analysis (ck:predict Integration)", () => {
     expect(questions.devils_advocate.type).toBe("score");
   });
 
-  test("runMultiPersonaDebate routes evaluation exclusively to fast-model tier (jev-fast)", async () => {
+  test("runMultiPersonaDebate routes evaluation exclusively to predict tier (jev-latest default)", async () => {
     let capturedModel = "";
     let capturedQuestions: Record<string, unknown> = {};
 
@@ -45,7 +45,7 @@ describe("Phase 5: Multi-Persona Pre-Analysis (ck:predict Integration)", () => {
     const plan = "1. Step 1: Implement secure cache in src/cache.ts\nVerification: bun test";
     const result = await runMultiPersonaDebate(plan, mockClient);
 
-    expect(capturedModel).toBe("jev-fast");
+    expect(capturedModel).toBe("jev-latest");
     expect(Object.keys(capturedQuestions)).toEqual([
       "architect",
       "security",

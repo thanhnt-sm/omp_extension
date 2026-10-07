@@ -424,7 +424,7 @@ export interface DebateJudgeClient {
   evaluateDebate: (params: {
     state: string;
     questions: Record<string, TypeSafeQuestion>;
-    model: "jev-fast";
+    model?: string;
   }) => Promise<{
     answers?: Record<string, { score: number; verdict?: string }>;
     modelUsed?: string;
@@ -512,11 +512,11 @@ export async function runMultiPersonaDebate(
     response = await client.evaluateDebate({
       state,
       questions,
-      model: "jev-fast",
+      model: process.env.TYPESAFE_PREDICT_MODEL || "jev-latest",
     });
   } else {
     response = {
-      modelUsed: "jev-fast",
+      modelUsed: process.env.TYPESAFE_PREDICT_MODEL || "jev-latest",
       answers: {
         architect: { score: 3 },
         security: { score: 3 },
@@ -620,40 +620,21 @@ export default function (pi: ExtensionAPI): void {
           signal: probeSignal,
         });
 
+        const extCtx = ctx as unknown as { ui?: { notify?: (msg: string, type: string) => void } };
+
         if (probeRes.status === 401 || probeRes.status === 403) {
           lastFailedKeyHash = hashToken(apiKey);
-          await pi.sendMessage(
-            {
-              customType: "typesafe-health",
-              content: "TypeSafe warning: TYPESAFE_API_KEY is invalid or expired. Check your environment configuration.",
-              display: true,
-            },
-            { deliverAs: "nextTurn" }
-          );
+          extCtx.ui?.notify?.("TypeSafe warning: TYPESAFE_API_KEY is invalid or expired. Check your environment configuration.", "warning");
           return;
         }
 
         if (probeRes.status === 404) {
-          await pi.sendMessage(
-            {
-              customType: "typesafe-health",
-              content: "TypeSafe warning: TypeSafe endpoint returned 404 Not Found. Verify models.yml baseUrl does not have an extraneous '/v1' suffix.",
-              display: true,
-            },
-            { deliverAs: "nextTurn" }
-          );
+          extCtx.ui?.notify?.("TypeSafe warning: TypeSafe endpoint returned 404 Not Found. Verify models.yml baseUrl does not have an extraneous '/v1' suffix.", "warning");
           return;
         }
 
         if (probeRes.ok) {
-          await pi.sendMessage(
-            {
-              customType: "typesafe-health",
-              content: "TypeSafe: ONLINE (jev-latest)",
-              display: true,
-            },
-            { deliverAs: "nextTurn" }
-          );
+          extCtx.ui?.notify?.("TypeSafe: ONLINE (jev-latest)", "info");
           await pi.sendMessage(
             { customType: "typesafe-planner", content: PROMPT_INJECTION, display: false },
             { deliverAs: "nextTurn" }
@@ -661,23 +642,10 @@ export default function (pi: ExtensionAPI): void {
           return;
         }
 
-        await pi.sendMessage(
-          {
-            customType: "typesafe-health",
-            content: `TypeSafe warning: Pre-flight probe failed with HTTP status ${probeRes.status}.`,
-            display: true,
-          },
-          { deliverAs: "nextTurn" }
-        );
+        extCtx.ui?.notify?.(`TypeSafe warning: Pre-flight probe failed with HTTP status ${probeRes.status}.`, "warning");
       } catch {
-        await pi.sendMessage(
-          {
-            customType: "typesafe-health",
-            content: "TypeSafe warning: TypeSafe API unreachable. Check internet connection or proxy settings.",
-            display: true,
-          },
-          { deliverAs: "nextTurn" }
-        );
+        const extCtx = ctx as unknown as { ui?: { notify?: (msg: string, type: string) => void } };
+        extCtx.ui?.notify?.("TypeSafe warning: TypeSafe API unreachable. Check internet connection or proxy settings.", "warning");
       }
     } catch {
       // Non-critical notification failure — the tool is registered

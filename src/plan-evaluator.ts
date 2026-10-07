@@ -1,4 +1,5 @@
 import { preparePayloadSafe, type TypeSafePayload } from "./payload-safety";
+import { encloseUntrusted } from "./xml-enclosure";
 
 export interface PlanQuestion {
   type: "choice" | "score" | "noul";
@@ -296,8 +297,10 @@ export async function evaluatePlanDraft(
 
   // 2. Build questions and evaluate
   const questions = constructPlanQuestions();
-  const state = `Plan Title: ${input.planTitle}\nUser Prompt: ${input.userPrompt ?? "N/A"}\n\nPlan Content:\n${input.planContent}`;
-
+  const safeTitle = encloseUntrusted(input.planTitle, "plan_title");
+  const safePrompt = encloseUntrusted(input.userPrompt ?? "N/A", "user_prompt");
+  const safeContent = encloseUntrusted(input.planContent, "plan_content");
+  const state = `<plan_evaluation_state>\n${safeTitle}\n${safePrompt}\n${safeContent}\n</plan_evaluation_state>`;
   const response = judgeClient
     ? await judgeClient.evaluatePlan({ state, questions })
     : await defaultJudgeClient(state, questions);
