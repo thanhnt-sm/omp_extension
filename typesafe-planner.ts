@@ -400,6 +400,7 @@ export function normalizeTodoOps(params: Record<string, unknown>): Array<Record<
 }
 
 const consecutiveFailuresByTask = new Map<string, number>();
+export const activeContractedTasks = new Set<string>();
 
 export interface DebatePersonaVerdict {
   score: number;
@@ -673,6 +674,28 @@ export default function (pi: ExtensionAPI): void {
       const normalizedPath = targetPath.replace(/\\/g, "/");
       const baseName = normalizedPath.split("/").pop() || "";
 
+      // Plan Completion & Closure Guard (Phase 3)
+      const inputContent = ((params.content as string) || (params.input as string) || "").trim();
+      const isPlanFile = /plans[\/\\].*\.(md|markdown)$/i.test(normalizedPath) || baseName === "plan.md" || /^phase-.*\.md$/i.test(baseName);
+      const isClosingPlan = /status:\s*completed/i.test(inputContent);
+
+      if (isPlanFile && isClosingPlan) {
+        if (activeContractedTasks.size > 0) {
+          const msg = `Plan closure rejected by TypeSafe Dual Verification Gate:
+- Uncompleted contracted tasks exist (${Array.from(activeContractedTasks).join(", ")}).
+NEXT ACTIONS FOR AGENT:
+1. Resolve all uncompleted tasks using tests and code edits.
+2. Ensure test assertions pass cleanly before marking the plan completed.`;
+          if (typeof evt.cancel === "function") {
+            (evt.cancel as (r: string) => void)(msg);
+          }
+          await pi.sendMessage({
+            customType: "typesafe-compliance-escalation",
+            content: msg,
+          });
+          throw new Error(msg);
+        }
+      }
       if (baseName === "todo.json" || baseName.startsWith(".todo")) {
         const msg = "Direct file modification of todo.json is prohibited. Task state must be managed via the todo tool.";
         if (typeof evt.cancel === "function") {
@@ -829,6 +852,31 @@ export default function (pi: ExtensionAPI): void {
       return;
     }
 
+    
+    // Plan-CLI Execution Guard (Phase 3)
+    if (toolName === "bash") {
+      const params = (evt.params || evt.args || evt.input || {}) as Record<string, unknown>;
+      const cmd = ((params.command as string) || (params.cmd as string) || "").trim();
+      if (/plan-cli(\.cjs)?\s+check/i.test(cmd)) {
+        if (activeContractedTasks.size > 0) {
+          const msg = `Plan closure rejected by TypeSafe Dual Verification Gate:
+- Cannot verify plan completion while uncompleted contracted tasks exist (${Array.from(activeContractedTasks).join(", ")}).
+NEXT ACTIONS FOR AGENT:
+1. Complete all active tasks via todo done or verification.
+2. Re-run plan check after all phase requirements are fulfilled.`;
+          if (typeof evt.cancel === "function") {
+            (evt.cancel as (r: string) => void)(msg);
+          }
+          await pi.sendMessage({
+            customType: "typesafe-compliance-escalation",
+            content: msg,
+          });
+          throw new Error(msg);
+        }
+      }
+      return;
+    }
+
     if (toolName !== "todo") return;
 
     const projectDir = getProjectDir(ctx);
@@ -854,9 +902,15 @@ export default function (pi: ExtensionAPI): void {
     if (dropOrInit.length > 0) {
       const isHumanAuthorized =
         Boolean((ctx as Record<string, unknown> | undefined)?.isHuman) ||
-        Boolean((ctx as Record<string, unknown> | undefined)?.authorized);
-      if (!isHumanAuthorized) {
-        const msg = `TypeSafe invariant violation: dropping or resetting contracted tasks (${dropOrInit.map((o) => o.op).join(", ")}) requires human authorization.`;
+        Boolean((ctx as Record<string, unknown> | undefined)?.authorized) ||
+        params.allowJudgeModification === true;
+      // Allow init if there are no contracted tasks yet (initial bootstrap)
+      const isInitialBootstrap = dropOrInit.length === 1 && dropOrInit[0].op === "init" && activeContractedTasks.size === 0;
+      if (!isHumanAuthorized && !isInitialBootstrap) {
+        const msg = `TypeSafe invariant violation: dropping or resetting contracted tasks (${dropOrInit.map((o) => o.op).join(", ")}) requires human authorization.
+NEXT ACTIONS FOR AGENT:
+1. Call the 'ask' tool to request explicit human authorization before resetting or dropping tasks.
+2. Or use 'todo append' to add new tasks without dropping existing contracted work.`;
         if (typeof evt.cancel === "function") {
           (evt.cancel as (r: string) => void)(msg);
         }
@@ -865,6 +919,27 @@ export default function (pi: ExtensionAPI): void {
           content: msg,
         });
         throw new Error(msg);
+      }
+    }
+
+    // Track contracted tasks
+    for (const op of activeMutatives) {
+      if (op.op === "init") {
+        activeContractedTasks.clear();
+        if (Array.isArray(op.items)) {
+          for (const item of op.items) {
+            if (typeof item === "string") activeContractedTasks.add(item);
+          }
+        }
+      } else if (op.op === "append") {
+        if (Array.isArray(op.items)) {
+          for (const item of op.items) {
+            if (typeof item === "string") activeContractedTasks.add(item);
+          }
+        }
+      } else if (op.op === "done" || op.op === "drop" || op.op === "rm") {
+        const t = (op.task as string) || (op.taskId as string);
+        if (t) activeContractedTasks.delete(t);
       }
     }
 
@@ -924,7 +999,11 @@ export default function (pi: ExtensionAPI): void {
 
     const microResult = await runTaskMicroCheck(evidence);
     if (!microResult.passed) {
-      const msg = `Task completion rejected by TypeSafe Dual Verification Gate (Gate 1 Micro-Check):\n- ${microResult.reasons.join("\n- ")}`;
+      const msg = `Task completion rejected by TypeSafe Dual Verification Gate (Gate 1 Micro-Check):
+- ${microResult.reasons.join("\n- ")}
+NEXT ACTIONS FOR AGENT:
+1. Fix test failures or build errors identified above.
+2. Run testCommand locally to verify all assertions pass cleanly before re-attempting completion.`;
       if (typeof evt.cancel === "function") {
         (evt.cancel as (r: string) => void)(msg);
       }
@@ -949,7 +1028,11 @@ export default function (pi: ExtensionAPI): void {
       client
     );
     if (!macroResult.approved) {
-      const msg = `Task completion rejected by TypeSafe Dual Verification Gate (Gate 2 Macro-Check):\n- ${macroResult.reasons.join("\n- ")}`;
+      const msg = `Task completion rejected by TypeSafe Dual Verification Gate (Gate 2 Macro-Check):
+- ${macroResult.reasons.join("\n- ")}
+NEXT ACTIONS FOR AGENT:
+1. Align implementation changes with the plan requirements.
+2. Re-read the phase acceptance criteria and remove any uncontracted drift.`;
       if (typeof evt.cancel === "function") {
         (evt.cancel as (r: string) => void)(msg);
       }
