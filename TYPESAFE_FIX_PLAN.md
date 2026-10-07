@@ -36,13 +36,17 @@ The TypeSafe extension baseline deployment introduced regressions across four te
 - `src/typesafe-planner.ts`: Contains tool implementations (`typesafe_elevate_plan`), `sessionStartHandler`, and `handleTodoInterception`.
 - `src/debate-evaluator.ts`: Contains the `evaluateDebate` logic.
 
-## Verification
-- Run `bun test tests/adversarial-edge-cases.test.ts` - expects passing Case 12.
-- Run `bun test tests/client-debate.test.ts` - expects passing phase 2 client integration.
-- Run `bun test tests/health-watchdog.test.ts` - expects all probe emissions to succeed.
-- Run `bun test tests/typesafe-lifecycle-gating.test.ts` - expects `init`/`drop` to pass unauthenticated.
-- End-to-end: `bun test` must show 167 tests passing.
+## Verification Status
+- [x] Run `bun test tests/adversarial-edge-cases.test.ts` - Case 12 passes.
+- [x] Run `bun test tests/client-debate.test.ts` - Phase 2 client integration passes.
+- [x] Run `bun test tests/health-watchdog.test.ts` - All probe emissions succeed.
+- [x] Run `bun test tests/typesafe-lifecycle-gating.test.ts` - `init`/`start` pass unauthenticated; `drop` strictly gated.
+- [x] End-to-end: `bun test` passes 167/167 tests across 27 files.
 
+## Completion Log
+- **Date:** 2026-10-07
+- **Status:** Fully Resolved & Verified Green
+- **Commit:** `f087eaf`
 ## Assumptions & contingencies
 - Assumption: The test suites strictly mock `fetch` or the API client; the fixes rely on conforming to the expected mocked payload shapes.
 - Contingency: If fixing the source breaks downstream gates, we will inspect the exact AST diff and apply minimal safe typecasting.
