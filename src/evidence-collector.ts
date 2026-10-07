@@ -176,18 +176,18 @@ export async function collectTaskEvidence(
     assertPathIsClaudeSafe(options.planPath);
   }
 
-  // 1. Git working tree status
-  const gitStatusRes = await executeTestCommand("git status --porcelain", cwd, 5000);
+  // 1 & 2. Git working tree status and diff (run concurrently for low latency)
+  const [gitStatusRes, gitDiffRes] = await Promise.all([
+    executeTestCommand("git status --porcelain", cwd, 5000),
+    executeTestCommand("git diff HEAD", cwd, 5000).then(async (res) => {
+      if (res.exitCode !== 0) {
+        return executeTestCommand("git diff", cwd, 5000);
+      }
+      return res;
+    }),
+  ]);
   const gitStatus = gitStatusRes.output.trim();
-
-  // 2. Git diff
-  // 2. Git diff (capture staged and unstaged changes, fall back to plain git diff if HEAD doesn't exist)
-  let gitDiffRes = await executeTestCommand("git diff HEAD", cwd, 5000);
-  if (gitDiffRes.exitCode !== 0) {
-    gitDiffRes = await executeTestCommand("git diff", cwd, 5000);
-  }
   const gitDiff = gitDiffRes.output.trim();
-  // 3. Test execution if command provided
   let testExitCode: number | null = null;
   let testOutput = "";
   if (options.testCommand) {
