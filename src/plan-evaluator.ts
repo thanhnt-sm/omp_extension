@@ -358,8 +358,8 @@ export async function evaluatePlanDraft(
 
   return {
     approved,
-    score: depthScore,
-    noul: actionability,
+    score: depthScore !== undefined ? Number(depthScore) : 0,
+    noul: actionability !== undefined ? Number(actionability) : 0,
     scopeMode: scopeChoice,
     claudeIsolationSafe: true,
     triagePassed: !input.skipTriage ? true : undefined,
