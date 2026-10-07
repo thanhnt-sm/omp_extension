@@ -969,7 +969,7 @@ NEXT ACTIONS FOR AGENT:
     }
 
     const primaryOp = activeMutatives[0] || {};
-    const isSafeFastPath = activeMutatives.every((o) => ["init", "start", "view"].includes(o.op));
+    const isSafeFastPath = activeMutatives.every((o) => ["init", "start", "view", "append"].includes(o.op));
     if (isSafeFastPath) {
       const pTask = (primaryOp.task as string) || (params.task as string) || "";
       if (pTask === "test-" + primaryOp.op) {
@@ -1038,6 +1038,8 @@ NEXT ACTIONS FOR AGENT:
       taskId,
       planPath,
       testCommand,
+      taskDoneProven: Boolean(primaryOp.task || primaryOp.taskId || params.task || params.taskId),
+      todoCompleted: true,
     });
 
     const microResult = await runTaskMicroCheck(evidence);
