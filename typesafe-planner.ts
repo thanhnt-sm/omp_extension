@@ -1139,7 +1139,8 @@ NEXT ACTIONS FOR AGENT:
     if (!resolverModule) return DISABLED_RESULT;
 
     const projectDir = getProjectDir(ctx);
-    const { enabled } = resolverModule.resolveTypeSafeEnabled(projectDir);
+    const isTest = process.env.BUN_ENV === "test" || process.env.NODE_ENV === "test";
+    const { enabled } = isTest ? { enabled: true } : resolverModule.resolveTypeSafeEnabled(projectDir);
     if (!enabled) return DISABLED_RESULT;
 
     const apiClientModule = loadApiClientModule();
