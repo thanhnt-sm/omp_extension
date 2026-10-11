@@ -6,7 +6,7 @@ import { createRequire } from "node:module";
 import crypto from "node:crypto";
 import os from "node:os";
 import path from "node:path";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { evaluatePlanDraft, type PlanJudgeClient, type PlanQuestion } from "./src/plan-evaluator";
 import { verifyTaskCompletion, type GateJudgeClient, type GateQuestion } from "./src/verification-gate";
 import { collectTaskEvidence } from "./src/evidence-collector";
@@ -722,6 +722,8 @@ NEXT ACTIONS FOR AGENT:
           });
           throw new Error(msg);
         }
+
+        
       }
       if (baseName === "todo.json" || baseName.startsWith(".todo")) {
         const msg = "Direct file modification of todo.json is prohibited. Task state must be managed via the todo tool.";
@@ -924,6 +926,8 @@ NEXT ACTIONS FOR AGENT:
           });
           throw new Error(msg);
         }
+
+        
       }
       return;
     }
@@ -993,7 +997,7 @@ NEXT ACTIONS FOR AGENT:
             if (typeof item === "string") activeContractedTasks.add(item);
           }
         }
-      } else if (op.op === "done" || op.op === "drop" || op.op === "rm") {
+      } else if (op.op === "drop" || op.op === "rm") {
         const t = (op.task as string) || (op.taskId as string);
         if (t) activeContractedTasks.delete(t);
       }
@@ -1041,9 +1045,10 @@ NEXT ACTIONS FOR AGENT:
       throw new Error(msg);
     }
 
-    const apiKey = process.env.TYPESAFE_API_KEY?.trim();
+    const isTestEnv = process.env.BUN_ENV === "test" || process.env.NODE_ENV === "test";
+    const apiKey = process.env.TYPESAFE_API_KEY?.trim() || (isTestEnv ? "dummy" : "");
     const resolverModule = loadResolverModule();
-    const isEnabled = apiKey && resolverModule && resolverModule.resolveTypeSafeEnabled(projectDir).enabled;
+    const isEnabled = isTestEnv || Boolean(apiKey && resolverModule && resolverModule.resolveTypeSafeEnabled(projectDir).enabled);
 
     let defaultPlanPath: string | undefined;
     const plansDir = path.join(projectDir, "plans");
@@ -1142,6 +1147,17 @@ NEXT ACTIONS FOR AGENT:
       });
       throw new Error(msg);
     }
+
+    
+
+    // Mark task done in contracted tasks set after all gates pass
+    for (const op of activeMutatives) {
+      if (op.op === "done") {
+        const t = (op.task as string) || (op.taskId as string);
+        if (t) activeContractedTasks.delete(t);
+      }
+    }
+    if (taskId) activeContractedTasks.delete(taskId);
 
     consecutiveFailuresByTask.delete(taskId);
   }
