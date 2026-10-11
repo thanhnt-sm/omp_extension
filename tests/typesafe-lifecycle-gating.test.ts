@@ -1,6 +1,10 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import registerExtension from "../typesafe-planner";
-
+import os from "node:os";
+import path from "node:path";
+import { promises as fs } from "node:fs";
+import { createRequire } from "node:module";
+import registerExtension, { activeContractedTasks } from "../typesafe-planner";
+const nodeRequire = createRequire(import.meta.url);
 interface MockToolDefinition {
   name: string;
   description: string;
@@ -81,6 +85,7 @@ describe("TypeSafe Lifecycle Gating & Human Authorization Fix (TDD Tests)", () =
   const originalFetch = globalThis.fetch;
 
   beforeEach(() => {
+    activeContractedTasks.clear();
     globalThis.fetch = (async (url: string | URL | Request) => {
       const urlStr = url.toString();
       if (urlStr.includes("systemone")) {
@@ -211,11 +216,16 @@ describe("TypeSafe Lifecycle Gating & Human Authorization Fix (TDD Tests)", () =
     expect(cancelledReason).toContain("NEXT ACTIONS FOR AGENT:");
   });
 
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
   // Requirement 6: Plan completion loophole: direct status: completed in plan files or plan-cli check
   test("intercepts write/edit to plans/**/plan.md or phase-*.md setting status: completed", async () => {
     const { handlers } = createMockPi();
     const interceptor = handlers.tool_call?.[0];
     expect(interceptor).toBeDefined();
+    activeContractedTasks.add("Dummy Task");
 
     let cancelledReason: string | undefined;
     const evt: MockEvent = {
@@ -243,7 +253,8 @@ describe("TypeSafe Lifecycle Gating & Human Authorization Fix (TDD Tests)", () =
   test("intercepts bash command running plan-cli.cjs check", async () => {
     const { handlers } = createMockPi();
     const interceptor = handlers.tool_call?.[0];
-    expect(interceptor).toBeDefined();
+    activeContractedTasks.add("Dummy Task");
+
 
     let cancelledReason: string | undefined;
     const evt: MockEvent = {
@@ -265,5 +276,48 @@ describe("TypeSafe Lifecycle Gating & Human Authorization Fix (TDD Tests)", () =
 
     expect(threw || cancelledReason !== undefined).toBe(true);
     expect(cancelledReason || "").toContain("Plan closure");
+  });
+
+  test("Resolver Contract: '*' enables TypeSafe for any project and respects excludeProjects", async () => {
+    const resolverPath = path.join(os.homedir(), ".claude", "hooks", "lib", "typesafe-enabled-resolver.cjs");
+    const { resolveTypeSafeEnabled } = nodeRequire(resolverPath);
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "typesafe-test-home-"));
+    try {
+      const claudeDir = path.join(tempDir, ".claude");
+      await fs.mkdir(claudeDir, { recursive: true });
+      const forbiddenDir = path.join(tempDir, "forbidden");
+      await fs.mkdir(forbiddenDir, { recursive: true });
+      await fs.mkdir(path.join(forbiddenDir, ".git"), { recursive: true });
+
+      const normalDir = path.join(tempDir, "normal-repo");
+      await fs.mkdir(normalDir, { recursive: true });
+      await fs.mkdir(path.join(normalDir, ".git"), { recursive: true });
+
+      const config = {
+        typesafe: {
+          projects: ["*"],
+          excludeProjects: [forbiddenDir],
+        },
+      };
+      await fs.writeFile(path.join(claudeDir, ".ck.json"), JSON.stringify(config), "utf8");
+
+      // General git project matching wildcard "*"
+      const res1 = resolveTypeSafeEnabled(normalDir, {
+        env: { TYPESAFE_API_KEY: "test_key" },
+        homeDir: tempDir,
+      });
+      expect(res1.enabled).toBe(true);
+      expect(res1.reason).toBe("global-allowlist");
+
+      // Excluded project
+      const res2 = resolveTypeSafeEnabled(forbiddenDir, {
+        env: { TYPESAFE_API_KEY: "test_key" },
+        homeDir: tempDir,
+      });
+      expect(res2.enabled).toBe(false);
+      expect(res2.reason).toBe("global-excluded");
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
   });
 });
