@@ -182,4 +182,49 @@ describe("Phase 3: Session Pre-Flight Health Probe", () => {
       expect(warning?.display).toBe(true);
     });
   });
+  test("False-Positive Warning Suppression: 200 OK probe suppresses unreachable warning on IPC rejection", async () => {
+    let sessionStartHandler: ((event: unknown, ctx: unknown) => Promise<void>) | undefined;
+    const sentMessages: SentMessage[] = [];
+
+    const mockPi = {
+      zod: {
+        object: (x: unknown) => x,
+        union: (x: unknown) => x,
+        string: () => ({ optional: () => "string", min: () => "string" }),
+        number: () => ({ optional: () => "number" }),
+        record: (x: unknown) => x,
+        enum: (x: unknown) => x,
+        unknown: () => ({ optional: () => "unknown" }),
+        array: (x: unknown) => ({ min: () => x, optional: () => x }),
+      },
+      on: (event: string, handler: (event: unknown, ctx: unknown) => Promise<void>) => {
+        if (event === "session_start") sessionStartHandler = handler;
+      },
+      sendMessage: async (msg: SentMessage, opts?: MessageOptions) => {
+        if (opts?.deliverAs === "nextTurn") {
+          throw new Error("IPC rejection on nextTurn");
+        }
+        sentMessages.push(msg);
+      },
+      registerTool: () => {},
+    };
+
+    registerExtension(mockPi as unknown as Parameters<typeof registerExtension>[0]);
+    await withScopedEnv({ TYPESAFE_API_KEY: "valid_key" }, async () => {
+      globalThis.fetch = mock(async () => {
+        return new Response(JSON.stringify({ answers: { ping: { noul: 1.0 } } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }) as unknown as typeof fetch;
+
+      await expect(sessionStartHandler!({}, { cwd: process.cwd() })).resolves.toBeUndefined();
+
+      const onlineMsg = sentMessages.find((m) => m.content.includes("TypeSafe: ONLINE (jev-latest)"));
+      const unreachableMsg = sentMessages.find((m) => m.content.includes("TypeSafe API unreachable"));
+
+      expect(onlineMsg).toBeDefined();
+      expect(unreachableMsg).toBeUndefined();
+    });
+  });
 });
