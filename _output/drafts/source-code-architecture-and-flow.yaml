@@ -1,0 +1,116 @@
+version: 1
+meta:
+  title: "TypeSafe Extension: Architecture, Modeling & Logic Flow"
+  description: "Comprehensive technical documentation and structural visualization of the omp-typesafe-extension codebase."
+theme:
+  preset: blueprint
+policy:
+  network: deny
+datasets:
+  core-modules:
+    - { file: "typesafe-planner.ts", layer: "Root Orchestration", role: "OMP extension hook, tool interceptor, stall ratchet", testSuite: "typesafe-planner.test.ts" }
+    - { file: "src/verification-gate.ts", layer: "Verification Engine", role: "Dual-gate verification coordinator (Gate 1 + Gate 2)", testSuite: "verification-gate.test.ts" }
+    - { file: "src/evidence-collector.ts", layer: "Evidence Subsystem", role: "Concurrent git status/diff collector, test runner", testSuite: "evidence-collector.test.ts" }
+    - { file: "src/plan-evaluator.ts", layer: "Plan Quality", role: "Plan-time rubric evaluation (Scope, Depth, Actionability)", testSuite: "plan-evaluator.test.ts" }
+    - { file: "src/cook-expert-judge.ts", layer: "Expert System", role: "Specialist verdicts (scope_arbiter, drift_guard, risk)", testSuite: "cook-expert-judge.test.ts" }
+    - { file: "src/debate-evaluator.ts", layer: "Debate & Consensus", role: "5-persona multi-perspective evaluation & score averaging", testSuite: "debate-evaluator.test.ts" }
+    - { file: "src/ast-analyzer.ts", layer: "Static Analysis", role: "Anti-test-evasion diffing & tautology detection", testSuite: "ast-analyzer.test.ts" }
+    - { file: "src/auth-manager.ts", layer: "Security & Auth", role: "API key hashing, failure tracking, dynamic recovery", testSuite: "auth-manager.test.ts" }
+    - { file: "src/payload-safety.ts", layer: "Security & Redaction", role: "Secret redaction (Anthropic/Claude), 32KB payload boundary", testSuite: "payload-safety.test.ts" }
+    - { file: "src/xml-enclosure.ts", layer: "Boundary Defense", role: "Prompt boundary protection & XML injection sanitization", testSuite: "xml-enclosure.test.ts" }
+    - { file: "src/remediation-generator.ts", layer: "Remediation", role: "Strict XML remediation blocks for rejected tasks", testSuite: "remediation.test.ts" }
+    - { file: "src/egc.ts", layer: "Governance", role: "Evidence-Gated Completion alternative arbiter", testSuite: "egc.test.ts" }
+
+  registered-tools:
+    - { name: "typesafe_judge", category: "Core Evaluation", description: "Send state and questions (noul, choice, score) to System One" }
+    - { name: "typesafe_rerank", category: "Ranking", description: "Rank candidate strings or code snippets against a query" }
+    - { name: "typesafe_evaluate_multi", category: "Multi-Label", description: "Evaluate state against multiple dimension labels simultaneously" }
+    - { name: "typesafe_elevate_plan", category: "Plan Quality", description: "Evaluate plan draft against Scope, Algorithm, and Actionability" }
+    - { name: "typesafe_verify_completion", category: "Dual Gate", description: "Intercept and gate task completion via Gate 1 and Gate 2" }
+    - { name: "typesafe_expert_review", category: "Specialist Review", description: "Invoke scope_arbiter, drift_guard, or risk_security_triage" }
+
+  gate-comparison:
+    - { attribute: "Execution Cadence", gate1: "Local (Zero-token)", gate2: "Remote (System One API)" }
+    - { attribute: "Implementation Path", gate1: "cook-expert-judge (runTaskMicroCheck)", gate2: "cook-expert-judge (runPhaseMacroCheck)" }
+    - { attribute: "Primary Checks", gate1: "Tests code 0, AST diff evasion, .claude safe", gate2: "meets_criteria probability, plan_drift, secret isolation" }
+    - { attribute: "Threshold / Invariant", gate1: "100% deterministic invariants pass", gate2: "P(criteria) >= 0.80, drift == 'no_drift'" }
+    - { attribute: "Failure Outcome (todo)", gate1: "Reject message; ratchet counter was incremented before check", gate2: "Reject message with drift feedback; halts at >= 3 failures" }
+    - { attribute: "Remediation Block", gate1: "Only generated in typesafe_verify_completion tool", gate2: "Fail-closed fallback remediation in verify tool" }
+
+  debate-personas:
+    - { persona: "Architect", focus: "Architecture & Modularity", criterion: "Architectural soundness, separation of concerns, and component boundary integrity" }
+    - { persona: "Security", focus: "Threat Surface & Secrets", criterion: "Threat surface, credential protection, boundary isolation, and attack resilience" }
+    - { persona: "Performance", focus: "Latency & Resources", criterion: "Computational complexity, latency bottlenecks, memory footprint, and token waste" }
+    - { persona: "UX", focus: "Ergonomics & DX", criterion: "Developer experience, API ergonomics, debuggability, and diagnostic clarity" }
+    - { persona: "Devil's Advocate", focus: "Blindspots & Fallbacks", criterion: "Challenge hidden assumptions, single points of failure, missing rollback paths, and edge cases" }
+
+blocks:
+  - type: hero
+    eyebrow: "Architecture & Logic Flow"
+    title: "omp-typesafe-extension Overview"
+    description: "Deep-dive documentation of modules, security firewalls, dual-verification gates, and execution lifecycles."
+  - type: kpi
+    title: "System Metrics & Contracts"
+    items:
+      - { label: "Core Modules", value: "12 files", caption: "Modular TypeScript in src/" }
+      - { label: "Registered Tools", value: "6 tools", caption: "Exposed to OMP harness" }
+      - { label: "Verification Suites", value: "26 suites", caption: "Hermetic Bun tests" }
+      - { label: "Approval Threshold", value: "80%", caption: "Configurable Gate 2 threshold" }
+  - type: callout
+    tone: info
+    title: "Dual Verification Gate Architecture"
+    text: "Task completion (`todo done`) triggers a two-tier evaluation firewall. Gate 1 executes locally in milliseconds with zero LLM tokens, checking test pass status and AST diff safety. Only when Gate 1 passes does Gate 2 query TypeSafe System One (`jev-latest`) to semantically assess plan adherence and drift."
+  - type: steps
+    title: "Task Completion & Verification Pipeline"
+    items:
+      - title: "1. Tool Call Interception & Ratchet Count"
+        text: "The agent issues `todo done`. `typesafe-planner.ts` increments the task failure counter immediately, before executing Gate 1. If counter >= 3, it halts for user escalation."
+      - title: "2. Ground-Truth Evidence Collection"
+        text: "Evidence collector concurrently executes `git status --porcelain` and `git diff HEAD`, runs the test command, and extracts criteria from the plan."
+      - title: "3. Gate 1 Deterministic Micro-Check"
+        text: "Executed via `cook-expert-judge.runTaskMicroCheck`. Verifies test exit code is 0, scans diff with AST analyzer for deleted assertions or tautologies, and asserts zero `.claude/` modifications."
+      - title: "4. Gate 2 Semantic Macro-Check"
+        text: "Executed via `cook-expert-judge.runPhaseMacroCheck`. Evaluates `meets_criteria` (threshold >= 0.80) and `plan_drift` (must be `no_drift`)."
+      - title: "5. Completion or Ratchet Escalation"
+        text: "On approval, task completes and failure counter is cleared. On rejection, rejection feedback is returned to the agent."
+  - type: main-aside
+    blocks:
+      - type: data-table
+        title: "Core Modules & Responsibilities"
+        dataRef: core-modules
+        columns:
+          - { key: file, label: "Module" }
+          - { key: layer, label: "Layer", type: badge, tones: { "Root Orchestration": info, "Verification Engine": success, "Security & Auth": danger, "Plan Quality": warning } }
+          - { key: role, label: "Responsibility" }
+          - { key: testSuite, label: "Test Suite" }
+      - type: data-table
+        title: "Registered OMP Tools"
+        dataRef: registered-tools
+        columns:
+          - { key: name, label: "Tool Name" }
+          - { key: category, label: "Category", type: badge }
+          - { key: description, label: "Function" }
+      - type: data-table
+        title: "Multi-Persona Debate Framework"
+        dataRef: debate-personas
+        columns:
+          - { key: persona, label: "Persona", type: badge }
+          - { key: focus, label: "Core Focus" }
+          - { key: criterion, label: "Evaluation Criterion" }
+    aside:
+      - type: key-value
+        title: "Runtime Environment"
+        items:
+          - { key: "Host Harness", value: "oh-my-pi (omp)" }
+          - { key: "Runtime", value: "Bun v1.4.0 (ESM)" }
+          - { key: "Judge Model", value: "jev-latest" }
+          - { key: "API Endpoint", value: "https://api.typesafe.ai/v1/systemone" }
+          - { key: "Payload Max Size", value: "32 KB" }
+          - { key: "Stall Limit", value: "3 consecutive rejections" }
+      - type: data-table
+        title: "Gate 1 vs Gate 2 Comparison"
+        dataRef: gate-comparison
+        columns:
+          - { key: attribute, label: "Aspect" }
+          - { key: gate1, label: "Gate 1 (Deterministic)" }
+          - { key: gate2, label: "Gate 2 (Semantic)" }

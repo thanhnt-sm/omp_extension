@@ -1,0 +1,64 @@
+version: 1
+meta:
+  title: "omp_extension TypeSafe Status"
+  description: "Status of plan 261009 (health probe transport isolation) and recent TypeSafe commits, from repo observations."
+theme:
+  preset: blueprint
+policy:
+  network: deny
+datasets:
+  criteria:
+    - { criterion: "Transport scoping isolation", status: "done" }
+    - { criterion: "False-positive warning suppression", status: "done" }
+    - { criterion: "Hermetic verification (health-watchdog tests)", status: "done" }
+    - { criterion: "Dynamic dev workspace detection", status: "done" }
+    - { criterion: "Stall ratchet authorization and failure reset", status: "done" }
+  commits:
+    - { hash: "4f781a5", subject: "test: support test environment in type safe resolver check" }
+    - { hash: "272d770", subject: "fix(typesafe): decouple default test command and exempt dev workspace from integrity shield" }
+    - { hash: "6820704", subject: "feat(typesafe): add append to safe fast path and wire task completion proof in typesafe-planner" }
+    - { hash: "743b643", subject: "feat(typesafe): implement configurable threshold and gate 1 proof of completion" }
+    - { hash: "cef35d7", subject: "perf(evidence): execute git status and git diff concurrently to prevent test timeouts" }
+  changed-files:
+    - { file: "src/cook-expert-judge.ts", lines: "14 changed" }
+    - { file: "src/evidence-collector.ts", lines: "14 changed" }
+    - { file: "tests/redteam-vulnerabilities.test.ts", lines: "3 added" }
+    - { file: "tests/typesafe-lifecycle-gating.test.ts", lines: "75 changed" }
+    - { file: "typesafe-planner.ts", lines: "36 changed" }
+blocks:
+  - type: hero
+    eyebrow: "Plan 261009"
+    title: "Health Probe Transport Isolation"
+    description: "Plan status is `in_progress`; all five acceptance criteria are checked in `plan.md`."
+  - type: kpi
+    title: "Observed results"
+    items:
+      - { label: "Acceptance criteria checked", value: "5 / 5" }
+      - { label: "health-watchdog tests", value: "4 pass / 0 fail", caption: "10 expect() calls" }
+      - { label: "Uncommitted diff", value: "5 files", caption: "+115 / -27 lines" }
+  - type: main-aside
+    blocks:
+      - type: data-table
+        title: "Acceptance criteria (plan.md)"
+        dataRef: criteria
+        columns:
+          - { key: criterion, label: "Criterion" }
+          - { key: status, label: "Status", type: badge, tones: { done: success } }
+      - type: data-table
+        title: "Recent TypeSafe commits"
+        dataRef: commits
+        columns:
+          - { key: hash, label: "Commit" }
+          - { key: subject, label: "Subject" }
+    aside:
+      - type: key-value
+        title: "Not yet verified"
+        items:
+          - { key: "Phase 2 regression", value: "`bun test tests/` not run in this session" }
+          - { key: "Integration scripts", value: "Simulated `nextTurn` rejection and `Failed to fetch` scripts not run" }
+      - type: data-table
+        title: "Uncommitted changes"
+        dataRef: changed-files
+        columns:
+          - { key: file, label: "File" }
+          - { key: lines, label: "Lines" }
