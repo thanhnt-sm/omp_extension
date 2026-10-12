@@ -121,6 +121,72 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
       expect(res.scopeChoice).toBe("HOLD");
     });
 
+    test("branches question rubric for analysis_research task type", async () => {
+      let evaluatedState = "";
+      let evaluatedQuestions: Record<string, unknown> = {};
+
+      const mockClient: ExpertJudgeClient = {
+        evaluate: async ({ state, questions }) => {
+          evaluatedState = state;
+          evaluatedQuestions = questions;
+          return {
+            answers: {
+              meets_criteria: { noul: 0.90 },
+              architectural_drift: { choice: "no_drift" },
+              scope_mode: { choice: "HOLD" },
+            },
+          };
+        },
+      };
+
+      const ctx: MacroCheckContext = {
+        phaseTitle: "Research Phase",
+        planRequirements: ["Evaluate trade-offs", "Write report"],
+        diffSummary: "No unstaged changes observed",
+        unifiedDiff: "No diff (unobserved)",
+        testSummary: "No test output (unobserved)",
+        taskType: "analysis_research",
+        deliverableArtifacts: "Report content discussing architecture trade-offs",
+      };
+
+      const res = await runPhaseMacroCheck(ctx, mockClient);
+      expect(res.approved).toBe(true);
+      expect(evaluatedState).toContain("deliverable_artifacts");
+      expect(JSON.stringify(evaluatedQuestions)).toContain("deliverable_artifacts");
+      expect(JSON.stringify(evaluatedQuestions)).not.toContain("Does `unified_diff` satisfy");
+    });
+
+    test("anti-spoofing overrides taskType to code_change if code files exist in diff", async () => {
+      let evaluatedQuestions: Record<string, unknown> = {};
+
+      const mockClient: ExpertJudgeClient = {
+        evaluate: async ({ questions }) => {
+          evaluatedQuestions = questions;
+          return {
+            answers: {
+              meets_criteria: { noul: 0.90 },
+              architectural_drift: { choice: "no_drift" },
+              scope_mode: { choice: "HOLD" },
+            },
+          };
+        },
+      };
+
+      const ctx: MacroCheckContext = {
+        phaseTitle: "Spoofed Research Phase",
+        planRequirements: ["Do research"],
+        diffSummary: "M src/exploit.ts",
+        unifiedDiff: "+ const malicious = true;",
+        testSummary: "1 passed",
+        taskType: "analysis_research",
+        deliverableArtifacts: "Fake report",
+      };
+
+      await runPhaseMacroCheck(ctx, mockClient);
+      // Must be forced back to code_change rubric demanding unified_diff!
+      expect(JSON.stringify(evaluatedQuestions)).toContain("unified_diff");
+    });
+
     test("rejects phase when meets_criteria < 0.80", async () => {
       const mockClient: ExpertJudgeClient = {
         evaluate: async () => ({

@@ -63,6 +63,39 @@ diff --git a/tests/auth.test.ts b/tests/auth.test.ts
     expect(gate1.reasons.some((r) => r.includes("Test evasion detected"))).toBe(true);
   });
 
+  test("Attack 8 (TaskType Spoofing): Prevents agent from claiming research when code is modified", async () => {
+    const { runPhaseMacroCheck } = await import("../src/cook-expert-judge");
+    let evaluatedQuestions: Record<string, unknown> = {};
+    const mockJudge = {
+      evaluate: async ({ questions }: { questions: Record<string, unknown> }) => {
+        evaluatedQuestions = questions;
+        return {
+          answers: {
+            meets_criteria: { noul: 0.95 },
+            architectural_drift: { choice: "no_drift" as const },
+            scope_mode: { choice: "HOLD" as const },
+          },
+        };
+      },
+    };
+
+    await runPhaseMacroCheck(
+      {
+        phaseTitle: "Research Spoof",
+        planRequirements: ["Conduct research"],
+        diffSummary: "M src/logic.ts",
+        unifiedDiff: "+ export function backDoor() {}",
+        testSummary: "1 passed",
+        taskType: "analysis_research",
+      },
+      mockJudge
+    );
+
+    // Rubric must demand unified_diff and reject deliverable_artifacts question
+    expect(JSON.stringify(evaluatedQuestions)).toContain("unified_diff");
+    expect(JSON.stringify(evaluatedQuestions)).not.toContain("Do the `deliverable_artifacts`");
+  });
+
   test("Attack 3 (Unauthorized Plan Reduction): Tighten-only lattice blocks dropping requirements", async () => {
     const mockJudge: PlanJudgeClient = {
       evaluatePlan: async () => ({

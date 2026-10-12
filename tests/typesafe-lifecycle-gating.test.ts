@@ -196,6 +196,7 @@ describe("TypeSafe Lifecycle Gating & Human Authorization Fix (TDD Tests)", () =
     expect(interceptor).toBeDefined();
 
     // Trigger invariant violation
+    activeContractedTasks.add("Any Task");
     let cancelledReason = "";
     const evt: MockEvent = {
       tool: "todo",

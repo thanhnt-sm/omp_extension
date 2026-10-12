@@ -55,6 +55,43 @@ describe("Phase 4: End-to-End Workflow & OMP Integration", () => {
     expect(taskResult.gate2?.passed).toBe(true);
   });
 
+  test("E2E Dual Verification Gate passes analytical task with empty git diff when deliverables exist", async () => {
+    const { runPhaseMacroCheck } = await import("../src/cook-expert-judge");
+    let receivedQuestions: Record<string, unknown> = {};
+    let receivedState = "";
+
+    const mockJudge = {
+      evaluate: async ({ state, questions }: { state: string; questions: Record<string, unknown> }) => {
+        receivedState = state;
+        receivedQuestions = questions;
+        return {
+          answers: {
+            meets_criteria: { noul: 0.92 },
+            architectural_drift: { choice: "no_drift" as const },
+            scope_mode: { choice: "HOLD" as const },
+          },
+        };
+      },
+    };
+
+    const macroResult = await runPhaseMacroCheck(
+      {
+        phaseTitle: "Research Analysis",
+        planRequirements: ["Conduct trade-off audit", "Document findings in report"],
+        diffSummary: "No unstaged changes observed",
+        unifiedDiff: "No diff (unobserved)",
+        testSummary: "No test output (unobserved)",
+        taskType: "analysis_research",
+        deliverableArtifacts: "# Analysis Report\nComprehensive trade-off comparison.",
+      },
+      mockJudge
+    );
+
+    expect(macroResult.approved).toBe(true);
+    expect(receivedState).toContain("deliverable_artifacts");
+    expect(JSON.stringify(receivedQuestions)).toContain("deliverable_artifacts");
+  });
+
   test("Extension exposes typesafe_elevate_plan and typesafe_verify_completion tools", () => {
     const registeredTools: string[] = [];
     const mockPi = {
