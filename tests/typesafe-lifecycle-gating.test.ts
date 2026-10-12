@@ -316,6 +316,16 @@ describe("TypeSafe Lifecycle Gating & Human Authorization Fix (TDD Tests)", () =
       });
       expect(res2.enabled).toBe(false);
       expect(res2.reason).toBe("global-excluded");
+
+      // Arbitrary non-git directory without project markers matching wildcard "*"
+      const nonRepoDir = path.join(tempDir, "clean-arbitrary-dir");
+      await fs.mkdir(nonRepoDir, { recursive: true });
+      const res3 = resolveTypeSafeEnabled(nonRepoDir, {
+        env: { TYPESAFE_API_KEY: "test_key" },
+        homeDir: tempDir,
+      });
+      expect(res3.enabled).toBe(true);
+      expect(res3.reason).toBe("global-allowlist");
     } finally {
       await fs.rm(tempDir, { recursive: true, force: true });
     }
