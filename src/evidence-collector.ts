@@ -1,8 +1,9 @@
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
+import * as fsSync from "node:fs";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-
 export class SecurityViolationError extends Error {
   constructor(message: string) {
     super(message);
@@ -19,6 +20,7 @@ export interface TaskEvidenceOptions {
   untrustedAgentState?: string;
   taskDoneProven?: boolean;
   todoCompleted?: boolean;
+  baseline?: WorkspaceSnapshot;
 }
 
 export interface TaskEvidenceResult {
@@ -31,6 +33,70 @@ export interface TaskEvidenceResult {
   timestamp: string;
   taskDoneProven?: boolean;
   todoCompleted?: boolean;
+  changedFiles: string[];
+  diffScope: "task-baseline" | "full-working-tree";
+  criteriaSource: "phase" | "plan" | "none";
+}
+
+export interface WorkspaceSnapshot {
+  files: Map<string, string>;
+  truncated: boolean;
+}
+
+export async function captureWorkspaceSnapshot(cwd: string): Promise<WorkspaceSnapshot> {
+  const statusRes = await executeTestCommand("git status --porcelain -uall", cwd, 5000);
+  const files = new Map<string, string>();
+  if (statusRes.exitCode !== 0) {
+    return { files, truncated: false };
+  }
+
+  const lines = statusRes.output.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  let truncated = false;
+  for (let i = 0; i < lines.length; i++) {
+    if (i >= 2000) {
+      truncated = true;
+      break;
+    }
+    const line = lines[i];
+    let filePath = line.slice(3).trim();
+    if (filePath.includes(" -> ")) {
+      const parts = filePath.split(" -> ");
+      filePath = parts[parts.length - 1].trim();
+    }
+    if (filePath.startsWith('"') && filePath.endsWith('"')) {
+      filePath = filePath.slice(1, -1);
+    }
+
+    const fullPath = path.resolve(cwd, filePath);
+    try {
+      if (fsSync.existsSync(fullPath)) {
+        const bytes = fsSync.readFileSync(fullPath);
+        const hash = createHash("sha1").update(bytes).digest("hex");
+        files.set(filePath, hash);
+      } else {
+        files.set(filePath, "<deleted>");
+      }
+    } catch {
+      files.set(filePath, "<error>");
+    }
+  }
+
+  return { files, truncated };
+}
+
+export function diffSnapshots(before: WorkspaceSnapshot, after: WorkspaceSnapshot): string[] {
+  const changed = new Set<string>();
+  for (const [p, h] of after.files.entries()) {
+    if (before.files.get(p) !== h) {
+      changed.add(p);
+    }
+  }
+  for (const p of before.files.keys()) {
+    if (!after.files.has(p)) {
+      changed.add(p);
+    }
+  }
+  return Array.from(changed).sort();
 }
 
 /**
@@ -88,7 +154,7 @@ export function sanitizeEnvironment(
  */
 export function extractCriteriaFromPlan(
   planContent: string,
-  _taskId?: string
+  taskId?: string
 ): string[] {
   const lines = planContent.split("\n");
   const criteria: string[] = [];
@@ -180,18 +246,86 @@ export async function collectTaskEvidence(
     assertPathIsClaudeSafe(options.planPath);
   }
 
-  // 1 & 2. Git working tree status and diff (run concurrently for low latency)
-  const [gitStatusRes, gitDiffRes] = await Promise.all([
-    executeTestCommand("git status --porcelain", cwd, 5000),
-    executeTestCommand("git diff HEAD", cwd, 5000).then(async (res) => {
-      if (res.exitCode !== 0) {
-        return executeTestCommand("git diff", cwd, 5000);
+  let gitStatus = "";
+  let gitDiff = "";
+  let diffScope: "task-baseline" | "full-working-tree" = "full-working-tree";
+  let changedFiles: string[] = [];
+
+  if (options.baseline && !options.baseline.truncated) {
+    const after = await captureWorkspaceSnapshot(cwd);
+    changedFiles = diffSnapshots(options.baseline, after);
+    diffScope = "task-baseline";
+
+    const statusRes = await executeTestCommand("git status --porcelain -uall", cwd, 5000);
+    const porcelainLines = statusRes.output.split(/\r?\n/).filter((l) => l.trim().length > 0);
+    const statusEntries: string[] = [];
+    const trackedChanged: string[] = [];
+    const untrackedChanged: string[] = [];
+
+    for (const file of changedFiles) {
+      const matchedLine = porcelainLines.find((l) => {
+        let p = l.slice(3).trim();
+        if (p.includes(" -> ")) p = p.split(" -> ").pop()?.trim() || p;
+        if (p.startsWith('"') && p.endsWith('"')) p = p.slice(1, -1);
+        return p === file;
+      });
+
+      if (matchedLine) {
+        statusEntries.push(matchedLine);
+        if (matchedLine.startsWith("??")) {
+          untrackedChanged.push(file);
+        } else {
+          trackedChanged.push(file);
+        }
+      } else {
+        statusEntries.push(`   ${file} (reverted to HEAD)`);
       }
-      return res;
-    }),
-  ]);
-  const gitStatus = gitStatusRes.output.trim();
-  const gitDiff = gitDiffRes.output.trim();
+    }
+
+    gitStatus = statusEntries.join("\n");
+
+    let trackedDiff = "";
+    if (trackedChanged.length > 0) {
+      const filesArg = trackedChanged.map((f) => `"${f}"`).join(" ");
+      const diffRes = await executeTestCommand(`git diff HEAD -- ${filesArg}`, cwd, 5000);
+      trackedDiff = diffRes.output.trim();
+    }
+
+    let untrackedDiff = "";
+    for (const uf of untrackedChanged) {
+      try {
+        const fullPath = path.resolve(cwd, uf);
+        if (fsSync.existsSync(fullPath)) {
+          const content = fsSync.readFileSync(fullPath, "utf8").slice(0, 4096);
+          const diffLines = content.split(/\r?\n/).map((l) => `+${l}`).join("\n");
+          untrackedDiff += `diff --git a/${uf} b/${uf}\nnew file\n+++ b/${uf}\n${diffLines}\n`;
+        }
+      } catch {}
+    }
+
+    gitDiff = [trackedDiff, untrackedDiff.trim()].filter(Boolean).join("\n\n");
+  } else {
+    const [gitStatusRes, gitDiffRes] = await Promise.all([
+      executeTestCommand("git status --porcelain", cwd, 5000),
+      executeTestCommand("git diff HEAD", cwd, 5000).then(async (res) => {
+        if (res.exitCode !== 0) {
+          return executeTestCommand("git diff", cwd, 5000);
+        }
+        return res;
+      }),
+    ]);
+    gitStatus = gitStatusRes.output.trim();
+    gitDiff = gitDiffRes.output.trim();
+    diffScope = "full-working-tree";
+
+    const lines = gitStatus.split(/\r?\n/).filter((l) => l.trim().length > 0);
+    changedFiles = lines.map((l) => {
+      let p = l.slice(3).trim();
+      if (p.includes(" -> ")) p = p.split(" -> ").pop()?.trim() || p;
+      if (p.startsWith('"') && p.endsWith('"')) p = p.slice(1, -1);
+      return p;
+    });
+  }
   let testExitCode: number | null = null;
   let testOutput = "";
   if (options.testCommand) {
@@ -202,10 +336,45 @@ export async function collectTaskEvidence(
 
   // 4. Criteria extraction from plan if path provided
   let criteria: string[] = [];
+  let criteriaSource: "phase" | "plan" | "none" = "none";
   if (options.planPath) {
     try {
       const planContent = await fs.readFile(options.planPath, "utf8");
       criteria = extractCriteriaFromPlan(planContent, options.taskId);
+
+      // If plan delegates to phase files, inspect whether a specific phase matches taskId
+      if (options.taskId) {
+        const phaseRegex = /\|\s*(\d+|[a-zA-Z0-9_-]+)\s*\|\s*\[.*?\]\(((\.?\/)?phase-[^)]+\.md)\)/gi;
+        let match: RegExpExecArray | null;
+        const planDir = path.dirname(options.planPath);
+        while ((match = phaseRegex.exec(planContent)) !== null) {
+          const phaseIdentifier = match[1].trim();
+          const phaseFileRelative = match[2].trim();
+          if (
+            options.taskId.toString() === phaseIdentifier ||
+            options.taskId.includes(`phase-${phaseIdentifier}`) ||
+            options.taskId.includes(`Phase ${phaseIdentifier}`) ||
+            options.taskId.includes(phaseIdentifier)
+          ) {
+            const resolvedPhasePath = path.resolve(planDir, phaseFileRelative);
+            assertPathIsClaudeSafe(resolvedPhasePath);
+            try {
+              const phaseContent = await fs.readFile(resolvedPhasePath, "utf8");
+              const phaseCriteria = extractCriteriaFromPlan(phaseContent, options.taskId);
+              if (phaseCriteria.length > 0) {
+                criteria = phaseCriteria;
+                criteriaSource = "phase";
+                break;
+              }
+            } catch {
+              // fallback to plan criteria if phase read fails
+            }
+          }
+        }
+      }
+      if (criteriaSource !== "phase" && criteria.length > 0) {
+        criteriaSource = "plan";
+      }
     } catch {
       criteria = [];
     }
@@ -217,6 +386,9 @@ export async function collectTaskEvidence(
     testExitCode,
     testOutput,
     criteria,
+    criteriaSource,
+    changedFiles,
+    diffScope,
     cleanWorkingTree: gitStatus.length === 0,
     timestamp: new Date().toISOString(),
     taskDoneProven: options.taskDoneProven,

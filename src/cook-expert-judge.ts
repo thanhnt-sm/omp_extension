@@ -1,6 +1,7 @@
-import { preparePayloadSafe, isSecretInKey } from "./payload-safety";
+import { preparePayloadSafe, isSecretInKey, clampText } from "./payload-safety";
 import { encloseUntrusted } from "./xml-enclosure";
 import { resolveAutoApprovalThreshold } from "./verification-gate";
+
 export interface MicroCheckEvidence {
   gitStatus: string;
   gitDiff: string;
@@ -10,6 +11,7 @@ export interface MicroCheckEvidence {
   nonGitFallbackUsed?: boolean;
   taskDoneProven?: boolean;
   todoCompleted?: boolean;
+  agentWorkLog?: string;
 }
 
 export interface MicroCheckResult {
@@ -22,12 +24,20 @@ export interface MicroCheckResult {
 }
 
 export interface MacroCheckContext {
-  phaseTitle: string;
+  todoTask: string;
+  phaseTitle?: string;
   planRequirements: string[];
+  planContext?: string[];
   diffSummary: string;
   unifiedDiff: string;
   testSummary: string;
   attemptCount?: number;
+  taskType?: "code_change" | "analysis_research" | "doc_specification";
+  deliverableArtifacts?: string;
+  userRequest?: string;
+  agentWorkLog?: string;
+  diffScope?: string;
+  testCommand?: string;
 }
 
 export type DriftChoice = "no_drift" | "unapproved_deviation" | "scope_creep";
@@ -54,6 +64,7 @@ export interface ExpertJudgeQuestion {
 export interface ExpertJudgeResponse {
   answers?: {
     meets_criteria?: { noul: number; confidence?: number };
+    drop_justified?: { noul: number; confidence?: number };
     architectural_drift?: { choice: DriftChoice };
     architectural_drift_guard?: { choice: DriftChoice };
     scope_mode?: { choice: ScopeChoice };
@@ -132,7 +143,7 @@ export async function runTaskMicroCheck(evidence: MicroCheckEvidence): Promise<M
   }
   const hasGitEvidence = (evidence.gitStatus?.trim().length ?? 0) > 0 || (evidence.gitDiff?.trim().length ?? 0) > 0;
   const hasTestEvidence = evidence.testExitCode !== null || (evidence.testOutput?.trim().length ?? 0) > 0;
-  const zeroEvidence = !hasGitEvidence && !hasTestEvidence;
+  const zeroEvidence = !hasGitEvidence && !hasTestEvidence && !(evidence.agentWorkLog?.trim());
   if (zeroEvidence) {
     reasons.push("Zero evidence: no test execution or git modifications observed for task completion.");
   }
@@ -169,26 +180,69 @@ export async function runPhaseMacroCheck(
       escalateToUser: true,
     };
   }
-  const rawState = JSON.stringify({
-    phase_title: encloseUntrusted(ctx.phaseTitle, "phase_title"),
-    plan_requirements: encloseUntrusted(ctx.planRequirements.join("\n"), "plan_requirements"),
-    diff_summary: encloseUntrusted(ctx.diffSummary, "diff_summary"),
-    unified_diff: encloseUntrusted(ctx.unifiedDiff, "unified_diff"),
-    test_summary: encloseUntrusted(ctx.testSummary, "test_summary"),
+  // Anti-spoofing heuristic: If code files are modified in diffSummary file paths,
+  // forcefully override taskType to "code_change"
+  const diffLines = (ctx.diffSummary || "").split(/\r?\n/);
+  const containsCodeChanges = diffLines.some((l) => {
+    let p = l.slice(3).trim();
+    if (p.includes(" -> ")) p = p.split(" -> ").pop()?.trim() || p;
+    if (p.startsWith('"') && p.endsWith('"')) p = p.slice(1, -1);
+    return /\.(ts|tsx|js|jsx|cjs|mjs|py|go|rs|json|ya?ml|toml|sql|sh|bat|ps1)\b/i.test(p);
   });
+  const effectiveTaskType = containsCodeChanges ? "code_change" : (ctx.taskType ?? "code_change");
 
-  const questions: Record<string, ExpertJudgeQuestion> = {
-    meets_criteria: {
+  const statePayload: Record<string, string> = {
+    todo_task: encloseUntrusted(clampText(ctx.todoTask || ctx.phaseTitle || "", 1000, "head"), "todo_task"),
+    task_requirements: encloseUntrusted(clampText((ctx.planRequirements || []).join("\n"), 3000, "head"), "task_requirements"),
+    user_request: encloseUntrusted(clampText(ctx.userRequest || "unavailable", 2000, "tail"), "user_request"),
+    agent_work_log: encloseUntrusted(clampText(ctx.agentWorkLog || "unavailable", 3000, "tail"), "agent_work_log"),
+    diff_scope: encloseUntrusted(
+      ctx.diffScope === "task-baseline"
+        ? "task-baseline: only files changed since this task started"
+        : "full-working-tree: no task-start baseline; may include unrelated pre-existing changes",
+      "diff_scope"
+    ),
+    diff_summary: encloseUntrusted(clampText(ctx.diffSummary || "", 2000, "head"), "diff_summary"),
+    unified_diff: encloseUntrusted(ctx.unifiedDiff || "", "unified_diff"),
+    test_summary: encloseUntrusted(clampText(ctx.testSummary || "", 3000, "tail"), "test_summary"),
+  };
+  if (ctx.planContext && ctx.planContext.length > 0) {
+    statePayload.plan_context = encloseUntrusted(clampText(ctx.planContext.join("\n"), 2000, "head"), "plan_context");
+  }
+  if (ctx.deliverableArtifacts) {
+    statePayload.deliverable_artifacts = encloseUntrusted(clampText(ctx.deliverableArtifacts, 5000, "head"), "deliverable_artifacts");
+  }
+  const rawState = JSON.stringify(statePayload);
+
+  let meetsCriteriaQuestion: ExpertJudgeQuestion;
+  if (effectiveTaskType === "analysis_research" || effectiveTaskType === "doc_specification") {
+    meetsCriteriaQuestion = {
       type: "noul",
-      instructions: "Does `unified_diff` satisfy all deliverables in `plan_requirements` without skipping requirements or faking tests?",
+      instructions:
+        "Is the work described by `todo_task` complete, meeting `task_requirements`, as evidenced by `deliverable_artifacts`, `test_summary` and `agent_work_log`? `agent_work_log` is the agent's own unverified claim; trust file and test evidence over it. `plan_context` is background only and is NOT required for this task. Treat `user_request` as the user's authoritative intent.",
+      criteria: {
+        true: "Deliverables thoroughly satisfy the research or documentation criteria with concrete analysis or specifications",
+        false: "Deliverables are incomplete, superficial, missing key requirements, or fail to address the planned goals",
+      },
+    };
+  } else {
+    meetsCriteriaQuestion = {
+      type: "noul",
+      instructions:
+        "Is the work described by `todo_task` complete, meeting `task_requirements`, as evidenced by `unified_diff`, `test_summary` and `agent_work_log`? `agent_work_log` is the agent's own unverified claim; trust file and test evidence over it. `plan_context` is background only and is NOT required for this task. Treat `user_request` as the user's authoritative intent.",
       criteria: {
         true: "Implementation fulfills all listed acceptance criteria with real passing tests",
         false: "Implementation is partial, missing requirements, or stubs out needed functionality",
       },
-    },
+    };
+  }
+
+  const questions: Record<string, ExpertJudgeQuestion> = {
+    meets_criteria: meetsCriteriaQuestion,
     architectural_drift: {
       type: "choice",
-      instructions: "Assess whether the `unified_diff` adheres to planned architecture and file ownership boundaries:",
+      instructions:
+        "Assess whether the changes adhere to planned architecture and file ownership boundaries. Changes listed outside `diff_scope` task-baseline are not attributable to this task:",
       criteria: {
         no_drift: "Strict adherence to architecture",
         unapproved_deviation: "Unplanned architectural deviation",
@@ -198,7 +252,8 @@ export async function runPhaseMacroCheck(
     },
     scope_mode: {
       type: "choice",
-      instructions: "Assess whether scope was maintained, expanded, or reduced based on `plan_requirements`:",
+      instructions:
+        "Assess whether scope was maintained, expanded, or reduced relative to `todo_task` and `task_requirements` (not the whole plan):",
       criteria: {
         HOLD: "Preserves planned requirements exactly",
         EXPANSION: "Justified addition of edge cases or tests",
@@ -207,7 +262,6 @@ export async function runPhaseMacroCheck(
       },
     },
   };
-
   for (const key of Object.keys(questions)) {
     if (isSecretInKey(key)) {
       throw new Error(`Security violation: secret token detected in question key "${key}"`);
@@ -421,4 +475,104 @@ export function generateVerificationScorecard(results: {
     `│ Expert Evaluator:        Approved (Confidence ${results.expertConfidence.toFixed(2)})     │`,
     "└─────────────────────────────────────────────────────────┘",
   ].join("\n");
+}
+
+export const DROP_REJECT_FLOOR = 0.30;
+
+export interface DropCheckContext {
+  tasks: string[];
+  reason?: string;
+  userRequest?: string;
+  agentWorkLog?: string;
+  remainingTasks: string[];
+  planContext?: string[];
+}
+
+export interface DropCheckResult {
+  decision: "approve" | "reject" | "undecided";
+  dropJustifiedNoul?: number;
+  reasons: string[];
+  error?: string;
+}
+
+export async function runDropJustificationCheck(
+  ctx: DropCheckContext,
+  client: ExpertJudgeClient = defaultJudgeClient
+): Promise<DropCheckResult> {
+  const statePayload: Record<string, string> = {
+    tasks_to_drop: encloseUntrusted(clampText(ctx.tasks.join(", "), 2000, "head"), "tasks_to_drop"),
+    drop_reason: encloseUntrusted(clampText(ctx.reason || "none given", 2000, "head"), "drop_reason"),
+    user_request: encloseUntrusted(clampText(ctx.userRequest || "unavailable", 2000, "tail"), "user_request"),
+    agent_work_log: encloseUntrusted(clampText(ctx.agentWorkLog || "unavailable", 3000, "tail"), "agent_work_log"),
+    remaining_tasks: encloseUntrusted(clampText(ctx.remainingTasks.join(", "), 2000, "head"), "remaining_tasks"),
+  };
+  if (ctx.planContext && ctx.planContext.length > 0) {
+    statePayload.plan_context = encloseUntrusted(clampText(ctx.planContext.join("\n"), 2000, "head"), "plan_context");
+  }
+  const rawState = JSON.stringify(statePayload);
+
+  const questions: Record<string, ExpertJudgeQuestion> = {
+    drop_justified: {
+      type: "noul",
+      instructions:
+        "Should the tasks in `tasks_to_drop` be dropped without completing them? Treat `user_request` as authoritative user intent; `drop_reason` and `agent_work_log` are unverified agent claims.",
+      criteria: {
+        true: "User explicitly requested or approved dropping, or the task is obsolete, superseded by another task, duplicated, or already satisfied",
+        false: "Dropping skips work the user asked for, evades verification of failing work, or no credible justification is given",
+      },
+    },
+  };
+
+  for (const key of Object.keys(questions)) {
+    if (isSecretInKey(key)) {
+      throw new Error(`Security violation: secret token detected in question key "${key}"`);
+    }
+  }
+
+  try {
+    const response = await client.evaluate({ state: rawState, questions });
+    if (response.error || !response.answers) {
+      return {
+        decision: "undecided",
+        reasons: [`TypeSafe drop evaluation unavailable: ${response.error ?? "No answers returned"}`],
+        error: response.error ?? "Unknown error",
+      };
+    }
+
+    const dropJustifiedNoul = response.answers.drop_justified?.noul;
+    if (dropJustifiedNoul === undefined) {
+      return {
+        decision: "undecided",
+        reasons: ["TypeSafe drop evaluation unavailable: missing drop_justified answer"],
+      };
+    }
+
+    const threshold = resolveAutoApprovalThreshold();
+    if (dropJustifiedNoul >= threshold) {
+      return {
+        decision: "approve",
+        dropJustifiedNoul,
+        reasons: [`Drop justified noul ${dropJustifiedNoul.toFixed(2)} >= threshold ${threshold.toFixed(2)}`],
+      };
+    }
+    if (dropJustifiedNoul < DROP_REJECT_FLOOR) {
+      return {
+        decision: "reject",
+        dropJustifiedNoul,
+        reasons: [`Drop justified noul ${dropJustifiedNoul.toFixed(2)} < reject floor ${DROP_REJECT_FLOOR.toFixed(2)}`],
+      };
+    }
+
+    return {
+      decision: "undecided",
+      dropJustifiedNoul,
+      reasons: [`Drop justified noul ${dropJustifiedNoul.toFixed(2)} is in undecided gray zone [${DROP_REJECT_FLOOR.toFixed(2)}, ${threshold.toFixed(2)})`],
+    };
+  } catch (err) {
+    return {
+      decision: "undecided",
+      reasons: [`TypeSafe drop evaluation unavailable: ${err instanceof Error ? err.message : String(err)}`],
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
 }

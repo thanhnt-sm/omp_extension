@@ -9,7 +9,17 @@ import path from "node:path";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { evaluatePlanDraft, type PlanJudgeClient, type PlanQuestion } from "./src/plan-evaluator";
 import { verifyTaskCompletion, type GateJudgeClient, type GateQuestion } from "./src/verification-gate";
-import { collectTaskEvidence } from "./src/evidence-collector";
+import {
+  collectTaskEvidence,
+  captureWorkspaceSnapshot,
+  diffSnapshots,
+  type WorkspaceSnapshot,
+} from "./src/evidence-collector";
+import { clampText } from "./src/payload-safety";
+import {
+  runDropJustificationCheck,
+  DROP_REJECT_FLOOR,
+} from "./src/cook-expert-judge";
 import {
   runTaskMicroCheck,
   runPhaseMacroCheck,
@@ -23,6 +33,12 @@ import {
   type DriftChoice,
   type ScopeChoice,
 } from "./src/cook-expert-judge";
+const taskBaselines = new Map<string, WorkspaceSnapshot>();
+export let lastCheckpoint: WorkspaceSnapshot | undefined;
+export function resetLastCheckpoint(): void {
+  lastCheckpoint = undefined;
+}
+const lastFailureReasonByTask = new Map<string, string>();
 interface ExtensionToolResult {
   content: Array<{ type: "text"; text: string }>;
   details?: unknown;
@@ -62,7 +78,7 @@ interface ExtensionAPI {
   ) => Promise<void>;
 }
 
-interface TypeSafeQuestion {
+export interface TypeSafeQuestion {
   type: "noul" | "choice" | "score";
   instructions: string | Record<string, unknown>;
   criteria?: unknown;
@@ -285,6 +301,103 @@ function sleep(ms: number): Promise<void> {
   return promise;
 }
 
+export function inferTaskType(
+  gitStatus: string,
+  deliverableArtifacts?: string
+): "code_change" | "analysis_research" | "doc_specification" {
+  const statusLines = gitStatus.split("\n").map((l) => l.trim()).filter(Boolean);
+  
+  // Check for any code or config modifications
+  const hasCodeFiles = statusLines.some((line) => {
+    const filepath = line.replace(/^[MADRCU?! ]+\s+/, "");
+    return /\.(ts|tsx|js|jsx|cjs|mjs|py|go|rs|json|ya?ml|toml|sql|sh|bat|ps1)$/i.test(filepath) &&
+      !filepath.endsWith("package-lock.json");
+  });
+  if (hasCodeFiles) {
+    return "code_change";
+  }
+
+  // Check for documentation specifications (.md, .txt, .rst)
+  const hasDocFiles = statusLines.some((line) => {
+    const filepath = line.replace(/^[MADRCU?! ]+\s+/, "");
+    return /\.(md|markdown|txt|rst|adoc)$/i.test(filepath) && !filepath.includes("reports/");
+  });
+  if (hasDocFiles) {
+    return "doc_specification";
+  }
+
+  // If only reports or artifact text exists, or no diff with artifact
+  if (deliverableArtifacts && deliverableArtifacts.trim().length > 0) {
+    return "analysis_research";
+  }
+  const hasReportFiles = statusLines.some((line) => {
+    const filepath = line.replace(/^[MADRCU?! ]+\s+/, "");
+    return filepath.includes("reports/") || filepath.includes("decisions/");
+  });
+  if (hasReportFiles) {
+    return "analysis_research";
+  }
+
+  // Fallback default
+  return "code_change";
+}
+
+export function summarizeMarkdownArtifact(content: string, maxBytes: number = 8192): string {
+  if (Buffer.byteLength(content, "utf8") <= maxBytes) {
+    return content;
+  }
+  // AST-aware hunk summarization: preserve headings (#, ##, ###), lists, blockquotes, and key sections
+  const lines = content.split("\n");
+  const preserved: string[] = [];
+  let currentBytes = 0;
+  const reservedFooter = "\n\n... [markdown artifact summarized for size budget] ...";
+  const allowedBytes = maxBytes - Buffer.byteLength(reservedFooter, "utf8");
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    // Prioritize headings, table headers/rows, bullet points, and numbered lists
+    const isStructural =
+      /^#{1,6}\s+/.test(trimmed) ||
+      /^\|.*\|$/.test(trimmed) ||
+      /^(?:[-*+]|\d+\.)\s+/.test(trimmed) ||
+      /^>\s+/.test(trimmed);
+
+    const lineBytes = Buffer.byteLength(line + "\n", "utf8");
+    if (isStructural || currentBytes + lineBytes < allowedBytes * 0.7) {
+      if (currentBytes + lineBytes <= allowedBytes) {
+        preserved.push(line);
+        currentBytes += lineBytes;
+      } else {
+        break;
+      }
+    }
+  }
+
+  return preserved.join("\n") + reservedFooter;
+}
+
+export async function collectDeliverableArtifacts(projectDir: string, changedFiles: string[] = []): Promise<string> {
+  let combinedText = "";
+  const maxBytes = 8192; // 8KB cap to prevent token bloat
+
+  for (const file of changedFiles) {
+    if (/\.(md|markdown|txt|rst|adoc)$/i.test(file)) {
+      const fullPath = path.resolve(projectDir, file);
+      if (existsSync(fullPath)) {
+        try {
+          const rawContent = readFileSync(fullPath, "utf-8");
+          const summarized = summarizeMarkdownArtifact(rawContent, 4096);
+          combinedText += `\n--- Deliverable: ${file} ---\n${summarized}\n`;
+          if (combinedText.length >= maxBytes) {
+            return combinedText.slice(0, maxBytes) + "\n[Summarized to 8KB artifact budget]";
+          }
+        } catch {}
+      }
+    }
+  }
+  return combinedText.trim();
+}
+
 
 
 /** Short, non-descriptive error code only — never forward upstream error
@@ -326,7 +439,7 @@ export function summarizeUnifiedDiff(diff: string, maxChars = 28000): string {
   return result;
 }
 
-function sanitizeStateForTypeSafe(state: string | Record<string, unknown>): Record<string, unknown> | string {
+export function sanitizeStateForTypeSafe(state: string | Record<string, unknown>): Record<string, unknown> | string {
   let resolved: Record<string, unknown> | string = state;
 
   if (typeof state === "string") {
@@ -343,15 +456,31 @@ function sanitizeStateForTypeSafe(state: string | Record<string, unknown>): Reco
     }
   }
 
+  const clampEnclosedOrRaw = (val: string, maxLen: number): string => {
+    const match = val.match(/^<([a-z_]+)>\n([\s\S]*)\n<\/\1>$/);
+    if (match) {
+      const tagName = match[1];
+      const inner = match[2];
+      const tagOverhead = tagName.length * 2 + 7; // <tag>\n\n</tag>
+      const budget = Math.max(0, maxLen - tagOverhead);
+      if (inner.length > budget) {
+        const clampedInner = clampText(inner, budget, "head");
+        return `<${tagName}>\n${clampedInner}\n</${tagName}>`;
+      }
+      return val;
+    }
+    return clampText(val, maxLen, "head");
+  };
+
   if (typeof resolved === "object" && resolved !== null) {
     const obj: Record<string, unknown> = { ...resolved };
     for (const key of Object.keys(obj)) {
       const val = obj[key];
       if (typeof val === "string") {
         if (key === "unified_diff" || key === "gitDiff" || key === "diff") {
-          obj[key] = summarizeUnifiedDiff(val, 28000);
+          obj[key] = summarizeUnifiedDiff(val, 14000);
         } else if (val.length > 2000) {
-          obj[key] = val.slice(0, 1950) + "... [truncated]";
+          obj[key] = clampEnclosedOrRaw(val, 2000);
         }
       }
     }
@@ -360,8 +489,14 @@ function sanitizeStateForTypeSafe(state: string | Record<string, unknown>): Reco
     if (serialized.length > 28000) {
       for (const key of Object.keys(obj)) {
         const val = obj[key];
-        if (typeof val === "string" && key !== "unified_diff" && key !== "gitDiff" && key !== "diff" && val.length > 1000) {
-          obj[key] = val.slice(0, 950) + "... [truncated]";
+        if (
+          typeof val === "string" &&
+          key !== "unified_diff" &&
+          key !== "gitDiff" &&
+          key !== "diff" &&
+          val.length > 950
+        ) {
+          obj[key] = clampEnclosedOrRaw(val, 950);
         }
       }
     }
@@ -370,17 +505,204 @@ function sanitizeStateForTypeSafe(state: string | Record<string, unknown>): Reco
 
   if (typeof resolved === "string") {
     if (resolved.startsWith("diff --git") || resolved.includes("\n--- a/") || resolved.includes("\n+++ b/")) {
-      return summarizeUnifiedDiff(resolved, 28000);
+      return summarizeUnifiedDiff(resolved, 14000);
     }
-    if (resolved.length > 8000) {
-      return resolved.slice(0, 7950) + "... [truncated]";
+    if (resolved.length > 6000) {
+      return clampEnclosedOrRaw(resolved, 6000);
     }
   }
 
   return resolved;
 }
 
+export function collectConversationContext(ctx: unknown): { userRequest: string; agentWorkLog: string } {
+  if (!ctx || typeof ctx !== "object") {
+    return { userRequest: "", agentWorkLog: "" };
+  }
 
+  const ctxRecord = ctx as Record<string, unknown>;
+  const sessionManager = ctxRecord.sessionManager;
+  if (!sessionManager || typeof sessionManager !== "object") {
+    return { userRequest: "", agentWorkLog: "" };
+  }
+
+  const smRecord = sessionManager as Record<string, unknown>;
+  if (typeof smRecord.getBranch !== "function") {
+    return { userRequest: "", agentWorkLog: "" };
+  }
+
+  try {
+    const branch = smRecord.getBranch() as unknown;
+    if (!Array.isArray(branch)) {
+      return { userRequest: "", agentWorkLog: "" };
+    }
+
+    const userMessages: string[] = [];
+    const assistantMessages: string[] = [];
+
+    for (const entry of branch) {
+      if (!entry || typeof entry !== "object") continue;
+      const entryRecord = entry as Record<string, unknown>;
+      if (entryRecord.type !== "message" || !entryRecord.message || typeof entryRecord.message !== "object") {
+        continue;
+      }
+      const msg = entryRecord.message as Record<string, unknown>;
+      let textContent = "";
+      if (typeof msg.content === "string") {
+        textContent = msg.content;
+      } else if (Array.isArray(msg.content)) {
+        const parts: string[] = [];
+        for (const block of msg.content) {
+          if (block && typeof block === "object") {
+            const b = block as Record<string, unknown>;
+            if (b.type === "text" && typeof b.text === "string") {
+              parts.push(b.text);
+            }
+          }
+        }
+        textContent = parts.join("\n");
+      }
+
+      if (msg.role === "user") {
+        userMessages.push(textContent);
+      } else if (msg.role === "assistant") {
+        assistantMessages.push(textContent);
+      }
+    }
+
+    const lastUser = userMessages.slice(-2).join("\n---\n");
+    const lastAssistant = assistantMessages.slice(-3).join("\n---\n");
+
+    return {
+      userRequest: clampText(lastUser, 2000, "tail"),
+      agentWorkLog: clampText(lastAssistant, 3000, "tail"),
+    };
+  } catch {
+    return { userRequest: "", agentWorkLog: "" };
+  }
+}
+
+export interface TaskReport {
+  kind: "DONE" | "DROP";
+  tasks: string[];
+  approved: boolean;
+  decidedBy: "judge" | "human" | "host-authorization" | "gate1";
+  scores?: {
+    meetsCriteria?: number;
+    threshold?: number;
+    drift?: string;
+    scope?: string;
+    dropJustified?: number;
+  };
+  diffScope?: string;
+  changedFiles?: string[];
+  test?: string;
+  reasons: string[];
+}
+
+export function formatTaskReport(r: TaskReport): string {
+  const tasksFormatted = r.tasks.map((t) => `"${t}"`).join(", ");
+  const lines: string[] = [
+    `📋 TypeSafe task report — ${r.kind} ${tasksFormatted}`,
+    `Decision: ${r.approved ? "APPROVED" : "REJECTED"} (by: ${r.decidedBy})`,
+  ];
+
+  if (r.scores) {
+    if (r.scores.meetsCriteria !== undefined) {
+      const thresh = r.scores.threshold !== undefined ? r.scores.threshold.toFixed(2) : "0.80";
+      lines.push(
+        `Judge: meets_criteria=${r.scores.meetsCriteria.toFixed(2)} (threshold ${thresh}) | drift=${r.scores.drift || "none"} | scope=${r.scores.scope || "none"}`
+      );
+    }
+    if (r.scores.dropJustified !== undefined) {
+      lines.push(
+        `Judge: drop_justified=${r.scores.dropJustified.toFixed(2)} (approve ≥ 0.80, reject < 0.30)`
+      );
+    }
+  }
+
+  const evidenceParts: string[] = [];
+  if (r.diffScope) {
+    evidenceParts.push(`diff_scope=${r.diffScope}`);
+  }
+  if (r.changedFiles) {
+    if (r.changedFiles.length === 0) {
+      evidenceParts.push("files changed: none");
+    } else if (r.changedFiles.length <= 10) {
+      evidenceParts.push(`files changed: ${r.changedFiles.join(", ")}`);
+    } else {
+      const top10 = r.changedFiles.slice(0, 10).join(", ");
+      const remainder = r.changedFiles.length - 10;
+      evidenceParts.push(`files changed: ${top10} (+${remainder} more)`);
+    }
+  }
+  if (r.test) {
+    evidenceParts.push(`tests: ${r.test}`);
+  }
+  if (evidenceParts.length > 0) {
+    lines.push(`Evidence: ${evidenceParts.join("; ")}`);
+  }
+
+  if (r.reasons && r.reasons.length > 0) {
+    lines.push("Reasons:");
+    for (const reason of r.reasons) {
+      lines.push(`- ${reason}`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
+
+
+export function normalizeQuestionForTypeSafe(
+  questions: Record<string, TypeSafeQuestion>
+): Record<string, TypeSafeQuestion> {
+  if (!questions || typeof questions !== "object" || Array.isArray(questions)) {
+    return questions;
+  }
+  const normalized: Record<string, TypeSafeQuestion> = {};
+  for (const [key, q] of Object.entries(questions)) {
+    if (!q || typeof q !== "object") {
+      normalized[key] = q;
+      continue;
+    }
+    const newQ: TypeSafeQuestion = { ...q };
+    if (newQ.type === "choice" && Array.isArray(newQ.criteria)) {
+      const criteriaObj: Record<string, string> = {};
+      for (let i = 0; i < newQ.criteria.length; i++) {
+        const item = newQ.criteria[i];
+        if (typeof item === "string") {
+          const match = item.match(/^([^:\-]+)[:\-]\s*(.+)$/);
+          if (match) {
+            criteriaObj[match[1].trim()] = match[2].trim();
+          } else {
+            criteriaObj[`option_${i}`] = item.trim();
+          }
+        } else {
+          criteriaObj[`option_${i}`] = String(item);
+        }
+      }
+      newQ.criteria = criteriaObj;
+    } else if (newQ.type === "noul" && Array.isArray(newQ.criteria)) {
+      if (newQ.criteria.length >= 2) {
+        newQ.criteria = {
+          true: String(newQ.criteria[0]),
+          false: String(newQ.criteria[1]),
+        };
+      } else if (newQ.criteria.length === 1) {
+        newQ.criteria = {
+          true: String(newQ.criteria[0]),
+          false: `Not ${String(newQ.criteria[0])}`,
+        };
+      }
+    } else if (newQ.type === "score" && Array.isArray(newQ.criteria)) {
+      newQ.criteria = newQ.criteria.map((c) => (typeof c === "string" ? c : String(c)));
+    }
+    normalized[key] = newQ;
+  }
+  return normalized;
+}
 
 export function hasActiveEGC(cwd: string): boolean {
   return (
@@ -952,40 +1274,134 @@ NEXT ACTIONS FOR AGENT:
     const mutativeOps = new Set(["done", "rm", "drop", "init", "start", "append"]);
     const activeMutatives = ops.filter((o) => typeof o.op === "string" && mutativeOps.has(o.op));
     if (activeMutatives.length === 0) return;
-
-    const dropOrInit = activeMutatives.filter((o) => o.op === "drop" || o.op === "init");
     const ctxObj = (ctx as Record<string, unknown> | undefined) || {};
-    const isHumanAuthorized =
-      Boolean(ctxObj.isHuman) ||
-      Boolean(ctxObj.authorized) ||
-      Boolean(ctxObj.advisorApproved) ||
-      Boolean(params.authorized) ||
-      Boolean(params.isHuman) ||
-      Boolean(params.advisorApproved) ||
-      params.allowJudgeModification === true;
-    if (dropOrInit.length > 0) {
-      // Allow init if there are no contracted tasks yet (initial bootstrap)
-      const isInitialBootstrap = dropOrInit.length === 1 && dropOrInit[0].op === "init" && activeContractedTasks.size === 0;
-      if (!isHumanAuthorized && !isInitialBootstrap) {
-        const msg = `TypeSafe invariant violation: dropping or resetting contracted tasks (${dropOrInit.map((o) => o.op).join(", ")}) requires human authorization.
-NEXT ACTIONS FOR AGENT:
-1. Call the 'ask' tool to request explicit human authorization before resetting or dropping tasks.
-2. Or use 'todo append' to add new tasks without dropping existing contracted work.`;
+    const isHumanAuthorized = Boolean(ctxObj.isHuman || ctxObj.authorized || ctxObj.advisorApproved);
+
+    // Compute tasksToDrop
+    const tasksToDrop: string[] = [];
+    for (const o of activeMutatives) {
+      if (o.op === "drop" || o.op === "rm") {
+        const t = (o.task as string) || (o.taskId as string);
+        if (t && activeContractedTasks.has(t) && !tasksToDrop.includes(t)) {
+          tasksToDrop.push(t);
+        }
+      } else if (o.op === "init") {
+        const newItems = new Set<string>();
+        if (Array.isArray(o.items)) {
+          for (const it of o.items) {
+            if (typeof it === "string") newItems.add(it);
+          }
+        }
+        for (const contracted of activeContractedTasks) {
+          if (!newItems.has(contracted) && !tasksToDrop.includes(contracted)) {
+            tasksToDrop.push(contracted);
+          }
+        }
+      }
+    }
+
+    const isTestEnv = process.env.BUN_ENV === "test" || process.env.NODE_ENV === "test";
+    const apiKey = process.env.TYPESAFE_API_KEY?.trim() || (isTestEnv ? "dummy" : "");
+    const resolverModule = loadResolverModule();
+    const isEnabled = isTestEnv || Boolean(apiKey && resolverModule && resolverModule.resolveTypeSafeEnabled(projectDir).enabled);
+
+    if (tasksToDrop.length > 0) {
+      let dropDecision: "approve" | "reject" | "undecided" = "undecided";
+      let decidedBy: "judge" | "human" | "host-authorization" | "gate1" = "judge";
+      let dropJustifiedNoul: number | undefined;
+      let dropReasons: string[] = [];
+
+      if (isHumanAuthorized) {
+        dropDecision = "approve";
+        decidedBy = "host-authorization";
+        dropReasons.push("Authorized by host execution context");
+      } else if (!isEnabled) {
+        dropDecision = "undecided";
+        dropReasons.push("TypeSafe is disabled or API key missing");
+      } else {
+        const client = createExtensionJudgeClient(apiKey, undefined, ctx);
+        const convo = collectConversationContext(ctx);
+        const primaryDrop = activeMutatives.find((o) => o.op === "drop" || o.op === "rm" || o.op === "init");
+        const dropRes = await runDropJustificationCheck(
+          {
+            tasks: tasksToDrop,
+            reason: (primaryDrop?.reason as string) || (params.reason as string),
+            userRequest: convo.userRequest,
+            agentWorkLog: convo.agentWorkLog,
+            remainingTasks: Array.from(activeContractedTasks).filter((t) => !tasksToDrop.includes(t)),
+          },
+          client
+        );
+        dropDecision = dropRes.decision;
+        dropJustifiedNoul = dropRes.dropJustifiedNoul;
+        dropReasons = dropRes.reasons;
+        decidedBy = "judge";
+      }
+
+      if (dropDecision === "undecided") {
+        if (ctxObj.hasUI !== false && typeof (ctxObj.ui as Record<string, unknown> | undefined)?.confirm === "function") {
+          const uiConfirm = (ctxObj.ui as { confirm: (t: string, m: string) => Promise<boolean> }).confirm;
+          const reasonText = dropReasons.join("; ");
+          const noulText = dropJustifiedNoul !== undefined ? `drop_justified score: ${dropJustifiedNoul.toFixed(2)}` : "drop evaluation unavailable";
+          const confirmMsg = `Tasks to drop: ${tasksToDrop.join(", ")}\nReason/status: ${reasonText} (${noulText})\nApprove dropping these tasks?`;
+          const confirmed = await uiConfirm("TypeSafe: drop contracted task?", confirmMsg);
+          if (confirmed) {
+            dropDecision = "approve";
+            decidedBy = "human";
+            dropReasons.push("Explicitly confirmed by user in UI prompt");
+          } else {
+            dropDecision = "reject";
+            decidedBy = "human";
+            dropReasons.push("User rejected drop in UI confirmation dialog");
+          }
+        } else {
+          dropDecision = "reject";
+          decidedBy = "gate1";
+          dropReasons.push("No interactive user available to resolve undecided drop");
+        }
+      }
+
+      const report = formatTaskReport({
+        kind: "DROP",
+        tasks: tasksToDrop,
+        approved: dropDecision === "approve",
+        decidedBy,
+        scores: { dropJustified: dropJustifiedNoul },
+        reasons: dropReasons,
+      });
+
+      if (dropDecision === "reject") {
+        const msg = `TypeSafe drop gate rejected dropping or resetting contracted tasks: ${tasksToDrop.join(", ")}.\n- ${dropReasons.join("\n- ")}\nNEXT ACTIONS FOR AGENT:\n1. Complete the task(s) and mark them done, or\n2. Explain in your reply why the task is obsolete, superseded, or user-cancelled, then retry the drop, or\n3. Ask the user to state the cancellation explicitly in chat; their message is forwarded to the judge.`;
         if (typeof evt.cancel === "function") {
           (evt.cancel as (r: string) => void)(msg);
         }
         await pi.sendMessage({
           customType: "typesafe-compliance-escalation",
-          content: msg,
+          content: msg + "\n\n" + report,
+          display: true,
         });
         throw new Error(msg);
       }
+
+      // Drop approved
+      for (const t of tasksToDrop) {
+        activeContractedTasks.delete(t);
+        taskBaselines.delete(t);
+      }
+      await pi.sendMessage({
+        customType: "typesafe-task-report",
+        content: report,
+        display: true,
+      });
+      lastCheckpoint = await captureWorkspaceSnapshot(projectDir);
     }
 
-    // Track contracted tasks
+    // Track contracted tasks and snapshot baseline
     for (const op of activeMutatives) {
       if (op.op === "init") {
         activeContractedTasks.clear();
+        taskBaselines.clear();
+        lastCheckpoint = await captureWorkspaceSnapshot(projectDir);
         if (Array.isArray(op.items)) {
           for (const item of op.items) {
             if (typeof item === "string") activeContractedTasks.add(item);
@@ -997,14 +1413,16 @@ NEXT ACTIONS FOR AGENT:
             if (typeof item === "string") activeContractedTasks.add(item);
           }
         }
-      } else if (op.op === "drop" || op.op === "rm") {
+      } else if (op.op === "start") {
         const t = (op.task as string) || (op.taskId as string);
-        if (t) activeContractedTasks.delete(t);
+        if (t) {
+          taskBaselines.set(t, await captureWorkspaceSnapshot(projectDir));
+        }
       }
     }
 
     const primaryOp = activeMutatives[0] || {};
-    const isSafeFastPath = activeMutatives.every((o) => ["init", "start", "view", "append"].includes(o.op));
+    const isSafeFastPath = activeMutatives.every((o) => ["init", "start", "view", "append", "drop", "rm"].includes(o.op));
     if (isSafeFastPath) {
       const pTask = (primaryOp.task as string) || (params.task as string) || "";
       if (pTask === "test-" + primaryOp.op) {
@@ -1014,12 +1432,14 @@ NEXT ACTIONS FOR AGENT:
       }
       return;
     }
+
     if (process.env.BUN_ENV === "test" || process.env.NODE_ENV === "test") {
       const itemsList = Array.isArray(primaryOp.items) ? primaryOp.items : (Array.isArray(params.items) ? params.items : []);
       if (primaryOp.task === "Pending Task" || itemsList.some((it) => typeof it === "string" && it.includes("Pending Task"))) {
         return;
       }
     }
+
     const taskId =
       (primaryOp.task as string) ||
       (primaryOp.taskId as string) ||
@@ -1034,21 +1454,57 @@ NEXT ACTIONS FOR AGENT:
     const currentFailures = (consecutiveFailuresByTask.get(taskId) || 0) + 1;
     consecutiveFailuresByTask.set(taskId, currentFailures);
     if (currentFailures >= 3) {
+      consecutiveFailuresByTask.delete(taskId);
+      const lastReason = lastFailureReasonByTask.get(taskId) || "Multiple verification failures";
+      let ratchetApproved = false;
+      if (ctxObj.hasUI !== false && typeof (ctxObj.ui as Record<string, unknown> | undefined)?.confirm === "function") {
+        const uiConfirm = (ctxObj.ui as { confirm: (t: string, m: string) => Promise<boolean> }).confirm;
+        const promptMsg = clampText(
+          `Task "${taskId}" failed verification ${currentFailures} times. Last failure: ${lastReason}. Accept as done?`,
+          1500,
+          "tail"
+        );
+        ratchetApproved = await uiConfirm("TypeSafe: accept task completion?", promptMsg);
+      }
+
+      if (ratchetApproved) {
+        activeContractedTasks.delete(taskId);
+        taskBaselines.delete(taskId);
+        lastCheckpoint = await captureWorkspaceSnapshot(projectDir);
+        const report = formatTaskReport({
+          kind: "DONE",
+          tasks: [taskId],
+          approved: true,
+          decidedBy: "human",
+          reasons: [`Stall ratchet resolved: manually accepted as done by user after ${currentFailures} failures`],
+        });
+        await pi.sendMessage({
+          customType: "typesafe-task-report",
+          content: report,
+          display: true,
+        });
+        return;
+      }
+
       const msg = `Task verification rejected: stall ratchet triggered after ${currentFailures} consecutive failed attempts for task "${taskId}". Halting autonomous retry loop for user escalation.`;
       if (typeof evt.cancel === "function") {
         (evt.cancel as (r: string) => void)(msg);
       }
+      const report = formatTaskReport({
+        kind: "DONE",
+        tasks: [taskId],
+        approved: false,
+        decidedBy: "human",
+        reasons: [msg],
+      });
       await pi.sendMessage({
         customType: "typesafe-compliance-escalation",
-        content: msg,
+        content: msg + "\n\n" + report,
+        display: true,
       });
       throw new Error(msg);
     }
 
-    const isTestEnv = process.env.BUN_ENV === "test" || process.env.NODE_ENV === "test";
-    const apiKey = process.env.TYPESAFE_API_KEY?.trim() || (isTestEnv ? "dummy" : "");
-    const resolverModule = loadResolverModule();
-    const isEnabled = isTestEnv || Boolean(apiKey && resolverModule && resolverModule.resolveTypeSafeEnabled(projectDir).enabled);
 
     let defaultPlanPath: string | undefined;
     const plansDir = path.join(projectDir, "plans");
@@ -1059,24 +1515,22 @@ NEXT ACTIONS FOR AGENT:
           .map((d) => d.name)
           .sort()
           .reverse();
-        if (planEntries.length > 0) {
-          defaultPlanPath = path.join(plansDir, planEntries[0], "plan.md");
+        for (const entry of planEntries) {
+          const pPath = path.join(plansDir, entry, "plan.md");
+          try {
+            const head = readFileSync(pPath, "utf-8").slice(0, 2000);
+            const m = head.match(/^status:\s*(\S+)/m);
+            const status = m ? m[1].toLowerCase() : "";
+            if (status !== "complete" && status !== "completed" && status !== "cancelled") {
+              defaultPlanPath = pPath;
+              break;
+            }
+          } catch {}
         }
-      } catch {
-        defaultPlanPath = existsSync(path.join(projectDir, "plans", "261004-redteam-egc-hardening", "plan.md"))
-          ? path.join(projectDir, "plans", "261004-redteam-egc-hardening", "plan.md")
-          : undefined;
-      }
+      } catch {}
     }
     const planPath = (primaryOp.planPath as string) || (primaryOp.plan as string) || (params.planPath as string) || (params.plan as string) || defaultPlanPath;
-    const defaultTestCommand =
-      existsSync(path.join(projectDir, "tests", "health-watchdog.test.ts"))
-        ? "bun test tests/health-watchdog.test.ts"
-        : (existsSync(path.join(projectDir, "tests", "redteam-vulnerabilities.test.ts"))
-            ? "bun test tests/redteam-vulnerabilities.test.ts --verbose"
-            : undefined);
-    const testCommand = (primaryOp.testCommand as string) || (params.testCommand as string) || process.env.TYPESAFE_TEST_COMMAND || defaultTestCommand;
-
+    const testCommand = (primaryOp.testCommand as string) || (params.testCommand as string) || process.env.TYPESAFE_TEST_COMMAND;
 
 
     if (!isEnabled) {
@@ -1091,51 +1545,100 @@ NEXT ACTIONS FOR AGENT:
       throw new Error(msg);
     }
 
+    const convo = collectConversationContext(ctx);
+    const baseline = taskBaselines.get(taskId) ?? lastCheckpoint;
     const evidence = await collectTaskEvidence({
       cwd: projectDir,
       taskId,
       planPath,
       testCommand,
+      baseline,
       taskDoneProven: Boolean(primaryOp.task || primaryOp.taskId || params.task || params.taskId),
       todoCompleted: true,
     });
 
-    const microResult = await runTaskMicroCheck(evidence);
+    const microResult = await runTaskMicroCheck({
+      ...evidence,
+      agentWorkLog: convo.agentWorkLog,
+    });
     if (!microResult.passed) {
-      const msg = `Task completion rejected by TypeSafe Dual Verification Gate (Gate 1 Micro-Check):
-- ${microResult.reasons.join("\n- ")}
-NEXT ACTIONS FOR AGENT:
-1. Fix test failures or build errors identified above.
-2. Run testCommand locally to verify all assertions pass cleanly before re-attempting completion.`;
+      lastFailureReasonByTask.set(taskId, microResult.reasons.join("; "));
+      const report = formatTaskReport({
+        kind: "DONE",
+        tasks: [taskId],
+        approved: false,
+        decidedBy: "gate1",
+        diffScope: evidence.diffScope,
+        changedFiles: evidence.changedFiles,
+        test: testCommand ? `${testCommand} exit ${evidence.testExitCode}` : "not provided",
+        reasons: microResult.reasons,
+      });
+      const msg = `Task completion rejected by TypeSafe Dual Verification Gate (Gate 1 Micro-Check):\n- ${microResult.reasons.join("\n- ")}\nNEXT ACTIONS FOR AGENT:\n1. Fix test failures or build errors identified above.\n2. Run testCommand locally to verify all assertions pass cleanly before re-attempting completion.`;
       if (typeof evt.cancel === "function") {
         (evt.cancel as (r: string) => void)(msg);
       }
       await pi.sendMessage({
         customType: "typesafe-compliance",
-        content: msg,
+        content: msg + "\n\n" + report,
       });
       throw new Error(msg);
     }
 
     // Gate 2: Semantic macro-check against TypeSafe System One runs for ALL task completions
     const client = createExtensionJudgeClient(apiKey, undefined, ctx);
+    const deliverableArtifacts = await collectDeliverableArtifacts(projectDir, evidence.changedFiles);
+    const taskType = inferTaskType(evidence.gitStatus, deliverableArtifacts);
+    const testSummary = testCommand
+      ? `$ ${testCommand}\nexit ${evidence.testExitCode}\n${evidence.testOutput}`
+      : "No testCommand provided for this task; test evidence not collected.";
+
+    const planRequirements = Array.isArray(params.requirements)
+      ? (params.requirements as string[])
+      : evidence.criteriaSource === "phase"
+      ? evidence.criteria
+      : [taskId];
+
+    const planContext = evidence.criteriaSource === "plan" ? evidence.criteria : undefined;
+
     const macroResult = await runPhaseMacroCheck(
       {
+        todoTask: taskId,
         phaseTitle: (params.phaseTitle as string) || (primaryOp.phaseTitle as string) || taskId,
-        planRequirements: (Array.isArray(params.requirements) ? params.requirements as string[] : undefined) || (evidence.criteria.length > 0 ? evidence.criteria : [taskId]),
+        planRequirements,
+        planContext,
         diffSummary: evidence.gitStatus || "No unstaged changes observed",
         unifiedDiff: evidence.gitDiff || "No diff (unobserved)",
-        testSummary: evidence.testOutput || "No test output (unobserved)",
+        testSummary,
         attemptCount: currentFailures,
+        taskType,
+        deliverableArtifacts,
+        userRequest: convo.userRequest,
+        agentWorkLog: convo.agentWorkLog,
+        diffScope: evidence.diffScope,
+        testCommand,
       },
       client
     );
+
     if (!macroResult.approved) {
-      const msg = `Task completion rejected by TypeSafe Dual Verification Gate (Gate 2 Macro-Check):
-- ${macroResult.reasons.join("\n- ")}
-NEXT ACTIONS FOR AGENT:
-1. Align implementation changes with the plan requirements.
-2. Re-read the phase acceptance criteria and remove any uncontracted drift.`;
+      lastFailureReasonByTask.set(taskId, macroResult.reasons.join("; "));
+      const report = formatTaskReport({
+        kind: "DONE",
+        tasks: [taskId],
+        approved: false,
+        decidedBy: "judge",
+        scores: {
+          meetsCriteria: macroResult.meetsCriteriaNoul,
+          threshold: 0.80,
+          drift: macroResult.driftChoice,
+          scope: macroResult.scopeChoice,
+        },
+        diffScope: evidence.diffScope,
+        changedFiles: evidence.changedFiles,
+        test: testCommand ? `${testCommand} exit ${evidence.testExitCode}` : "not provided",
+        reasons: macroResult.reasons,
+      });
+      const msg = `Task completion rejected by TypeSafe Dual Verification Gate (Gate 2 Macro-Check):\n- ${macroResult.reasons.join("\n- ")}\nNEXT ACTIONS FOR AGENT:\n1. Align implementation changes with the plan requirements.\n2. Re-read the phase acceptance criteria and remove any uncontracted drift.`;
       if (typeof evt.cancel === "function") {
         (evt.cancel as (r: string) => void)(msg);
       }
@@ -1143,12 +1646,35 @@ NEXT ACTIONS FOR AGENT:
         customType: macroResult.escalateToUser
           ? "typesafe-compliance-escalation"
           : "typesafe-compliance",
-        content: msg,
+        content: msg + "\n\n" + report,
       });
       throw new Error(msg);
     }
 
-    
+    // Done approved
+    taskBaselines.delete(taskId);
+    lastCheckpoint = await captureWorkspaceSnapshot(projectDir);
+    const report = formatTaskReport({
+      kind: "DONE",
+      tasks: [taskId],
+      approved: true,
+      decidedBy: "judge",
+      scores: {
+        meetsCriteria: macroResult.meetsCriteriaNoul,
+        threshold: 0.80,
+        drift: macroResult.driftChoice,
+        scope: macroResult.scopeChoice,
+      },
+      diffScope: evidence.diffScope,
+      changedFiles: evidence.changedFiles,
+      test: testCommand ? `${testCommand} exit ${evidence.testExitCode}` : "not provided",
+      reasons: macroResult.reasons,
+    });
+    await pi.sendMessage({
+      customType: "typesafe-task-report",
+      content: report,
+      display: true,
+    });
 
     // Mark task done in contracted tasks set after all gates pass
     for (const op of activeMutatives) {
@@ -1160,10 +1686,10 @@ NEXT ACTIONS FOR AGENT:
     if (taskId) activeContractedTasks.delete(taskId);
 
     consecutiveFailuresByTask.delete(taskId);
+    lastFailureReasonByTask.delete(taskId);
   }
 
   pi.on("tool_call", handleTodoInterception);
-  pi.on("before_tool_call", handleTodoInterception);
 
   // Tool is registered UNCONDITIONALLY. Availability (API key, shared kit
   // modules, project opt-in) is re-checked on every call rather than once at
@@ -1212,9 +1738,10 @@ NEXT ACTIONS FOR AGENT:
     if (!policyClientModule) return shortError("policy_client_missing");
 
     const sanitizedState = sanitizeStateForTypeSafe(params.state);
+    const normalizedQuestions = normalizeQuestionForTypeSafe(params.questions);
     const validParams = {
       state: sanitizedState,
-      questions: params.questions,
+      questions: normalizedQuestions,
     };
 
     const validation = apiClientModule.validateInput(validParams);
@@ -1701,7 +2228,7 @@ NEXT ACTIONS FOR AGENT:
     name: "typesafe_verify_completion",
     label: "TypeSafe Task Completion Dual Gate",
     description:
-      "Intercepts and gates task completion via Gate 1 deterministic local verification and Gate 2 TypeSafe System One semantic validation.",
+      "Advisory pre-flight verification tool. Evaluates task completion via Gate 1 deterministic local verification and Gate 2 TypeSafe System One semantic validation without mutating task state. ADVISORY ONLY: Agent retries MUST be capped at <= 2 attempts to avoid loop thrashing.",
     parameters: z.object({
       taskId: z.string(),
       planPath: z.string().optional(),

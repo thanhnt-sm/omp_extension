@@ -331,3 +331,26 @@ export function preparePayloadSafe<T extends TypeSafePayload>(
   }
   return scrubbed;
 }
+
+/**
+ * Clamps text to maxChars, inserting a truncation marker at the cut point.
+ */
+export function clampText(text: string, maxChars: number, keep: "head" | "tail"): string {
+  if (text.length <= maxChars) {
+    return text;
+  }
+  const markerTemplate = "\n[... 00000 chars truncated ...]\n";
+  const overhead = markerTemplate.length;
+  if (maxChars <= overhead) {
+    return keep === "head" ? text.slice(0, maxChars) : text.slice(-maxChars);
+  }
+
+  const budget = maxChars - overhead;
+  const cutCount = text.length - budget;
+  const marker = `\n[... ${cutCount} chars truncated ...]\n`;
+
+  if (keep === "head") {
+    return text.slice(0, budget) + marker;
+  }
+  return marker + text.slice(-budget);
+}
