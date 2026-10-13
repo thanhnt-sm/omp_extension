@@ -40,14 +40,26 @@ const taskBaselines = new Map<string, WorkspaceSnapshot>();
 export let lastCheckpoint: WorkspaceSnapshot | undefined;
 export let lastFailedKeyHash: string | null = null;
 export let lastAlertedKeyHash: string | null = null;
+export interface PendingRemediation {
+  taskId: string;
+  gate: string;
+  diffHash: string;
+  testExitCode?: number | null;
+  reasons: string[];
+  nextActions: string[];
+  timestamp: number;
+}
+export const pendingRemediations = new Map<string, PendingRemediation>();
 export function resetLastCheckpoint(): void {
   lastCheckpoint = undefined;
   hostAuthorizedTasks.clear();
   lastFailedKeyHash = null;
   lastAlertedKeyHash = null;
+  lastFailureReasonByTask.clear();
+  pendingRemediations.clear();
 }
 export const hostAuthorizedTasks = new Set<string>();
-const lastFailureReasonByTask = new Map<string, string>();
+export const lastFailureReasonByTask = new Map<string, string>();
 interface ExtensionToolResult {
   content: Array<{ type: "text"; text: string }>;
   details?: unknown;
@@ -157,34 +169,42 @@ interface ApiClientModule {
 
 /** Load the shared enabled-resolver by absolute path; null on any failure. */
 function loadResolverModule(): EnabledResolverModule | null {
-  try {
-    const modulePath = path.join(
-      os.homedir(),
-      ".claude",
-      "hooks",
-      "lib",
-      "typesafe-enabled-resolver.cjs"
-    );
-    return nodeRequire(modulePath) as EnabledResolverModule;
-  } catch {
-    return null;
+  const candidatePaths = [
+    path.join(os.homedir(), ".claude", "hooks", "lib", "typesafe-enabled-resolver.cjs"),
+    path.join(__dirname, "src", "typesafe-enabled-resolver.cjs"),
+    path.normalize("C:/Users/thant/Projects/omp_extension/src/typesafe-enabled-resolver.cjs"),
+  ];
+  for (const modulePath of candidatePaths) {
+    try {
+      if (existsSync(modulePath)) {
+        const mod = nodeRequire(modulePath) as EnabledResolverModule;
+        if (mod && typeof mod.resolveTypeSafeEnabled === "function") {
+          return mod;
+        }
+      }
+    } catch {}
   }
+  return null;
 }
 
 /** Load the shared egress-redaction module by absolute path; null on any failure. */
 function loadRedactModule(): RedactModule | null {
-  try {
-    const modulePath = path.join(
-      os.homedir(),
-      ".claude",
-      "mcp",
-      "typesafe",
-      "typesafe-redact.cjs"
-    );
-    return nodeRequire(modulePath) as RedactModule;
-  } catch {
-    return null;
+  const candidatePaths = [
+    path.join(os.homedir(), ".claude", "mcp", "typesafe", "typesafe-redact.cjs"),
+    path.join(__dirname, "src", "typesafe-redact.cjs"),
+    path.normalize("C:/Users/thant/Projects/omp_extension/src/typesafe-redact.cjs"),
+  ];
+  for (const modulePath of candidatePaths) {
+    try {
+      if (existsSync(modulePath)) {
+        const mod = nodeRequire(modulePath) as RedactModule;
+        if (mod && typeof mod.preparePayload === "function") {
+          return mod;
+        }
+      }
+    } catch {}
   }
+  return null;
 }
 
 /** Load the shared response-sanitization module (the same one the MCP
@@ -192,24 +212,22 @@ function loadRedactModule(): RedactModule | null {
  * contract as the other loaders (kit not installed / renamed -> disabled,
  * never a fallback to locally-duplicated rules that could drift). */
 function loadApiClientModule(): ApiClientModule | null {
-  try {
-    const modulePath = path.join(
-      os.homedir(),
-      ".claude",
-      "mcp",
-      "typesafe",
-      "typesafe-api-client.cjs"
-    );
-    const mod = nodeRequire(modulePath) as ApiClientModule;
-    // Guard against a malformed/mismatched module version silently letting
-    // fetch() fire and then surfacing a TypeError as a misleading
-    // "network_error" — verify the exported shape, not just that require()
-    // didn't throw.
-    if (!mod || typeof mod.sanitizeAnswers !== "function" || typeof mod.validateInput !== "function") return null;
-    return mod;
-  } catch {
-    return null;
+  const candidatePaths = [
+    path.join(os.homedir(), ".claude", "mcp", "typesafe", "typesafe-api-client.cjs"),
+    path.join(__dirname, "src", "typesafe-api-client.cjs"),
+    path.normalize("C:/Users/thant/Projects/omp_extension/src/typesafe-api-client.cjs"),
+  ];
+  for (const modulePath of candidatePaths) {
+    try {
+      if (existsSync(modulePath)) {
+        const mod = nodeRequire(modulePath) as ApiClientModule;
+        if (mod && typeof mod.sanitizeAnswers === "function" && typeof mod.validateInput === "function") {
+          return mod;
+        }
+      }
+    } catch {}
   }
+  return null;
 }
 
 interface PolicyClientModule {
@@ -753,10 +771,10 @@ function sanitizeSafe(text: string): string {
 }
 
 export function buildGateRejectionMessage(opts: GateRejectionOptions): string {
-  const safeTaskId = clampText(sanitizeSafe(opts.taskId), 80, "head");
-  const safeTestCmd = opts.testCommand ? `$ ${clampText(sanitizeSafe(opts.testCommand), 120, "head")}` : "testCommand";
+  const safeTaskId = clampText(sanitizeSafe(opts.taskId), 200, "head");
+  const safeTestCmd = opts.testCommand ? `$ ${clampText(sanitizeSafe(opts.testCommand), 200, "head")}` : "testCommand";
   const reasonsList = opts.reasons.length > 0 ? opts.reasons : ["Verification rejected without specific reason details."];
-  const reasonLines = reasonsList.map((r) => `- ${clampText(sanitizeSafe(r), 200, "head")}`).join("\n");
+  const reasonLines = reasonsList.map((r) => `- ${clampText(sanitizeSafe(r), 400, "head")}`).join("\n");
   const actions: string[] = [];
 
   if (opts.isUnavailable) {
@@ -802,7 +820,7 @@ export function buildGateRejectionMessage(opts: GateRejectionOptions): string {
     if (opts.scores?.scope === "REDUCTION" || reasonsLower.includes("scope reduction")) {
       const reqSnippet =
         opts.planRequirements && opts.planRequirements.length > 0
-          ? ` Requirements: ${opts.planRequirements.slice(0, 2).map((r) => `"${clampText(sanitizeSafe(r), 60, "head")}"`).join(", ")}`
+          ? ` Requirements: ${opts.planRequirements.slice(0, 3).map((r) => `"${clampText(sanitizeSafe(r), 300, "head")}"`).join(", ")}`
           : "";
       actions.push(
         `${actNum++}. Address omitted deliverables for "${safeTaskId}": complete all planned implementation criteria in-place.${reqSnippet}`
@@ -826,7 +844,7 @@ export function buildGateRejectionMessage(opts: GateRejectionOptions): string {
 
   const msg = `Task completion rejected by TypeSafe Dual Verification Gate (${opts.gate}):\n${reasonLines}\nNEXT ACTIONS FOR AGENT:\n${actions.join("\n")}`;
 
-  return clampText(msg, 1200, "head");
+  return clampText(msg, 3500, "head");
 }
 async function safeSendMessage(
   pi: { sendMessage: (msg: Record<string, unknown>, opts?: Record<string, unknown>) => Promise<unknown> | unknown },
@@ -1379,7 +1397,7 @@ export default function (pi: ExtensionAPI): void {
       return;
     }
 
-    const mutativeOps = new Set(["done", "rm", "drop", "init", "start", "append"]);
+    const mutativeOps = new Set(["done", "rm", "drop", "init", "start", "append", "block"]);
     const activeMutatives = ops.filter((o) => typeof o.op === "string" && mutativeOps.has(o.op));
     if (activeMutatives.length === 0) return;
     const ctxObj = (ctx as Record<string, unknown> | undefined) || {};
@@ -1534,6 +1552,50 @@ export default function (pi: ExtensionAPI): void {
       lastCheckpoint = await captureWorkspaceSnapshot(projectDir);
     }
 
+    // Block Evasion Guard: Intercept op: "block" on tasks with pending rejections or active contracted tasks
+    const tasksToBlock: string[] = [];
+    for (const o of activeMutatives) {
+      if (o.op === "block") {
+        const t = (o.task as string) || (o.taskId as string);
+        if (t && activeContractedTasks.has(t) && !tasksToBlock.includes(t)) {
+          tasksToBlock.push(t);
+        } else if (!t && activeContractedTasks.size > 0) {
+          for (const contracted of activeContractedTasks) {
+            if (!tasksToBlock.includes(contracted)) {
+              tasksToBlock.push(contracted);
+            }
+          }
+        }
+      }
+    }
+
+    if (tasksToBlock.length > 0) {
+      const hasUnresolvedRejection = tasksToBlock.some(
+        (t) => lastFailureReasonByTask.has(t) || pendingRemediations.has(t)
+      );
+      if (hasUnresolvedRejection && !isHumanAuthorized) {
+        if (ctxObj.hasUI !== false && typeof (ctxObj.ui as Record<string, unknown> | undefined)?.confirm === "function") {
+          const uiConfirm = (ctxObj.ui as { confirm: (t: string, m: string) => Promise<boolean> }).confirm;
+          const blockReason = (primaryOp.reason as string) || (params.reason as string) || "no reason provided";
+          const confirmMsg = `Agent attempted to block task(s) with unresolved TypeSafe rejections: "${tasksToBlock.join(", ")}"\nAgent reason: ${blockReason}\nApprove blocking?`;
+          const confirmed = await uiConfirm("TypeSafe: block rejected task?", confirmMsg);
+          if (confirmed) {
+            for (const t of tasksToBlock) {
+              hostAuthorizedTasks.add(t);
+            }
+          } else {
+            const msg = `Task blocking rejected: human did not approve blocking task(s) "${tasksToBlock.join(", ")}" with unresolved TypeSafe rejections.`;
+            if (typeof evt.cancel === "function") (evt.cancel as (r: string) => void)(msg);
+            throw new Error(msg);
+          }
+        } else {
+          const msg = `Task blocking rejected by TypeSafe Gate: Task(s) "${tasksToBlock.join(", ")}" have unresolved TypeSafe Gate rejections. Evasion via 'todo block' is prohibited. You must implement the missing deliverables instead of blocking.`;
+          if (typeof evt.cancel === "function") (evt.cancel as (r: string) => void)(msg);
+          throw new Error(msg);
+        }
+      }
+    }
+
     // Track contracted tasks and snapshot baseline
     for (const op of activeMutatives) {
       if (op.op === "init") {
@@ -1564,7 +1626,7 @@ export default function (pi: ExtensionAPI): void {
     }
 
     const primaryOp = activeMutatives[0] || {};
-    const isSafeFastPath = activeMutatives.every((o) => ["init", "start", "view", "append", "drop", "rm"].includes(o.op));
+    const isSafeFastPath = activeMutatives.every((o) => ["init", "start", "view", "append", "drop", "rm", "block"].includes(o.op));
     if (isSafeFastPath) {
       const pTask = (primaryOp.task as string) || (params.task as string) || "";
       if (pTask === "test-" + primaryOp.op) {
@@ -1728,12 +1790,60 @@ export default function (pi: ExtensionAPI): void {
       todoCompleted: true,
     });
 
+    const currentDiffHash = hashToken(
+      [
+        evidence.gitDiff || "",
+        evidence.gitStatus || "",
+        evidence.changedFiles.join(","),
+        String(evidence.testExitCode ?? "none"),
+        (evidence.testOutput || "").slice(-500),
+      ].join("::")
+    );
+
+    const prevRemediation = pendingRemediations.get(taskId);
+    if (prevRemediation && prevRemediation.diffHash === currentDiffHash && !isHumanAuthorized) {
+      const msg = `Task completion rejected by TypeSafe Dual Verification Gate (Gate 0 Remediation Ratchet):
+- Unchanged evidence state: No code modifications or new test executions detected since previous rejection on task "${taskId}".
+NEXT ACTIONS FOR AGENT:
+1. Address the previous rejection findings before retrying 'todo done':
+${prevRemediation.reasons.map((r) => `   - ${r}`).join("\n")}
+2. Modify implementation files or run tests to produce new verification evidence.
+3. Do NOT call 'todo done' with unchanged code or tests.`;
+
+      if (typeof evt.cancel === "function") {
+        (evt.cancel as (r: string) => void)(msg);
+      }
+      await safeSendMessage(
+        pi,
+        {
+          customType: "typesafe-compliance",
+          content: msg,
+        },
+        { deliverAs: "steer" }
+      );
+      throw new Error(msg);
+    }
+
     const microResult = await runTaskMicroCheck({
       ...evidence,
       agentWorkLog: convo.agentWorkLog,
     });
     if (!microResult.passed) {
       lastFailureReasonByTask.set(taskId, microResult.reasons.join("; "));
+      const isEvasionOrZeroEvidence = microResult.reasons.some(
+        (r) => r.toLowerCase().includes("zero evidence") || r.toLowerCase().includes("evasion")
+      );
+      if (isEvasionOrZeroEvidence) {
+        pendingRemediations.set(taskId, {
+          taskId,
+          gate: "Gate 1 Micro-Check",
+          diffHash: currentDiffHash,
+          testExitCode: evidence.testExitCode,
+          reasons: microResult.reasons,
+          nextActions: ["Fix test failures or produce implementation changes."],
+          timestamp: Date.now(),
+        });
+      }
       const report = formatTaskReport({
         kind: "DONE",
         tasks: [taskId],
@@ -1803,6 +1913,15 @@ export default function (pi: ExtensionAPI): void {
 
     if (!macroResult.approved) {
       lastFailureReasonByTask.set(taskId, macroResult.reasons.join("; "));
+      pendingRemediations.set(taskId, {
+        taskId,
+        gate: "Gate 2 Macro-Check",
+        diffHash: currentDiffHash,
+        testExitCode: evidence.testExitCode,
+        reasons: macroResult.reasons,
+        nextActions: macroResult.reasons,
+        timestamp: Date.now(),
+      });
       const report = formatTaskReport({
         kind: "DONE",
         tasks: [taskId],
@@ -1896,6 +2015,7 @@ export default function (pi: ExtensionAPI): void {
 
     consecutiveFailuresByTask.delete(taskId);
     lastFailureReasonByTask.delete(taskId);
+    pendingRemediations.delete(taskId);
   }
 
   pi.on("tool_call", handleTodoInterception);
