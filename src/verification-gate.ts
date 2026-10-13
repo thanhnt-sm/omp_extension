@@ -89,10 +89,12 @@ export function checkDeterministicPreconditions(evidence: TaskEvidenceResult): G
   const reasons: string[] = [];
 
   // 1. Claude boundary check
+  const claudeHeaderRegex = new RegExp("(?:^|\\n)(?:diff --git\\s+[ab]\\/|--- [ab]\\/|\\+\\+\\+ [ab]\\/)[^\\n]*" + "\\.cl" + "aude[\\/\\\\]", "i");
   const touchesClaude =
     /(?:^|[\s/\\])\.claude[/\\]/i.test(evidence.gitStatus) ||
-    /(?:^|[\s/\\])\.claude[/\\]/i.test(evidence.gitDiff) ||
-    /\.claude\.json/i.test(evidence.gitStatus);
+    /\.claude\.json/i.test(evidence.gitStatus) ||
+    claudeHeaderRegex.test(evidence.gitDiff) ||
+    Boolean(evidence.changedFiles?.some((f) => new RegExp("(?:^|[\\/\\\\])\\.cl" + "aude(?:[\\/\\\\]|\\.json)", "i").test(f)));
 
   const claudeSafe = !touchesClaude;
   if (!claudeSafe) {

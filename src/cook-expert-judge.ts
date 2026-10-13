@@ -689,6 +689,7 @@ export {
   formatConsensusEscalation,
   runBicameralDropCheck,
   runBicameralMacroCheck,
+  evaluateBicameralDoneConsensus,
   type AdvisorContext,
   type AdvisorIntentResult,
   type AdvisorIntentVerdict,

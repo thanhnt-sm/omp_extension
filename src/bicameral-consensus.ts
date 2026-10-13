@@ -142,7 +142,7 @@ export function evaluateAdvisorIntent(ctx: AdvisorContext): AdvisorIntentResult 
 
   // Operation === "done" or "mutate"
   if (ctx.operation === "done") {
-    if (workLog.length > 0 && /pass|implement|added|completed|fixed/i.test(workLog)) {
+    if (workLog.length > 0 && /pass|implement|added|completed|fixed|moved|organized|refactor|verified|updated|tested/i.test(workLog)) {
       return {
         verdict: "ALLOW",
         confidence: 0.90,
@@ -304,7 +304,7 @@ export async function runBicameralDropCheck(
 export async function runBicameralMacroCheck(
   ctx: MacroCheckContext,
   client?: ExpertJudgeClient
-): Promise<BicameralConsensusDecision> {
+): Promise<BicameralConsensusDecision & { macroResult: PhaseMacroCheckResult }> {
   const advisor = evaluateAdvisorIntent({
     operation: "done",
     task: ctx.todoTask || ctx.phaseTitle || "",
@@ -315,6 +315,46 @@ export async function runBicameralMacroCheck(
 
   const jevMacro = await runPhaseMacroCheck(ctx, client);
   let jevVerdict: JevConsensusVerdict;
+  if (jevMacro.approved) {
+    jevVerdict = "APPROVE";
+  } else if (jevMacro.verdict === "NEXT_ACTION_REQUIRED") {
+    jevVerdict = "NEXT_ACTION_REQUIRED";
+  } else if (jevMacro.verdict === "REJECT") {
+    jevVerdict = "REJECT";
+  } else {
+    jevVerdict = "ESCALATE";
+  }
+
+  const jev: JevResult = {
+    verdict: jevVerdict,
+    confidence: jevMacro.expertConfidence,
+    reasons: jevMacro.reasons,
+  };
+
+  const decision = arbitrateConsensus(advisor, jev);
+  return { ...decision, macroResult: jevMacro };
+}
+
+/**
+ * Evaluates bicameral consensus for task completion given an existing PhaseMacroCheckResult.
+ */
+export async function evaluateBicameralDoneConsensus(ctx: {
+  todoTask: string;
+  phaseTitle?: string;
+  userRequest?: string;
+  agentWorkLog?: string;
+  evidence?: unknown;
+  macroResult: PhaseMacroCheckResult;
+}): Promise<BicameralConsensusDecision> {
+  const advisor = evaluateAdvisorIntent({
+    operation: "done",
+    task: ctx.todoTask || ctx.phaseTitle || "",
+    userRequest: ctx.userRequest,
+    agentWorkLog: ctx.agentWorkLog,
+  });
+
+  let jevVerdict: JevConsensusVerdict;
+  const jevMacro = ctx.macroResult;
   if (jevMacro.approved) {
     jevVerdict = "APPROVE";
   } else if (jevMacro.verdict === "NEXT_ACTION_REQUIRED") {

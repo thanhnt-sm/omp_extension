@@ -290,8 +290,21 @@ export async function collectTaskEvidence(
       const diffRes = await executeTestCommand(`git diff HEAD -- ${filesArg}`, cwd, 5000);
       trackedDiff = diffRes.output.trim();
     }
-
     let untrackedDiff = "";
+    if (!trackedDiff && untrackedChanged.length === 0) {
+      try {
+        const [recentLogRes, commitDiffRes] = await Promise.all([
+          executeTestCommand("git log -n 1 --oneline", cwd, 5000),
+          executeTestCommand("git diff HEAD~1..HEAD", cwd, 5000),
+        ]);
+        if (recentLogRes.exitCode === 0 && commitDiffRes.exitCode === 0 && commitDiffRes.output.trim()) {
+          gitStatus = `Committed in ${recentLogRes.output.trim()}`;
+          trackedDiff = commitDiffRes.output.trim();
+          const statRes = await executeTestCommand("git diff --name-only HEAD~1..HEAD", cwd, 5000);
+          changedFiles = statRes.output.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        }
+      } catch {}
+    }
     for (const uf of untrackedChanged) {
       try {
         const fullPath = path.resolve(cwd, uf);
@@ -317,14 +330,29 @@ export async function collectTaskEvidence(
     gitStatus = gitStatusRes.output.trim();
     gitDiff = gitDiffRes.output.trim();
     diffScope = "full-working-tree";
-
-    const lines = gitStatus.split(/\r?\n/).filter((l) => l.trim().length > 0);
-    changedFiles = lines.map((l) => {
-      let p = l.slice(3).trim();
-      if (p.includes(" -> ")) p = p.split(" -> ").pop()?.trim() || p;
-      if (p.startsWith('"') && p.endsWith('"')) p = p.slice(1, -1);
-      return p;
-    });
+    if (!gitStatus && !gitDiff) {
+      try {
+        const [recentLogRes, commitDiffRes] = await Promise.all([
+          executeTestCommand("git log -n 1 --oneline", cwd, 5000),
+          executeTestCommand("git diff HEAD~1..HEAD", cwd, 5000),
+        ]);
+        if (recentLogRes.exitCode === 0 && commitDiffRes.exitCode === 0 && commitDiffRes.output.trim()) {
+          gitStatus = `Committed in ${recentLogRes.output.trim()}`;
+          gitDiff = commitDiffRes.output.trim();
+          diffScope = "task-baseline";
+          const statRes = await executeTestCommand("git diff --name-only HEAD~1..HEAD", cwd, 5000);
+          changedFiles = statRes.output.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        }
+      } catch {}
+    } else {
+      const lines = gitStatus.split(/\r?\n/).filter((l) => l.trim().length > 0);
+      changedFiles = lines.map((l) => {
+        let p = l.slice(3).trim();
+        if (p.includes(" -> ")) p = p.split(" -> ").pop()?.trim() || p;
+        if (p.startsWith('"') && p.endsWith('"')) p = p.slice(1, -1);
+        return p;
+      });
+    }
   }
   let testExitCode: number | null = null;
   let testOutput = "";

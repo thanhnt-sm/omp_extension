@@ -3,6 +3,7 @@ import {
   evaluateAdvisorIntent,
   arbitrateConsensus,
   formatConsensusEscalation,
+  evaluateBicameralDoneConsensus,
   type AdvisorContext,
   type AdvisorIntentResult,
   type JevResult,
@@ -225,6 +226,67 @@ describe("Phase 2: Bicameral Consensus Engine & Advisor Intent Evaluator", () =>
       expect(formatted).toContain("Lobe 1 (Advisor Intent): ALLOW");
       expect(formatted).toContain("Lobe 2 (TypeSafe JEV Judge): REJECT");
       expect(formatted).toContain("Sovereign human confirmation");
+    });
+  });
+
+  describe("evaluateBicameralDoneConsensus", () => {
+    test("yields AUTO_APPROVE when advisor intent (ALLOW) and JEV macro (APPROVE) align", async () => {
+      const decision = await evaluateBicameralDoneConsensus({
+        todoTask: "Reorganize test and plan files",
+        userRequest: "Quy hoạch lại các file plan .md và test",
+        agentWorkLog: "Moved files to standard plans/ and tests/ locations. Full test suite passing with 278 pass.",
+        evidence: {
+          gitStatus: "clean",
+          gitDiff: "diff --git",
+          testExitCode: 0,
+          testOutput: "278 pass",
+          criteria: ["Organize files"],
+          cleanWorkingTree: true,
+          timestamp: new Date().toISOString(),
+        },
+        macroResult: {
+          approved: true,
+          verdict: "APPROVE",
+          meetsCriteriaNoul: 1.0,
+          driftChoice: "no_drift",
+          scopeChoice: "HOLD",
+          expertConfidence: 0.95,
+          reasons: ["All deliverables organized into standard directories and verified by tests."],
+        },
+      });
+
+      expect(decision.verdict).toBe("AUTO_APPROVE");
+      expect(decision.advisor.verdict).toBe("ALLOW");
+      expect(decision.jev.verdict).toBe("APPROVE");
+    });
+
+    test("yields RECONCILE_PLAN when JEV macro returns NEXT_ACTION_REQUIRED", async () => {
+      const decision = await evaluateBicameralDoneConsensus({
+        todoTask: "Implement auth middleware",
+        userRequest: "Add JWT authentication",
+        agentWorkLog: "Implemented handler, tests pending",
+        evidence: {
+          gitStatus: "M auth.ts",
+          gitDiff: "+auth",
+          testExitCode: 0,
+          testOutput: "ok",
+          criteria: ["JWT auth"],
+          cleanWorkingTree: false,
+          timestamp: new Date().toISOString(),
+        },
+        macroResult: {
+          approved: false,
+          verdict: "NEXT_ACTION_REQUIRED",
+          meetsCriteriaNoul: 0.5,
+          driftChoice: "no_drift",
+          scopeChoice: "HOLD",
+          expertConfidence: 0.85,
+          reasons: ["Missing token expiration verification test"],
+        },
+      });
+
+      expect(decision.verdict).toBe("RECONCILE_PLAN");
+      expect(decision.reasons.some((r) => r.includes("token expiration"))).toBe(true);
     });
   });
 });

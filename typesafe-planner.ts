@@ -29,6 +29,7 @@ import {
   evaluateAdvisorIntent,
   runBicameralDropCheck,
   runBicameralMacroCheck,
+  formatConsensusEscalation,
   type ExpertJudgeClient,
   type ExpertJudgeQuestion,
   type ExpertJudgeResponse,
@@ -1068,7 +1069,7 @@ export default function (pi: ExtensionAPI): void {
   // self-healing when environment updates with a valid key without restart.
   // (lastFailedKeyHash and lastAlertedKeyHash are managed at module scope)
   const PROMPT_INJECTION =
-    "TypeSafe System One is integrated into the host for all human handoffs and task completions. When you call the 'ask' tool to present decisions to the user, TypeSafe automatically evaluates your proposal and attaches a risk/clarity verdict directly to what the human sees (high risk increases human oversight, never blocks it). When you mark a task complete via 'todo done', the completion is strictly hard-gated: Gate 1 verifies tests locally, and Gate 2 runs a TypeSafe Macro-Check that actively rejects completion if requirements are dropped or architectural drift occurs. Tighten-only policies are enforced structurally. If you encounter auth or configuration errors, you MUST inform the user.";
+    "TypeSafe System One is integrated into the host for all human handoffs and task completions. Mutations (todo done, drop, plan updates) are governed by the Bicameral Consensus Engine: Lobe 1 (Advisor Intent) evaluates user intent and work logs, and Lobe 2 (JEV Judge) evaluates code diffs and test proofs. When a tool call or verification returns red notices with NEXT ACTIONS FOR AGENT or <plan_reconciliation>, you MUST execute the required actions autonomously: run relevant skills (ck:problem-solving, ck:plan, ck:research) to analyze, adapt plan.md and todo, and implement required deliverables. NEVER call 'ask' or ask human confirmation when actionable NEXT ACTIONS are provided. Human escalation is strictly reserved for irreconcilable conflicts where sovereign human confirmation is required.";
   // Session Pre-Flight Health Probe (Phase 3): event-driven diagnostic probe on session_start.
   pi.on("session_start", async (_event: unknown, ctx: unknown) => {
     try {
@@ -1676,62 +1677,68 @@ export default function (pi: ExtensionAPI): void {
     if (params.resetFailures === true || ctxObj2.resetFailures) {
       consecutiveFailuresByTask.delete(taskId);
     }
-    const currentFailures = (consecutiveFailuresByTask.get(taskId) || 0) + 1;
-    consecutiveFailuresByTask.set(taskId, currentFailures);
-    if (currentFailures >= 3) {
-      consecutiveFailuresByTask.delete(taskId);
-      const lastReason = lastFailureReasonByTask.get(taskId) || "Multiple verification failures";
-      let ratchetApproved = false;
-      if (ctxObj.hasUI !== false && typeof (ctxObj.ui as Record<string, unknown> | undefined)?.confirm === "function") {
-        const uiConfirm = (ctxObj.ui as { confirm: (t: string, m: string) => Promise<boolean> }).confirm;
-        const promptMsg = clampText(
-          `Task "${taskId}" failed verification ${currentFailures} times. Last failure: ${lastReason}. Accept as done?`,
-          1500,
-          "tail"
-        );
-        ratchetApproved = await uiConfirm("TypeSafe: accept task completion?", promptMsg);
-      }
+    const currentFailures = consecutiveFailuresByTask.get(taskId) || 0;
 
-      if (ratchetApproved) {
-        activeContractedTasks.delete(taskId);
-        taskBaselines.delete(taskId);
-        lastCheckpoint = await captureWorkspaceSnapshot(projectDir);
+    async function handleFailureEscalation(gateName: string, reasons: string[]): Promise<boolean> {
+      lastFailureReasonByTask.set(taskId, reasons.join("; "));
+      const failures = (consecutiveFailuresByTask.get(taskId) || 0) + 1;
+      consecutiveFailuresByTask.set(taskId, failures);
+
+      if (failures >= 3) {
+        consecutiveFailuresByTask.delete(taskId);
+        let ratchetApproved = false;
+        if (ctxObj.hasUI !== false && typeof (ctxObj.ui as Record<string, unknown> | undefined)?.confirm === "function") {
+          const uiConfirm = (ctxObj.ui as { confirm: (t: string, m: string) => Promise<boolean> }).confirm;
+          const promptMsg = clampText(
+            `Task "${taskId}" failed verification ${failures} times. Last failure (${gateName}): ${reasons.join("; ")}. Accept as done?`,
+            1500,
+            "tail"
+          );
+          ratchetApproved = await uiConfirm("TypeSafe: accept task completion?", promptMsg);
+        }
+
+        if (ratchetApproved) {
+          activeContractedTasks.delete(taskId);
+          taskBaselines.delete(taskId);
+          lastCheckpoint = await captureWorkspaceSnapshot(projectDir);
+          const report = formatTaskReport({
+            kind: "DONE",
+            tasks: [taskId],
+            approved: true,
+            decidedBy: "human",
+            reasons: [`Stall ratchet resolved: manually accepted as done by user after ${failures} failures`],
+          });
+          await pi.sendMessage({
+            customType: "typesafe-task-report",
+            content: report,
+            display: true,
+          });
+          return true;
+        }
+
+        const msg = `Task verification rejected: stall ratchet triggered after ${failures} consecutive failed attempts for task "${taskId}". Halting autonomous retry loop for user escalation.`;
+        if (typeof evt.cancel === "function") {
+          (evt.cancel as (r: string) => void)(msg);
+        }
         const report = formatTaskReport({
           kind: "DONE",
           tasks: [taskId],
-          approved: true,
+          approved: false,
           decidedBy: "human",
-          reasons: [`Stall ratchet resolved: manually accepted as done by user after ${currentFailures} failures`],
+          reasons: [msg],
         });
-        await pi.sendMessage({
-          customType: "typesafe-task-report",
-          content: report,
-          display: true,
-        });
-        return;
+        await safeSendMessage(
+          pi,
+          {
+            customType: "typesafe-compliance-escalation",
+            content: msg + "\n\n" + report,
+            display: true,
+          },
+          { deliverAs: "steer" }
+        );
+        throw new Error(msg);
       }
-
-      const msg = `Task verification rejected: stall ratchet triggered after ${currentFailures} consecutive failed attempts for task "${taskId}". Halting autonomous retry loop for user escalation.`;
-      if (typeof evt.cancel === "function") {
-        (evt.cancel as (r: string) => void)(msg);
-      }
-      const report = formatTaskReport({
-        kind: "DONE",
-        tasks: [taskId],
-        approved: false,
-        decidedBy: "human",
-        reasons: [msg],
-      });
-      await safeSendMessage(
-        pi,
-        {
-          customType: "typesafe-compliance-escalation",
-          content: msg + "\n\n" + report,
-          display: true,
-        },
-        { deliverAs: "steer" }
-      );
-      throw new Error(msg);
+      return false;
     }
 
 
@@ -1802,6 +1809,9 @@ export default function (pi: ExtensionAPI): void {
 
     const prevRemediation = pendingRemediations.get(taskId);
     if (prevRemediation && prevRemediation.diffHash === currentDiffHash && !isHumanAuthorized) {
+      if (await handleFailureEscalation("Gate 0 Remediation Ratchet", prevRemediation.reasons)) {
+        return;
+      }
       const msg = `Task completion rejected by TypeSafe Dual Verification Gate (Gate 0 Remediation Ratchet):
 - Unchanged evidence state: No code modifications or new test executions detected since previous rejection on task "${taskId}".
 NEXT ACTIONS FOR AGENT:
@@ -1829,7 +1839,9 @@ ${prevRemediation.reasons.map((r) => `   - ${r}`).join("\n")}
       agentWorkLog: convo.agentWorkLog,
     });
     if (!microResult.passed) {
-      lastFailureReasonByTask.set(taskId, microResult.reasons.join("; "));
+      if (await handleFailureEscalation("Gate 1 Micro-Check", microResult.reasons)) {
+        return;
+      }
       const isEvasionOrZeroEvidence = microResult.reasons.some(
         (r) => r.toLowerCase().includes("zero evidence") || r.toLowerCase().includes("evasion")
       );
@@ -1891,7 +1903,7 @@ ${prevRemediation.reasons.map((r) => `   - ${r}`).join("\n")}
 
     const planContext = evidence.criteriaSource === "plan" ? evidence.criteria : undefined;
 
-    const macroResult = await runPhaseMacroCheck(
+    const bicameralResult = await runBicameralMacroCheck(
       {
         todoTask: taskId,
         phaseTitle: (params.phaseTitle as string) || (primaryOp.phaseTitle as string) || taskId,
@@ -1900,7 +1912,7 @@ ${prevRemediation.reasons.map((r) => `   - ${r}`).join("\n")}
         diffSummary: evidence.gitStatus || "No unstaged changes observed",
         unifiedDiff: evidence.gitDiff || "No diff (unobserved)",
         testSummary,
-        attemptCount: currentFailures,
+        attemptCount: currentFailures + 1,
         taskType,
         deliverableArtifacts,
         userRequest: convo.userRequest,
@@ -1910,8 +1922,26 @@ ${prevRemediation.reasons.map((r) => `   - ${r}`).join("\n")}
       },
       client
     );
+    const macroResult = bicameralResult.macroResult;
+
+    if (bicameralResult.verdict === "AUTO_APPROVE") {
+      macroResult.approved = true;
+    } else if (bicameralResult.verdict === "HUMAN_ESCALATION") {
+      const uiObj = ctxObj.ui;
+      if (ctxObj.hasUI !== false && uiObj && typeof uiObj === "object" && "confirm" in uiObj && typeof uiObj.confirm === "function") {
+        const escalationCard = formatConsensusEscalation(bicameralResult);
+        const confirmed = await uiObj.confirm("TypeSafe: accept task completion?", escalationCard);
+        if (confirmed) {
+          macroResult.approved = true;
+          hostAuthorizedTasks.add(taskId);
+        }
+      }
+    }
 
     if (!macroResult.approved) {
+      if (await handleFailureEscalation("Gate 2 Macro-Check", macroResult.reasons)) {
+        return;
+      }
       lastFailureReasonByTask.set(taskId, macroResult.reasons.join("; "));
       pendingRemediations.set(taskId, {
         taskId,
