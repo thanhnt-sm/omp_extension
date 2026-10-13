@@ -20,6 +20,7 @@ export interface Gate1Result {
 export interface Gate2Result {
   passed: boolean;
   reasons: string[];
+  deliverablesVerdict?: "APPROVE" | "REJECT" | "NEXT_ACTION_REQUIRED";
   meetsCriteriaNoul?: number;
   planDriftChoice?: "no_drift" | "unapproved_deviation" | "scope_creep";
   claudeUntouchedNoul?: number;
@@ -47,6 +48,7 @@ export interface GateJudgeClient {
     questions: Record<string, GateQuestion>;
   }) => Promise<{
     answers?: {
+      deliverables_verdict?: { choice: string; confidence?: number };
       meets_criteria?: { noul: number };
       plan_drift?: { choice: string };
       claude_account_untouched?: { noul: number };
@@ -135,14 +137,24 @@ export function constructGateQuestions(criteria: string[]): Record<string, GateQ
       : ["Code correctly satisfies task deliverables and requirements."];
 
   return {
+    deliverables_verdict: {
+      type: "choice",
+      instructions:
+        "Rate whether the real Git diff and test execution output completely satisfy the task's stated deliverables.",
+      criteria: [
+        `APPROVE: Satisfies all criteria: ${criteriaList.join(", ")}`,
+        "REJECT: Fails to satisfy criteria or partially implemented",
+        "NEXT_ACTION_REQUIRED: Work is partial, missing tests, or needs plan revision",
+      ],
+    },
     meets_criteria: {
       type: "noul",
       instructions:
         "Rate the probability that the real Git diff and test execution output completely satisfy the task's stated deliverables.",
-      criteria: {
-        true: `Satisfies all criteria: ${criteriaList.join(", ")}`,
-        false: "Fails to satisfy criteria or partially implemented",
-      },
+      criteria: [
+        `true: Satisfies all criteria: ${criteriaList.join(", ")}`,
+        "false: Fails to satisfy criteria or partially implemented",
+      ],
     },
     plan_drift: {
       type: "choice",
@@ -256,6 +268,7 @@ async function defaultGateJudgeClient(
     const json = (await res.json()) as { answers?: Record<string, unknown> };
     return {
       answers: json.answers as {
+        deliverables_verdict?: { choice: string; confidence?: number };
         meets_criteria?: { noul: number };
         plan_drift?: { choice: string };
         claude_account_untouched?: { noul: number };
@@ -323,10 +336,18 @@ export async function verifyTaskCompletion(
   const response = await evaluate();
   const validProbability = (value: unknown): value is number =>
     typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;
-  const answersValid = response.answers &&
-    validProbability(response.answers.meets_criteria?.noul) &&
+  const rawDeliverablesVerdict = (response.answers as Record<string, unknown> | undefined)?.deliverables_verdict as { choice?: string } | undefined;
+  const rawMeetsCriteria = response.answers?.meets_criteria?.noul;
+  const hasValidDeliverablesVerdict = rawDeliverablesVerdict?.choice &&
+    ["APPROVE", "REJECT", "NEXT_ACTION_REQUIRED"].includes(rawDeliverablesVerdict.choice);
+  const hasValidMeetsCriteria = validProbability(rawMeetsCriteria);
+
+  const answersValid = Boolean(
+    response.answers &&
+    (hasValidDeliverablesVerdict || hasValidMeetsCriteria) &&
     validProbability(response.answers.claude_account_untouched?.noul) &&
-    ["no_drift", "unapproved_deviation", "scope_creep"].includes(response.answers.plan_drift?.choice ?? "");
+    ["no_drift", "unapproved_deviation", "scope_creep"].includes(response.answers.plan_drift?.choice ?? "")
+  );
 
   // Fail-closed handling if TypeSafe is offline, errors, or fails to answer
   if (response.error || !response.answers || !answersValid) {
@@ -349,15 +370,37 @@ export async function verifyTaskCompletion(
     };
   }
 
+  let deliverablesVerdict: "APPROVE" | "REJECT" | "NEXT_ACTION_REQUIRED" | undefined;
+  if (hasValidDeliverablesVerdict) {
+    deliverablesVerdict = rawDeliverablesVerdict!.choice as "APPROVE" | "REJECT" | "NEXT_ACTION_REQUIRED";
+  } else if (hasValidMeetsCriteria) {
+    const threshold = resolveAutoApprovalThreshold();
+    deliverablesVerdict = rawMeetsCriteria! >= threshold ? "APPROVE" : rawMeetsCriteria! < 0.30 ? "REJECT" : "NEXT_ACTION_REQUIRED";
+  }
+
   const { answers } = response;
   const reasons: string[] = [];
 
-  const meetsCriteriaNoul = answers.meets_criteria?.noul;
-  const threshold = resolveAutoApprovalThreshold();
-  if (meetsCriteriaNoul !== undefined && meetsCriteriaNoul < threshold) {
-    reasons.push(
-      `Deliverable verification failed: meets_criteria probability (${meetsCriteriaNoul}) is below ${threshold.toFixed(2)} threshold.`
-    );
+  if (deliverablesVerdict === "REJECT") {
+    if (rawMeetsCriteria !== undefined && rawMeetsCriteria < resolveAutoApprovalThreshold()) {
+      reasons.push(
+        `Deliverable verification failed: meets_criteria probability (${rawMeetsCriteria}) is below ${resolveAutoApprovalThreshold().toFixed(2)} threshold.`
+      );
+    } else {
+      reasons.push(
+        "Deliverable verification rejected: implementation is incomplete, evading work, or failing acceptance criteria."
+      );
+    }
+  } else if (deliverablesVerdict === "NEXT_ACTION_REQUIRED") {
+    if (rawMeetsCriteria !== undefined && rawMeetsCriteria < resolveAutoApprovalThreshold()) {
+      reasons.push(
+        `Deliverable verification failed: meets_criteria probability (${rawMeetsCriteria}) is below ${resolveAutoApprovalThreshold().toFixed(2)} threshold.`
+      );
+    } else {
+      reasons.push(
+        "Deliverable verification requires next actions: implementation is partial, missing tests, or requires plan adaptation."
+      );
+    }
   }
 
   const driftChoice = answers.plan_drift?.choice?.toLowerCase() as
@@ -386,7 +429,8 @@ export async function verifyTaskCompletion(
     gate2: {
       passed: approved,
       reasons,
-      meetsCriteriaNoul,
+      deliverablesVerdict,
+      meetsCriteriaNoul: rawMeetsCriteria ?? (deliverablesVerdict === "APPROVE" ? 1.0 : deliverablesVerdict === "NEXT_ACTION_REQUIRED" ? 0.5 : 0.0),
       planDriftChoice: driftChoice,
       claudeUntouchedNoul,
       escalateToUser: false,

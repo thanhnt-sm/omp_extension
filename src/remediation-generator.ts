@@ -60,3 +60,37 @@ ${actionsXml}
   </action_items>
 </remediation>`;
 }
+
+export interface PlanDeltaParams {
+  taskId?: string;
+  reasons: string[];
+  nextActions: string[];
+  suggestedTasks?: string[];
+  humanAuthorized?: boolean;
+}
+
+export function synthesizePlanDelta(
+  params: PlanDeltaParams | { reasons: string[]; nextActions: string[] }
+): string {
+  const reasons = params.reasons || [];
+  const nextActions = params.nextActions || [];
+  const taskId = "taskId" in params ? params.taskId : undefined;
+  const suggested = "suggestedTasks" in params && params.suggestedTasks ? params.suggestedTasks : [];
+
+  const reasonsXml = reasons.map((r) => `    <reason>${escapeXml(r)}</reason>`).join("\n");
+  const actionsXml = nextActions.map((a) => `    <action>${escapeXml(a)}</action>`).join("\n");
+  const taskTag = taskId ? `  <task_id>${escapeXml(taskId)}</task_id>\n` : "";
+  const suggestedTag = suggested.length > 0
+    ? `  <proposed_plan_delta>\n${suggested.map((t) => `    <add_task>${escapeXml(t)}</add_task>`).join("\n")}\n  </proposed_plan_delta>\n`
+    : "";
+
+  return `<plan_reconciliation>
+  <instruction>Deliverable verification identified missing requirements or next actions. Adapt your plan and todo list using the synthesized delta below rather than terminating.</instruction>
+${taskTag}  <unfulfilled_criteria>
+${reasonsXml}
+  </unfulfilled_criteria>
+  <required_actions>
+${actionsXml}
+  </required_actions>
+${suggestedTag}</plan_reconciliation>`;
+}

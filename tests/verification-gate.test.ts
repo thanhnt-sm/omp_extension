@@ -342,4 +342,82 @@ describe("Phase 3: Execution Compliance & Dual Verification Gate", () => {
       }
     });
   });
+
+  describe("Categorical Gate 2 Verification Contracts", () => {
+    test("approves completion when deliverables_verdict is APPROVE", async () => {
+      const mockJudge: GateJudgeClient = {
+        evaluateGate: async () => ({
+          answers: {
+            deliverables_verdict: { choice: "APPROVE" },
+            plan_drift: { choice: "no_drift" },
+            claude_account_untouched: { noul: 1.0 },
+          },
+        }),
+      };
+
+      const context: TaskVerificationContext = {
+        taskId: "task-categorical-approve",
+        testCommand: "bun -e \"process.exit(0)\"",
+        taskDoneProven: true,
+        todoCompleted: true,
+      };
+
+      const result = await verifyTaskCompletion(context, mockJudge);
+      expect(result.approved).toBe(true);
+      expect(result.gate1.passed).toBe(true);
+      expect(result.gate2?.passed).toBe(true);
+      expect(result.gate2?.deliverablesVerdict).toBe("APPROVE");
+      expect(result.reasons.length).toBe(0);
+    });
+
+    test("rejects completion when deliverables_verdict is REJECT", async () => {
+      const mockJudge: GateJudgeClient = {
+        evaluateGate: async () => ({
+          answers: {
+            deliverables_verdict: { choice: "REJECT" },
+            plan_drift: { choice: "no_drift" },
+            claude_account_untouched: { noul: 1.0 },
+          },
+        }),
+      };
+
+      const context: TaskVerificationContext = {
+        taskId: "task-categorical-reject",
+        testCommand: "bun -e \"process.exit(0)\"",
+        taskDoneProven: true,
+        todoCompleted: true,
+      };
+
+      const result = await verifyTaskCompletion(context, mockJudge);
+      expect(result.approved).toBe(false);
+      expect(result.gate2?.passed).toBe(false);
+      expect(result.gate2?.deliverablesVerdict).toBe("REJECT");
+      expect(result.reasons.some((r) => r.includes("rejected") || r.includes("incomplete"))).toBe(true);
+    });
+
+    test("rejects completion with next actions when deliverables_verdict is NEXT_ACTION_REQUIRED", async () => {
+      const mockJudge: GateJudgeClient = {
+        evaluateGate: async () => ({
+          answers: {
+            deliverables_verdict: { choice: "NEXT_ACTION_REQUIRED" },
+            plan_drift: { choice: "no_drift" },
+            claude_account_untouched: { noul: 1.0 },
+          },
+        }),
+      };
+
+      const context: TaskVerificationContext = {
+        taskId: "task-categorical-next-action",
+        testCommand: "bun -e \"process.exit(0)\"",
+        taskDoneProven: true,
+        todoCompleted: true,
+      };
+
+      const result = await verifyTaskCompletion(context, mockJudge);
+      expect(result.approved).toBe(false);
+      expect(result.gate2?.passed).toBe(false);
+      expect(result.gate2?.deliverablesVerdict).toBe("NEXT_ACTION_REQUIRED");
+      expect(result.reasons.some((r) => r.includes("next actions") || r.includes("Next actions"))).toBe(true);
+    });
+  });
 });

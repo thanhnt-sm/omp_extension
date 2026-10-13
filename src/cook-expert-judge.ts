@@ -42,12 +42,17 @@ export interface MacroCheckContext {
   testCommand?: string;
 }
 
+export type JevVerdict = "APPROVE" | "REJECT" | "NEXT_ACTION_REQUIRED" | "ESCALATE";
+export type DropVerdict = "APPROVE" | "REJECT" | "ESCALATE";
+export type DeliverablesVerdict = "APPROVE" | "REJECT" | "NEXT_ACTION_REQUIRED";
 export type DriftChoice = "no_drift" | "unapproved_deviation" | "scope_creep";
 export type ScopeChoice = "HOLD" | "EXPANSION" | "REDUCTION";
 
 export interface MacroCheckResult {
   approved: boolean;
   reasons: string[];
+  verdict?: DeliverablesVerdict;
+  deliverablesVerdict?: DeliverablesVerdict;
   meetsCriteriaNoul?: number;
   driftChoice?: DriftChoice;
   scopeChoice?: ScopeChoice;
@@ -65,12 +70,14 @@ export interface ExpertJudgeQuestion {
 
 export interface ExpertJudgeResponse {
   answers?: {
+    deliverables_verdict?: { choice: DeliverablesVerdict; confidence?: number };
+    drop_verdict?: { choice: DropVerdict; confidence?: number };
     meets_criteria?: { noul: number; confidence?: number };
     drop_justified?: { noul: number; confidence?: number };
-    architectural_drift?: { choice: DriftChoice };
-    architectural_drift_guard?: { choice: DriftChoice };
-    scope_mode?: { choice: ScopeChoice };
-    scope_arbiter?: { choice: ScopeChoice };
+    architectural_drift?: { choice: DriftChoice; confidence?: number };
+    architectural_drift_guard?: { choice: DriftChoice; confidence?: number };
+    scope_mode?: { choice: ScopeChoice; confidence?: number };
+    scope_arbiter?: { choice: ScopeChoice; confidence?: number };
     risk_score?: { score: number };
     risk_security_triage?: { score: number };
   };
@@ -216,31 +223,33 @@ export async function runPhaseMacroCheck(
   }
   const rawState = JSON.stringify(statePayload);
 
-  let meetsCriteriaQuestion: ExpertJudgeQuestion;
+  let deliverablesQuestion: ExpertJudgeQuestion;
   if (effectiveTaskType === "analysis_research" || effectiveTaskType === "doc_specification") {
-    meetsCriteriaQuestion = {
-      type: "noul",
+    deliverablesQuestion = {
+      type: "choice",
       instructions:
         "Is the work described by `todo_task` complete, meeting `task_requirements`, as evidenced by `deliverable_artifacts`, `test_summary` and `agent_work_log`? `agent_work_log` is the agent's own unverified claim; trust file and test evidence over it. `plan_context` is background only and is NOT required for this task. Treat `user_request` as the user's authoritative intent.",
       criteria: {
-        true: "Deliverables thoroughly satisfy the research or documentation criteria with concrete analysis or specifications",
-        false: "Deliverables are incomplete, superficial, missing key requirements, or fail to address the planned goals",
+        APPROVE: "Deliverables thoroughly satisfy the research or documentation criteria with concrete analysis or specifications",
+        REJECT: "Deliverables are incomplete, superficial, missing key requirements, or fail to address the planned goals",
+        NEXT_ACTION_REQUIRED: "Deliverables are partial, missing key requirements, or require plan revision",
       },
     };
   } else {
-    meetsCriteriaQuestion = {
-      type: "noul",
+    deliverablesQuestion = {
+      type: "choice",
       instructions:
         "Is the work described by `todo_task` complete, meeting `task_requirements`, as evidenced by `unified_diff`, `test_summary` and `agent_work_log`? `agent_work_log` is the agent's own unverified claim; trust file and test evidence over it. `plan_context` is background only and is NOT required for this task. Treat `user_request` as the user's authoritative intent.",
       criteria: {
-        true: "Implementation fulfills all listed acceptance criteria with real passing tests",
-        false: "Implementation is partial, missing requirements, or stubs out needed functionality",
+        APPROVE: "Implementation fulfills all listed acceptance criteria with real passing tests",
+        REJECT: "Implementation is partial, missing requirements, or stubs out needed functionality",
+        NEXT_ACTION_REQUIRED: "Implementation is partial, has failing tests, or requires plan delta",
       },
     };
   }
 
   const questions: Record<string, ExpertJudgeQuestion> = {
-    meets_criteria: meetsCriteriaQuestion,
+    deliverables_verdict: deliverablesQuestion,
     architectural_drift: {
       type: "choice",
       instructions:
@@ -292,40 +301,70 @@ export async function runPhaseMacroCheck(
   }
 
   const answers = response.answers;
-  const meetsCriteriaNoul = answers.meets_criteria?.noul;
-  if (typeof meetsCriteriaNoul !== "number" || !Number.isFinite(meetsCriteriaNoul) || meetsCriteriaNoul < 0 || meetsCriteriaNoul > 1) {
+  const rawDeliverablesVerdict = answers.deliverables_verdict?.choice;
+  const rawMeetsCriteria = answers.meets_criteria?.noul;
+
+  let deliverablesVerdict: DeliverablesVerdict | undefined;
+  if (rawDeliverablesVerdict && ["APPROVE", "REJECT", "NEXT_ACTION_REQUIRED"].includes(rawDeliverablesVerdict)) {
+    deliverablesVerdict = rawDeliverablesVerdict;
+  } else if (rawMeetsCriteria !== undefined) {
+    if (typeof rawMeetsCriteria !== "number" || !Number.isFinite(rawMeetsCriteria) || rawMeetsCriteria < 0 || rawMeetsCriteria > 1) {
+      return {
+        approved: false,
+        reasons: ["TypeSafe evaluation unavailable: meets_criteria must be a finite probability in [0,1]."],
+        escalateToUser: true,
+        error: "unavailable",
+      };
+    }
+    const threshold = resolveAutoApprovalThreshold();
+    deliverablesVerdict = rawMeetsCriteria >= threshold ? "APPROVE" : rawMeetsCriteria < 0.30 ? "REJECT" : "NEXT_ACTION_REQUIRED";
+  } else {
     return {
       approved: false,
-      reasons: ["TypeSafe evaluation unavailable: meets_criteria must be a finite probability in [0,1]."],
+      reasons: ["TypeSafe evaluation unavailable: deliverables_verdict must be APPROVE, REJECT, or NEXT_ACTION_REQUIRED."],
       escalateToUser: true,
       error: "unavailable",
     };
   }
+
   const driftChoice = (answers.architectural_drift?.choice ?? answers.architectural_drift_guard?.choice) as DriftChoice | undefined;
   const scopeChoice = (answers.scope_mode?.choice ?? answers.scope_arbiter?.choice) as ScopeChoice | undefined;
   const riskScore = answers.risk_score?.score ?? answers.risk_security_triage?.score;
-  const expertConfidence = answers.architectural_drift?.confidence ?? answers.scope_mode?.confidence ?? meetsCriteriaNoul ?? 0.0;
+  const expertConfidence = answers.deliverables_verdict?.confidence ?? answers.architectural_drift?.confidence ?? answers.scope_mode?.confidence ?? rawMeetsCriteria ?? 0.95;
+  const meetsCriteriaNoul = rawMeetsCriteria ?? (deliverablesVerdict === "APPROVE" ? 1.0 : deliverablesVerdict === "NEXT_ACTION_REQUIRED" ? 0.5 : 0.0);
 
-  if (meetsCriteriaNoul === undefined || !driftChoice || !scopeChoice) {
+  if (!driftChoice || !scopeChoice) {
     return {
       approved: false,
       reasons: ["Incomplete TypeSafe evaluation: one or more required judgment dimensions were missing."],
       escalateToUser: true,
       error: "unavailable",
-      meetsCriteriaNoul: meetsCriteriaNoul ?? 0,
+      verdict: deliverablesVerdict,
+      deliverablesVerdict,
+      meetsCriteriaNoul,
       driftChoice: driftChoice ?? "unapproved_deviation",
       scopeChoice: scopeChoice ?? "REDUCTION",
       riskScore,
       expertConfidence,
     };
   }
-  let approved = true;
-  const threshold = resolveAutoApprovalThreshold();
-  if (meetsCriteriaNoul < threshold) {
-    approved = false;
-    reasons.push(`Implementation score P=${meetsCriteriaNoul.toFixed(2)} is below required threshold ${threshold.toFixed(2)}.`);
-  }
 
+  let approved = true;
+  if (deliverablesVerdict === "REJECT") {
+    approved = false;
+    if (rawMeetsCriteria !== undefined && rawMeetsCriteria < 0.80) {
+      reasons.push(`Implementation score P=${rawMeetsCriteria.toFixed(2)} is below required threshold ${resolveAutoApprovalThreshold().toFixed(2)}.`);
+    } else {
+      reasons.push("Deliverable verification rejected: implementation is evading work, malicious, or stubs out needed functionality.");
+    }
+  } else if (deliverablesVerdict === "NEXT_ACTION_REQUIRED") {
+    approved = false;
+    if (rawMeetsCriteria !== undefined && rawMeetsCriteria < 0.80) {
+      reasons.push(`Implementation score P=${rawMeetsCriteria.toFixed(2)} is below required threshold ${resolveAutoApprovalThreshold().toFixed(2)}.`);
+    } else {
+      reasons.push("Next actions required: implementation is partial, has missing criteria, or requires plan adaptation.");
+    }
+  }
 
   if (driftChoice !== "no_drift") {
     approved = false;
@@ -340,6 +379,8 @@ export async function runPhaseMacroCheck(
   return {
     approved,
     reasons,
+    verdict: deliverablesVerdict,
+    deliverablesVerdict,
     meetsCriteriaNoul,
     driftChoice,
     scopeChoice,
@@ -470,10 +511,11 @@ export async function evaluateRiskSecurityTriage(
  * Formats verification metrics into standard scorecard box.
  */
 export function generateVerificationScorecard(results: {
-  meetsCriteriaNoul: number;
+  deliverablesVerdict?: DeliverablesVerdict;
+  meetsCriteriaNoul?: number;
   driftChoice: DriftChoice;
   scopeChoice: ScopeChoice;
-  expertConfidence: number;
+  expertConfidence?: number;
 }): string {
   const driftLabel =
     results.driftChoice === "no_drift" ? "None (Strict adherence)" : results.driftChoice;
@@ -484,15 +526,27 @@ export function generateVerificationScorecard(results: {
       ? "Justified additions"
       : "Requirements dropped";
 
-  const threshold = resolveAutoApprovalThreshold();
+  const confidence = (results.expertConfidence ?? results.meetsCriteriaNoul ?? 0.95).toFixed(2);
+
+  let deliverablesLine: string;
+  if (results.deliverablesVerdict) {
+    const vLabel = results.deliverablesVerdict === "APPROVE" ? "APPROVED" : results.deliverablesVerdict === "NEXT_ACTION_REQUIRED" ? "NEXT ACTION REQ" : "REJECTED";
+    deliverablesLine = `│ Meets Plan Deliverables: VERDICT: ${vLabel} (JEV Confidence ${confidence}) │`;
+  } else if (results.meetsCriteriaNoul !== undefined) {
+    const threshold = resolveAutoApprovalThreshold();
+    deliverablesLine = `│ Meets Plan Deliverables: P = ${results.meetsCriteriaNoul.toFixed(2)} (Threshold >= ${threshold.toFixed(2)})   │`;
+  } else {
+    deliverablesLine = `│ Meets Plan Deliverables: VERDICT: APPROVED (JEV Confidence ${confidence}) │`;
+  }
+
   return [
     "┌─────────────────────────────────────────────────────────┐",
     "│ TypeSafe System One Verification Scorecard              │",
     "├─────────────────────────────────────────────────────────┤",
-    `│ Meets Plan Deliverables: P = ${results.meetsCriteriaNoul.toFixed(2)} (Threshold >= ${threshold.toFixed(2)})   │`,
+    deliverablesLine,
     `│ Architectural Drift:     ${driftLabel.padEnd(28)}│`,
     `│ Scope Mode:              ${results.scopeChoice} (${scopeDesc})│`,
-    `│ Expert Evaluator:        Approved (Confidence ${results.expertConfidence.toFixed(2)})     │`,
+    `│ Expert Evaluator:        Approved (Confidence ${confidence})     │`,
     "└─────────────────────────────────────────────────────────┘",
   ].join("\n");
 }
@@ -510,6 +564,7 @@ export interface DropCheckContext {
 
 export interface DropCheckResult {
   decision: "approve" | "reject" | "undecided" | "unavailable";
+  verdict?: DropVerdict;
   dropJustifiedNoul?: number;
   reasons: string[];
   error?: string;
@@ -532,13 +587,14 @@ export async function runDropJustificationCheck(
   const rawState = JSON.stringify(statePayload);
 
   const questions: Record<string, ExpertJudgeQuestion> = {
-    drop_justified: {
-      type: "noul",
+    drop_verdict: {
+      type: "choice",
       instructions:
         "Should the tasks in `tasks_to_drop` be dropped without completing them? Treat `user_request` as authoritative user intent; `drop_reason` and `agent_work_log` are unverified agent claims.",
       criteria: {
-        true: "User explicitly requested or approved dropping, or the task is obsolete, superseded by another task, duplicated, or already satisfied",
-        false: "Dropping skips work the user asked for, evades verification of failing work, or no credible justification is given",
+        APPROVE: "User explicitly requested or approved dropping, or the task is obsolete, superseded by another task, duplicated, or already satisfied",
+        REJECT: "Dropping skips work the user asked for, evades verification of failing work, or no credible justification is given",
+        ESCALATE: "Conflicting evidence, ambiguous intent, or partial justification requiring sovereign human confirmation",
       },
     },
   };
@@ -559,48 +615,64 @@ export async function runDropJustificationCheck(
       };
     }
 
-    const dropJustifiedNoul = response.answers.drop_justified?.noul;
-    if (dropJustifiedNoul === undefined) {
+    const rawDropVerdict = response.answers.drop_verdict?.choice;
+    const rawDropNoul = response.answers.drop_justified?.noul;
+
+    let dropVerdict: DropVerdict | undefined;
+    if (rawDropVerdict && ["APPROVE", "REJECT", "ESCALATE"].includes(rawDropVerdict)) {
+      dropVerdict = rawDropVerdict;
+    } else if (rawDropNoul !== undefined) {
+      if (typeof rawDropNoul !== "number" || !Number.isFinite(rawDropNoul) || rawDropNoul < 0 || rawDropNoul > 1) {
+        return {
+          decision: "unavailable",
+          reasons: [`TypeSafe drop evaluation unavailable: invalid or malformed drop_justified noul probability (${String(rawDropNoul)})`],
+        };
+      }
+      const threshold = resolveAutoApprovalThreshold();
+      if (rawDropNoul >= threshold) dropVerdict = "APPROVE";
+      else if (rawDropNoul < DROP_REJECT_FLOOR) dropVerdict = "REJECT";
+      else dropVerdict = "ESCALATE";
+    } else {
       return {
         decision: "unavailable",
-        reasons: ["TypeSafe drop evaluation unavailable: missing drop_justified answer"],
-      };
-    }
-    if (
-      typeof dropJustifiedNoul !== "number" ||
-      !Number.isFinite(dropJustifiedNoul) ||
-      dropJustifiedNoul < 0 ||
-      dropJustifiedNoul > 1
-    ) {
-      return {
-        decision: "unavailable",
-        reasons: [`TypeSafe drop evaluation unavailable: invalid or malformed drop_justified noul probability (${String(dropJustifiedNoul)})`],
+        reasons: ["TypeSafe drop evaluation unavailable: missing drop_verdict answer (or missing drop_justified answer)"],
       };
     }
 
-    const threshold = resolveAutoApprovalThreshold();
-    if (dropJustifiedNoul >= threshold) {
+    const dropJustifiedNoul = rawDropNoul ?? response.answers.drop_verdict?.confidence ?? (dropVerdict === "APPROVE" ? 1.0 : dropVerdict === "REJECT" ? 0.0 : 0.5);
+
+    if (dropVerdict === "APPROVE") {
+      const reasonMsg = rawDropNoul !== undefined
+        ? `Drop justified noul ${rawDropNoul.toFixed(2)} >= threshold ${resolveAutoApprovalThreshold().toFixed(2)}`
+        : "Drop verdict: APPROVE (tasks verified obsolete or user authorized)";
       return {
         decision: "approve",
+        verdict: "APPROVE",
         dropJustifiedNoul,
-        reasons: [`Drop justified noul ${dropJustifiedNoul.toFixed(2)} >= threshold ${threshold.toFixed(2)}`],
+        reasons: [reasonMsg],
       };
     }
 
-    if (dropJustifiedNoul < DROP_REJECT_FLOOR) {
+    if (dropVerdict === "REJECT") {
+      const reasonMsg = rawDropNoul !== undefined
+        ? `Drop justified noul ${rawDropNoul.toFixed(2)} < reject floor ${DROP_REJECT_FLOOR.toFixed(2)}`
+        : "Drop verdict: REJECT (evading work or required planned tasks)";
       return {
         decision: "reject",
+        verdict: "REJECT",
         dropJustifiedNoul,
-        reasons: [`Drop justified noul ${dropJustifiedNoul.toFixed(2)} < reject floor ${DROP_REJECT_FLOOR.toFixed(2)}`],
+        reasons: [reasonMsg],
       };
     }
 
+    const reasonMsg = rawDropNoul !== undefined
+      ? `Drop justified noul ${rawDropNoul.toFixed(2)} is in undecided gray zone [${DROP_REJECT_FLOOR.toFixed(2)}, ${resolveAutoApprovalThreshold().toFixed(2)})`
+      : "Drop verdict: ESCALATE (conflicting evidence, requires sovereign human confirmation)";
     return {
       decision: "undecided",
+      verdict: "ESCALATE",
       dropJustifiedNoul,
-      reasons: [
-        `Drop justified noul ${dropJustifiedNoul.toFixed(2)} is in undecided gray zone [${DROP_REJECT_FLOOR.toFixed(2)}, ${threshold.toFixed(2)})`,
-      ],
+      reasons: [reasonMsg],
     };
   } catch (err) {
     return {
@@ -610,3 +682,18 @@ export async function runDropJustificationCheck(
     };
   }
 }
+
+export {
+  evaluateAdvisorIntent,
+  arbitrateConsensus,
+  formatConsensusEscalation,
+  runBicameralDropCheck,
+  runBicameralMacroCheck,
+  type AdvisorContext,
+  type AdvisorIntentResult,
+  type AdvisorIntentVerdict,
+  type BicameralConsensusDecision,
+  type ConsensusVerdict,
+  type JevResult,
+} from "./bicameral-consensus";
+

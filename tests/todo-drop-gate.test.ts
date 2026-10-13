@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import registerExtension, { activeContractedTasks } from "../typesafe-planner";
+import registerExtension, { activeContractedTasks, resetLastCheckpoint } from "../typesafe-planner";
 
 interface MockToolDefinition {
   name: string;
@@ -94,6 +94,7 @@ describe("TypeSafe Todo Drop Gate", () => {
   const interceptor = defaultPiInstance.handlers.tool_call?.[0];
 
   beforeEach(() => {
+    resetLastCheckpoint();
     activeContractedTasks.clear();
     defaultPiInstance.messages.length = 0;
     fetchStateBody = null;
@@ -118,6 +119,10 @@ describe("TypeSafe Todo Drop Gate", () => {
                 json: async () => ({
                   answers: {
                     drop_justified: { noul: X, confidence: 0.9 },
+                    drop_verdict: {
+                      choice: X >= 0.80 ? "APPROVE" : X < 0.30 ? "REJECT" : "ESCALATE",
+                      confidence: X,
+                    },
                   },
                 }),
               } as Response;
@@ -128,6 +133,7 @@ describe("TypeSafe Todo Drop Gate", () => {
               json: async () => ({
                 answers: {
                   meets_criteria: { noul: 0.95 },
+                  deliverables_verdict: { choice: "APPROVE", confidence: 0.9 },
                   architectural_drift: { choice: "no_drift", confidence: 0.9 },
                   scope_mode: { choice: "HOLD", confidence: 0.9 },
                 },

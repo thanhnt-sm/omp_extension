@@ -6,7 +6,7 @@ priority: P1
 effort: "1-2d"
 branch: master
 tags: [typesafe, jev, threshold, todo-lifecycle, fail-closed]
-blockedBy: [261012-todo-drop-judge-fidelity]
+blockedBy: [261012-todo-drop-judge-fidelity, 261013-bicameral-judge-consensus]
 blocks: []
 created: 2026-10-12
 ---

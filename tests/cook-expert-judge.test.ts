@@ -12,6 +12,9 @@ import {
   type ExpertJudgeClient,
   type MicroCheckEvidence,
   type MacroCheckContext,
+  type JevVerdict,
+  type DropVerdict,
+  type DeliverablesVerdict,
 } from "../src/cook-expert-judge";
 
 describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
@@ -522,6 +525,142 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
         if (orig !== undefined) process.env.TYPESAFE_AUTO_APPROVAL_THRESHOLD = orig;
         else delete process.env.TYPESAFE_AUTO_APPROVAL_THRESHOLD;
       }
+    });
+  });
+
+  describe("Categorical Verdict Contract & Threshold Elimination", () => {
+    test("generates formatted scorecard with categorical verdict", () => {
+      const scorecard = generateVerificationScorecard({
+        deliverablesVerdict: "APPROVE",
+        driftChoice: "no_drift",
+        scopeChoice: "HOLD",
+        expertConfidence: 0.95,
+      });
+      expect(scorecard).toContain("TypeSafe System One Verification Scorecard");
+      expect(scorecard).toContain("Meets Plan Deliverables: VERDICT: APPROVED (JEV Confidence 0.95)");
+    });
+
+    test("categorical deliverables verdict APPROVE approves macro check", async () => {
+      const client: ExpertJudgeClient = {
+        evaluate: async () => ({
+          answers: {
+            deliverables_verdict: { choice: "APPROVE", confidence: 0.96 },
+            architectural_drift: { choice: "no_drift" },
+            scope_mode: { choice: "HOLD" },
+          },
+        }),
+      };
+      const res = await runPhaseMacroCheck(
+        {
+          phaseTitle: "Deliverable Phase",
+          planRequirements: ["Req 1"],
+          diffSummary: "changes",
+          unifiedDiff: "+ code",
+          testSummary: "pass",
+        },
+        client
+      );
+      expect(res.approved).toBe(true);
+      expect(res.verdict).toBe("APPROVE");
+      expect(res.deliverablesVerdict).toBe("APPROVE");
+    });
+
+    test("categorical deliverables verdict REJECT rejects macro check", async () => {
+      const client: ExpertJudgeClient = {
+        evaluate: async () => ({
+          answers: {
+            deliverables_verdict: { choice: "REJECT", confidence: 0.91 },
+            architectural_drift: { choice: "no_drift" },
+            scope_mode: { choice: "HOLD" },
+          },
+        }),
+      };
+      const res = await runPhaseMacroCheck(
+        {
+          phaseTitle: "Rejected Phase",
+          planRequirements: ["Req 1"],
+          diffSummary: "changes",
+          unifiedDiff: "+ code",
+          testSummary: "pass",
+        },
+        client
+      );
+      expect(res.approved).toBe(false);
+      expect(res.verdict).toBe("REJECT");
+      expect(res.reasons.some((r) => r.includes("rejected"))).toBe(true);
+    });
+
+    test("categorical deliverables verdict NEXT_ACTION_REQUIRED rejects macro check with next actions", async () => {
+      const client: ExpertJudgeClient = {
+        evaluate: async () => ({
+          answers: {
+            deliverables_verdict: { choice: "NEXT_ACTION_REQUIRED", confidence: 0.88 },
+            architectural_drift: { choice: "no_drift" },
+            scope_mode: { choice: "HOLD" },
+          },
+        }),
+      };
+      const res = await runPhaseMacroCheck(
+        {
+          phaseTitle: "Partial Phase",
+          planRequirements: ["Req 1"],
+          diffSummary: "changes",
+          unifiedDiff: "+ code",
+          testSummary: "pass",
+        },
+        client
+      );
+      expect(res.approved).toBe(false);
+      expect(res.verdict).toBe("NEXT_ACTION_REQUIRED");
+      expect(res.reasons.some((r) => r.includes("next actions") || r.includes("Next actions"))).toBe(true);
+    });
+
+    test("categorical drop verdict APPROVE returns approve", async () => {
+      const client: ExpertJudgeClient = {
+        evaluate: async () => ({
+          answers: {
+            drop_verdict: { choice: "APPROVE", confidence: 0.95 },
+          },
+        }),
+      };
+      const res = await runDropJustificationCheck(
+        { tasks: ["task-1"], remainingTasks: [] },
+        client
+      );
+      expect(res.decision).toBe("approve");
+      expect(res.verdict).toBe("APPROVE");
+    });
+
+    test("categorical drop verdict REJECT returns reject", async () => {
+      const client: ExpertJudgeClient = {
+        evaluate: async () => ({
+          answers: {
+            drop_verdict: { choice: "REJECT", confidence: 0.95 },
+          },
+        }),
+      };
+      const res = await runDropJustificationCheck(
+        { tasks: ["task-1"], remainingTasks: [] },
+        client
+      );
+      expect(res.decision).toBe("reject");
+      expect(res.verdict).toBe("REJECT");
+    });
+
+    test("categorical drop verdict ESCALATE returns undecided", async () => {
+      const client: ExpertJudgeClient = {
+        evaluate: async () => ({
+          answers: {
+            drop_verdict: { choice: "ESCALATE", confidence: 0.85 },
+          },
+        }),
+      };
+      const res = await runDropJustificationCheck(
+        { tasks: ["task-1"], remainingTasks: [] },
+        client
+      );
+      expect(res.decision).toBe("undecided");
+      expect(res.verdict).toBe("ESCALATE");
     });
   });
 });

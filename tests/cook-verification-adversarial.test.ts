@@ -206,4 +206,40 @@ describe("Phase 4: Adversarial Stress Test Matrix & Critical Verification", () =
     expect(scorecard).toContain("None (Strict adherence)");
     expect(scorecard).toContain("HOLD");
   });
+
+  test("Attack 1 (Categorical Deliverable Evaluation): Stubs rejected by Gate 2 categorical verdict REJECT", async () => {
+    const microEvidence: MicroCheckEvidence = {
+      gitStatus: "M src/feature.ts",
+      gitDiff: "+ function scaffold() { /* TODO */ }",
+      testExitCode: 0,
+      testOutput: "PASS 1 test (empty stub)",
+      cleanWorkingTree: false,
+    };
+
+    const g1 = await runTaskMicroCheck(microEvidence);
+    expect(g1.passed).toBe(true);
+
+    const mockJudge: ExpertJudgeClient = {
+      evaluate: async () => ({
+        answers: {
+          deliverables_verdict: { choice: "REJECT", confidence: 0.95 },
+          architectural_drift: { choice: "no_drift" },
+          scope_mode: { choice: "HOLD" },
+        },
+      }),
+    };
+
+    const ctx: MacroCheckContext = {
+      phaseTitle: "Feature Implementation",
+      planRequirements: ["Implement real business logic", "Handle edge cases"],
+      diffSummary: "1 file changed, +1 -0",
+      unifiedDiff: "+ function scaffold() { /* TODO */ }",
+      testSummary: "PASS 1 test",
+    };
+
+    const g2 = await runPhaseMacroCheck(ctx, mockJudge);
+    expect(g2.approved).toBe(false);
+    expect(g2.verdict).toBe("REJECT");
+    expect(g2.reasons.some((r) => r.includes("rejected") || r.includes("evading"))).toBe(true);
+  });
 });

@@ -115,6 +115,7 @@ describe("Judge Input Fidelity", () => {
               json: async () => ({
                 answers: {
                   meets_criteria: { noul: 0.95 },
+                  deliverables_verdict: { choice: "APPROVE", confidence: 0.9 },
                   architectural_drift: { choice: "no_drift", confidence: 0.9 },
                   scope_mode: { choice: "HOLD", confidence: 0.9 },
                 },
@@ -275,7 +276,7 @@ describe("Judge Input Fidelity", () => {
     let capturedQuestion = "";
     const mockClient = {
       evaluate: async (ctx: { questions: Record<string, { instructions: string }> }) => {
-        capturedQuestion = ctx.questions?.meets_criteria?.instructions || "";
+        capturedQuestion = ctx.questions?.deliverables_verdict?.instructions || ctx.questions?.meets_criteria?.instructions || "";
         return {
           answers: {
             meets_criteria: { noul: 0.95 },
