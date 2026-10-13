@@ -14,7 +14,7 @@ created: 2026-10-01
 
 ## Overview
 
-TBD.
+Standardized timestamp directory (261001-auth-error-visibility) per project organization standards.
 
 ## Phases
 

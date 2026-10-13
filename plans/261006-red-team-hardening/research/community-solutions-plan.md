@@ -1,5 +1,7 @@
 # Community Solutions Research Plan for OMP Extension (`ck:research`)
 
+> **Path:** `plans/261006-red-team-hardening/research/community-solutions-plan.md`  
+> **Category:** Plan-scoped research materials per `ck:project-organization` Rule 1.
 ## 1. Objective & Scope
 Systematically investigate, benchmark, and evaluate existing open-source and community-tested solutions across the VS Code, OMP (oh-my-pi), and autonomous coding agent ecosystems for reuse in `omp_extension`.
 

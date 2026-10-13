@@ -15,7 +15,7 @@ created: 2026-10-06
 
 ## Overview
 
-TBD.
+Standardized timestamp directory (261006-red-team-hardening) per project organization standards.
 
 ## Phases
 
