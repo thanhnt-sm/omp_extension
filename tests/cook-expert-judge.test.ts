@@ -6,6 +6,9 @@ import {
   evaluateDriftGuard,
   evaluateRiskSecurityTriage,
   generateVerificationScorecard,
+  runDropJustificationCheck,
+  DROP_REJECT_FLOOR,
+  resolveAutoApprovalThreshold,
   type ExpertJudgeClient,
   type MicroCheckEvidence,
   type MacroCheckContext,
@@ -94,6 +97,29 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
   });
 
   describe("Cadence 2: runPhaseMacroCheck & Tri-Role Evaluation", () => {
+    test.each([NaN, Infinity, -Infinity, -0.01, 1.01, undefined, null, "0.95"])("fails closed for invalid macro probability %s", async (score) => {
+      const result = await runPhaseMacroCheck({ phaseTitle: "Verify", planRequirements: [], diffSummary: "", unifiedDiff: "", testSummary: "PASS" }, {
+        evaluate: async () => ({ answers: {
+          meets_criteria: { noul: score as number },
+          architectural_drift: { choice: "no_drift" },
+          scope_mode: { choice: "HOLD" },
+        } }),
+      });
+      expect(result.approved).toBe(false);
+      expect(result.error).toBe("unavailable");
+      expect(result.escalateToUser).toBe(true);
+      expect(result.meetsCriteriaNoul).toBeUndefined();
+    });
+
+    test("returns unavailable rather than throwing on judge transport failure", async () => {
+      const result = await runPhaseMacroCheck({ phaseTitle: "Verify", planRequirements: [], diffSummary: "", unifiedDiff: "", testSummary: "PASS" }, {
+        evaluate: async () => { throw new Error("private transport detail"); },
+      });
+      expect(result.approved).toBe(false);
+      expect(result.error).toBe("unavailable");
+      expect(result.escalateToUser).toBe(true);
+      expect(result.reasons.join(" ")).not.toContain("private transport detail");
+    });
     test("approves phase when criteria met (>=0.80) and no drift", async () => {
       const mockClient: ExpertJudgeClient = {
         evaluate: async () => ({
@@ -379,7 +405,123 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
       const res = await runPhaseMacroCheck(ctx, offlineClient);
       expect(res.approved).toBe(false);
       expect(res.escalateToUser).toBe(true);
-      expect(res.error).toContain("api.typesafe.ai offline");
+      expect(res.error).toBe("unavailable");
+    });
+  });
+
+  describe("Cadence 3: runDropJustificationCheck & Boundary Threshold Contract", () => {
+    const makeMockClient = (noul?: number, error?: string): ExpertJudgeClient => ({
+      evaluate: async () => {
+        if (error) return { error };
+        if (noul === undefined) return { answers: {} };
+        return {
+          answers: {
+            drop_justified: { noul, confidence: 0.95 },
+          },
+        };
+      },
+    });
+
+    const dummyContext = {
+      tasks: ["T1"],
+      reason: "Obsolete task",
+      remainingTasks: ["T2"],
+    };
+
+    test("score 0.29 (< 0.30) returns reject", async () => {
+      const res = await runDropJustificationCheck(dummyContext, makeMockClient(0.29));
+      expect(res.decision).toBe("reject");
+      expect(res.dropJustifiedNoul).toBe(0.29);
+      expect(res.reasons.some((r) => r.includes("< reject floor"))).toBe(true);
+    });
+
+    test("score 0.30 (== DROP_REJECT_FLOOR) returns undecided gray zone", async () => {
+      const res = await runDropJustificationCheck(dummyContext, makeMockClient(0.30));
+      expect(res.decision).toBe("undecided");
+      expect(res.dropJustifiedNoul).toBe(0.30);
+      expect(res.reasons.some((r) => r.includes("undecided gray zone"))).toBe(true);
+    });
+
+    test("score 0.35 in [0.30, 0.80) returns undecided gray zone", async () => {
+      const res = await runDropJustificationCheck(dummyContext, makeMockClient(0.35));
+      expect(res.decision).toBe("undecided");
+      expect(res.dropJustifiedNoul).toBe(0.35);
+      expect(res.reasons.some((r) => r.includes("undecided gray zone"))).toBe(true);
+    });
+
+    test("score 0.79 in [0.30, 0.80) returns undecided gray zone", async () => {
+      const res = await runDropJustificationCheck(dummyContext, makeMockClient(0.79));
+      expect(res.decision).toBe("undecided");
+      expect(res.dropJustifiedNoul).toBe(0.79);
+      expect(res.reasons.some((r) => r.includes("undecided gray zone"))).toBe(true);
+    });
+
+    test("score 0.80 (>= threshold 0.80) returns approve", async () => {
+      const res = await runDropJustificationCheck(dummyContext, makeMockClient(0.80));
+      expect(res.decision).toBe("approve");
+      expect(res.dropJustifiedNoul).toBe(0.80);
+      expect(res.reasons.some((r) => r.includes(">= threshold"))).toBe(true);
+    });
+
+    test("score 0.95 (>= threshold 0.80) returns approve", async () => {
+      const res = await runDropJustificationCheck(dummyContext, makeMockClient(0.95));
+      expect(res.decision).toBe("approve");
+      expect(res.dropJustifiedNoul).toBe(0.95);
+    });
+
+    test("evaluation error returns unavailable", async () => {
+      const res = await runDropJustificationCheck(dummyContext, makeMockClient(undefined, "HTTP 500 error"));
+      expect(res.decision).toBe("unavailable");
+      expect(res.error).toBe("HTTP 500 error");
+      expect(res.reasons.some((r) => r.includes("unavailable"))).toBe(true);
+    });
+
+    test("missing drop_justified answer returns unavailable", async () => {
+      const res = await runDropJustificationCheck(dummyContext, makeMockClient());
+      expect(res.decision).toBe("unavailable");
+      expect(res.reasons.some((r) => r.includes("missing drop_justified answer"))).toBe(true);
+    });
+    test("malformed NaN drop_justified noul returns unavailable", async () => {
+      const res = await runDropJustificationCheck(dummyContext, makeMockClient(NaN));
+      expect(res.decision).toBe("unavailable");
+      expect(res.reasons.some((r) => r.includes("invalid or malformed drop_justified noul"))).toBe(true);
+    });
+
+    test("malformed out-of-bounds drop_justified noul returns unavailable", async () => {
+      const negativeRes = await runDropJustificationCheck(dummyContext, makeMockClient(-0.25));
+      expect(negativeRes.decision).toBe("unavailable");
+      expect(negativeRes.reasons.some((r) => r.includes("invalid or malformed drop_justified noul"))).toBe(true);
+
+      const overflowRes = await runDropJustificationCheck(dummyContext, makeMockClient(1.25));
+      expect(overflowRes.decision).toBe("unavailable");
+      expect(overflowRes.reasons.some((r) => r.includes("invalid or malformed drop_justified noul"))).toBe(true);
+    });
+
+    test("thrown exception inside evaluate returns unavailable", async () => {
+      const throwingClient: ExpertJudgeClient = {
+        evaluate: async () => {
+          throw new Error("Network timeout");
+        },
+      };
+      const res = await runDropJustificationCheck(dummyContext, throwingClient);
+      expect(res.decision).toBe("unavailable");
+      expect(res.error).toBe("Network timeout");
+      expect(res.reasons.some((r) => r.includes("unavailable"))).toBe(true);
+    });
+
+    test("dynamic threshold override via env is respected", async () => {
+      const orig = process.env.TYPESAFE_AUTO_APPROVAL_THRESHOLD;
+      try {
+        process.env.TYPESAFE_AUTO_APPROVAL_THRESHOLD = "0.90";
+        expect(resolveAutoApprovalThreshold()).toBe(0.90);
+        // 0.85 would normally approve, but under 0.90 it falls into undecided
+        const res = await runDropJustificationCheck(dummyContext, makeMockClient(0.85));
+        expect(res.decision).toBe("undecided");
+        expect(res.reasons.some((r) => r.includes("0.90"))).toBe(true);
+      } finally {
+        if (orig !== undefined) process.env.TYPESAFE_AUTO_APPROVAL_THRESHOLD = orig;
+        else delete process.env.TYPESAFE_AUTO_APPROVAL_THRESHOLD;
+      }
     });
   });
 });

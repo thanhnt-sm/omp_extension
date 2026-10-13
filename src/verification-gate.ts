@@ -79,6 +79,7 @@ export function resolveAutoApprovalThreshold(): number {
   return Math.min(Math.max(normalized, 0), 1.0);
 }
 
+
 /**
  * Gate 1: Fast deterministic verification (zero-token, local execution).
  */
@@ -310,13 +311,26 @@ export async function verifyTaskCompletion(
     criteria: evidence.criteria,
   });
 
-  const response = judgeClient
-    ? await judgeClient.evaluateGate({ state, questions })
-    : await defaultGateJudgeClient(state, questions);
+  const evaluate = async () => {
+    try {
+      return judgeClient
+        ? await judgeClient.evaluateGate({ state, questions })
+        : await defaultGateJudgeClient(state, questions);
+    } catch {
+      return { error: "unavailable: judge request failed" };
+    }
+  };
+  const response = await evaluate();
+  const validProbability = (value: unknown): value is number =>
+    typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;
+  const answersValid = response.answers &&
+    validProbability(response.answers.meets_criteria?.noul) &&
+    validProbability(response.answers.claude_account_untouched?.noul) &&
+    ["no_drift", "unapproved_deviation", "scope_creep"].includes(response.answers.plan_drift?.choice ?? "");
 
   // Fail-closed handling if TypeSafe is offline, errors, or fails to answer
-  if (response.error || !response.answers) {
-    const errorMsg = `TypeSafe judge offline/error: fail-closed escalation required (${response.error ?? "no answers"})`;
+  if (response.error || !response.answers || !answersValid) {
+    const errorMsg = "TypeSafe judge unavailable: request failed or required probability/choice answers are missing or invalid. Retry verification with valid evidence.";
     return {
       approved: false,
       gate1,

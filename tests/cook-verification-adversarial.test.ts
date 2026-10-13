@@ -105,7 +105,7 @@ describe("Phase 4: Adversarial Stress Test Matrix & Critical Verification", () =
     const res = await runPhaseMacroCheck(ctx, failingJudge);
     expect(res.approved).toBe(false);
     expect(res.escalateToUser).toBe(true);
-    expect(res.error).toContain("503");
+    expect(res.error).toBe("unavailable");
   });
 
   test("Attack 5 (Credential Injection): State payload redacts Anthropic tokens prior to egress", () => {

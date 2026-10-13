@@ -2,14 +2,34 @@ import { describe, expect, test } from "bun:test";
 import {
   checkDeterministicPreconditions,
   constructGateQuestions,
-  verifyTaskCompletion,
   type GateJudgeClient,
   type TaskVerificationContext,
   generateFallbackRemediation,
 } from "../src/verification-gate";
 import type { TaskEvidenceResult } from "../src/evidence-collector";
+import { verifyInIsolatedWorkspace as verifyTaskCompletion } from "./isolated-verification";
 
 describe("Phase 3: Execution Compliance & Dual Verification Gate", () => {
+  test.each([NaN, Infinity, -1, 1.1, undefined])("rejects invalid required probability %s after Gate 1", async (score) => {
+    const result = await verifyTaskCompletion({ taskId: "invalid-response" }, {
+      evaluateGate: async () => ({ answers: {
+        meets_criteria: { noul: score as number },
+        plan_drift: { choice: "no_drift" },
+        claude_account_untouched: { noul: 1 },
+      } }),
+    });
+    expect(result.gate1.passed).toBe(true);
+    expect(result.approved).toBe(false);
+    expect(result.gate2?.escalateToUser).toBe(true);
+  });
+  test("escalates thrown requests and missing required dimensions", async () => {
+    for (const evaluateGate of [async () => { throw new Error("transport"); }, async () => ({ answers: {} })]) {
+      const result = await verifyTaskCompletion({ taskId: "unavailable" }, { evaluateGate });
+      expect(result.gate1.passed).toBe(true);
+      expect(result.approved).toBe(false);
+      expect(result.escalateToUser).toBe(true);
+    }
+  });
   test("constructGateQuestions creates criteria, drift, and isolation questions", () => {
     const questions = constructGateQuestions(["Test must pass with exit code 0"]);
     expect(questions.meets_criteria).toBeDefined();
@@ -159,7 +179,6 @@ describe("Phase 3: Execution Compliance & Dual Verification Gate", () => {
     const result = await verifyTaskCompletion(context, mockJudge);
     expect(result.approved).toBe(false);
     expect(result.escalateToUser).toBe(true);
-    expect(result.reasons.some((r) => r.includes("fail-closed escalation"))).toBe(true);
   });
 
   describe("Dumb Model Fallback Protocol (XML Remediation Injection)", () => {

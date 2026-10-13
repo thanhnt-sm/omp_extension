@@ -16,6 +16,7 @@ import {
   type WorkspaceSnapshot,
 } from "./src/evidence-collector";
 import { clampText } from "./src/payload-safety";
+import { sanitizeXmlText } from "./src/xml-enclosure";
 import {
   runDropJustificationCheck,
   DROP_REJECT_FLOOR,
@@ -589,7 +590,6 @@ export interface TaskReport {
   decidedBy: "judge" | "human" | "host-authorization" | "gate1";
   scores?: {
     meetsCriteria?: number;
-    threshold?: number;
     drift?: string;
     scope?: string;
     dropJustified?: number;
@@ -609,14 +609,13 @@ export function formatTaskReport(r: TaskReport): string {
 
   if (r.scores) {
     if (r.scores.meetsCriteria !== undefined) {
-      const thresh = r.scores.threshold !== undefined ? r.scores.threshold.toFixed(2) : "0.80";
       lines.push(
-        `Judge: meets_criteria=${r.scores.meetsCriteria.toFixed(2)} (threshold ${thresh}) | drift=${r.scores.drift || "none"} | scope=${r.scores.scope || "none"}`
+        `Judge: meets_criteria=${r.scores.meetsCriteria.toFixed(2)} | drift=${r.scores.drift || "none"} | scope=${r.scores.scope || "none"}`
       );
     }
     if (r.scores.dropJustified !== undefined) {
       lines.push(
-        `Judge: drop_justified=${r.scores.dropJustified.toFixed(2)} (approve ≥ 0.80, reject < 0.30)`
+        `Judge: drop_justified=${r.scores.dropJustified.toFixed(2)} (reject < ${DROP_REJECT_FLOOR.toFixed(2)})`
       );
     }
   }
@@ -724,6 +723,138 @@ export function normalizeTodoOps(params: Record<string, unknown>): Array<Record<
 const consecutiveFailuresByTask = new Map<string, number>();
 export const activeContractedTasks = new Set<string>();
 
+export interface GateRejectionOptions {
+  gate: "Gate 1 Micro-Check" | "Gate 2 Macro-Check";
+  taskId: string;
+  reasons: string[];
+  testCommand?: string;
+  testExitCode?: number | null;
+  planRequirements?: string[];
+  scores?: {
+    meetsCriteria?: number;
+    drift?: string;
+    scope?: string;
+  };
+  isUnavailable?: boolean;
+}
+
+function sanitizeSafe(text: string): string {
+  return sanitizeXmlText(text).replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+export function buildGateRejectionMessage(opts: GateRejectionOptions): string {
+  const safeTaskId = clampText(sanitizeSafe(opts.taskId), 80, "head");
+  const safeTestCmd = opts.testCommand ? `$ ${clampText(sanitizeSafe(opts.testCommand), 120, "head")}` : "testCommand";
+  const reasonsList = opts.reasons.length > 0 ? opts.reasons : ["Verification rejected without specific reason details."];
+  const reasonLines = reasonsList.map((r) => `- ${clampText(sanitizeSafe(r), 200, "head")}`).join("\n");
+  const actions: string[] = [];
+
+  if (opts.isUnavailable) {
+    actions.push(
+      "1. TypeSafe evaluation service is unavailable. Do NOT alter codebase or tests evasively.",
+      "2. Verify network connectivity and TYPESAFE_API_KEY environment configuration, or report outage to user."
+    );
+  } else if (opts.gate.includes("Gate 1")) {
+    let actNum = 1;
+    const reasonsLower = opts.reasons.join(" ").toLowerCase();
+    if (
+      reasonsLower.includes("test suite failed") ||
+      (opts.testExitCode !== null && opts.testExitCode !== undefined && opts.testExitCode !== 0)
+    ) {
+      actions.push(
+        `${actNum++}. Run ${safeTestCmd} locally to verify all assertions pass with clean exit code 0 before re-attempting completion.`
+      );
+    }
+    if (reasonsLower.includes("test evasion") || reasonsLower.includes("deleted assertion")) {
+      actions.push(
+        `${actNum++}. Restore deleted test assertions. Deleting tests or assertions to pass verification is strictly prohibited.`
+      );
+    }
+    if (reasonsLower.includes("zero evidence")) {
+      actions.push(
+        `${actNum++}. Produce real implementation code changes or execute tests for "${safeTaskId}". Zero changes/tests observed.`
+      );
+    }
+    if (actions.length === 0) {
+      actions.push(
+        `${actNum++}. Fix test failures or build errors identified above.`,
+        `${actNum++}. Run testCommand locally to verify all assertions pass cleanly before re-attempting completion.`
+      );
+    }
+    actions.push(`${actNum++}. Do NOT retry 'todo done' without modifying code or fixing test failures.`);
+  } else {
+    let actNum = 1;
+    const reasonsLower = opts.reasons.join(" ").toLowerCase();
+    if (opts.scores?.meetsCriteria !== undefined) {
+      const scoreStr = `meets_criteria=${opts.scores.meetsCriteria.toFixed(2)}, drift=${opts.scores.drift || "none"}, scope=${opts.scores.scope || "none"}`;
+      actions.push(`[Judge Evaluation]: ${scoreStr}`);
+    }
+    if (opts.scores?.scope === "REDUCTION" || reasonsLower.includes("scope reduction")) {
+      const reqSnippet =
+        opts.planRequirements && opts.planRequirements.length > 0
+          ? ` Requirements: ${opts.planRequirements.slice(0, 2).map((r) => `"${clampText(sanitizeSafe(r), 60, "head")}"`).join(", ")}`
+          : "";
+      actions.push(
+        `${actNum++}. Address omitted deliverables for "${safeTaskId}": complete all planned implementation criteria in-place.${reqSnippet}`
+      );
+    }
+    if (opts.scores?.drift && opts.scores.drift !== "no_drift") {
+      actions.push(
+        `${actNum++}. Resolve architectural drift (${opts.scores.drift}): confine modifications strictly to planned task contracts.`
+      );
+    }
+    if (actions.length === 0 || (actions.length === 1 && actions[0].startsWith("[Judge"))) {
+      actions.push(
+        `${actNum++}. Align implementation changes with the plan requirements.`,
+        `${actNum++}. Re-read the phase acceptance criteria and remove any uncontracted drift.`
+      );
+    }
+    actions.push(
+      `${actNum++}. Do NOT retry 'todo done' immediately without implementing missing deliverables or addressing the above findings.`
+    );
+  }
+
+  const msg = `Task completion rejected by TypeSafe Dual Verification Gate (${opts.gate}):\n${reasonLines}\nNEXT ACTIONS FOR AGENT:\n${actions.join("\n")}`;
+
+  return clampText(msg, 1200, "head");
+}
+async function safeSendMessage(
+  pi: { sendMessage: (msg: Record<string, unknown>, opts?: Record<string, unknown>) => Promise<unknown> | unknown },
+  msg: Record<string, unknown>,
+  opts?: Record<string, unknown>
+): Promise<void> {
+  try {
+    if (pi && typeof pi.sendMessage === "function") {
+      await Promise.resolve(pi.sendMessage(msg, opts));
+    }
+  } catch {}
+}
+
+export async function assertNoActiveContractedTasks(
+  actionName: string,
+  evt: Record<string, unknown>,
+  pi: { sendMessage: (msg: Record<string, unknown>) => Promise<unknown> }
+): Promise<void> {
+  if (activeContractedTasks.size > 0) {
+    const msg = `Plan closure rejected by TypeSafe Dual Verification Gate:
+- ${actionName} (${Array.from(activeContractedTasks).join(", ")}).
+NEXT ACTIONS FOR AGENT:
+1. Resolve all uncompleted tasks using tests and code edits.
+2. Ensure test assertions pass cleanly before marking the plan completed.`;
+    if (typeof evt.cancel === "function") {
+      (evt.cancel as (r: string) => void)(msg);
+    }
+    await safeSendMessage(
+      pi,
+      {
+        customType: "typesafe-compliance-escalation",
+        content: msg,
+      },
+      { deliverAs: "steer" }
+    );
+    throw new Error(msg);
+  }
+}
 export interface DebatePersonaVerdict {
   score: number;
   verdict?: string;
@@ -1026,26 +1157,10 @@ export default function (pi: ExtensionAPI): void {
       // Plan Completion & Closure Guard (Phase 3)
       const inputContent = ((params.content as string) || (params.input as string) || "").trim();
       const isPlanFile = /plans[\/\\].*\.(md|markdown)$/i.test(normalizedPath) || baseName === "plan.md" || /^phase-.*\.md$/i.test(baseName);
-      const isClosingPlan = /status:\s*completed/i.test(inputContent);
+      const isClosingPlan = /status:\s*complete(d)?\b/i.test(inputContent);
 
       if (isPlanFile && isClosingPlan) {
-        if (activeContractedTasks.size > 0) {
-          const msg = `Plan closure rejected by TypeSafe Dual Verification Gate:
-- Uncompleted contracted tasks exist (${Array.from(activeContractedTasks).join(", ")}).
-NEXT ACTIONS FOR AGENT:
-1. Resolve all uncompleted tasks using tests and code edits.
-2. Ensure test assertions pass cleanly before marking the plan completed.`;
-          if (typeof evt.cancel === "function") {
-            (evt.cancel as (r: string) => void)(msg);
-          }
-          await pi.sendMessage({
-            customType: "typesafe-compliance-escalation",
-            content: msg,
-          });
-          throw new Error(msg);
-        }
-
-        
+        await assertNoActiveContractedTasks("Uncompleted contracted tasks exist", evt as Record<string, unknown>, pi);
       }
       if (baseName === "todo.json" || baseName.startsWith(".todo")) {
         const msg = "Direct file modification of todo.json is prohibited. Task state must be managed via the todo tool.";
@@ -1233,23 +1348,7 @@ NEXT ACTIONS FOR AGENT:
       const params = (evt.params || evt.args || evt.input || {}) as Record<string, unknown>;
       const cmd = ((params.command as string) || (params.cmd as string) || "").trim();
       if (/plan-cli(\.cjs)?\s+check/i.test(cmd)) {
-        if (activeContractedTasks.size > 0) {
-          const msg = `Plan closure rejected by TypeSafe Dual Verification Gate:
-- Cannot verify plan completion while uncompleted contracted tasks exist (${Array.from(activeContractedTasks).join(", ")}).
-NEXT ACTIONS FOR AGENT:
-1. Complete all active tasks via todo done or verification.
-2. Re-run plan check after all phase requirements are fulfilled.`;
-          if (typeof evt.cancel === "function") {
-            (evt.cancel as (r: string) => void)(msg);
-          }
-          await pi.sendMessage({
-            customType: "typesafe-compliance-escalation",
-            content: msg,
-          });
-          throw new Error(msg);
-        }
-
-        
+        await assertNoActiveContractedTasks("Cannot verify plan completion while uncompleted contracted tasks exist", evt as Record<string, unknown>, pi);
       }
       return;
     }
@@ -1306,7 +1405,7 @@ NEXT ACTIONS FOR AGENT:
     const isEnabled = isTestEnv || Boolean(apiKey && resolverModule && resolverModule.resolveTypeSafeEnabled(projectDir).enabled);
 
     if (tasksToDrop.length > 0) {
-      let dropDecision: "approve" | "reject" | "undecided" = "undecided";
+      let dropDecision: "approve" | "reject" | "undecided" | "unavailable" = "undecided";
       let decidedBy: "judge" | "human" | "host-authorization" | "gate1" = "judge";
       let dropJustifiedNoul: number | undefined;
       let dropReasons: string[] = [];
@@ -1341,9 +1440,12 @@ NEXT ACTIONS FOR AGENT:
       if (dropDecision === "undecided") {
         if (ctxObj.hasUI !== false && typeof (ctxObj.ui as Record<string, unknown> | undefined)?.confirm === "function") {
           const uiConfirm = (ctxObj.ui as { confirm: (t: string, m: string) => Promise<boolean> }).confirm;
+          const primaryDrop = activeMutatives.find((o) => o.op === "drop" || o.op === "rm" || o.op === "init");
+          const agentReason = (primaryDrop?.reason as string) || (params.reason as string) || "none provided";
+          const convo = collectConversationContext(ctx);
           const reasonText = dropReasons.join("; ");
           const noulText = dropJustifiedNoul !== undefined ? `drop_justified score: ${dropJustifiedNoul.toFixed(2)}` : "drop evaluation unavailable";
-          const confirmMsg = `Tasks to drop: ${tasksToDrop.join(", ")}\nReason/status: ${reasonText} (${noulText})\nApprove dropping these tasks?`;
+          const confirmMsg = `Tasks to drop: ${tasksToDrop.join(", ")}\nAgent drop reason: ${clampText(agentReason, 200, "tail")}\nUser request: ${clampText(convo.userRequest || "none found in context", 200, "tail")}\nStatus: ${reasonText} (${noulText})\nApprove dropping these tasks?`;
           const confirmed = await uiConfirm("TypeSafe: drop contracted task?", confirmMsg);
           if (confirmed) {
             dropDecision = "approve";
@@ -1370,16 +1472,20 @@ NEXT ACTIONS FOR AGENT:
         reasons: dropReasons,
       });
 
-      if (dropDecision === "reject") {
+      if (dropDecision !== "approve") {
         const msg = `TypeSafe drop gate rejected dropping or resetting contracted tasks: ${tasksToDrop.join(", ")}.\n- ${dropReasons.join("\n- ")}\nNEXT ACTIONS FOR AGENT:\n1. Complete the task(s) and mark them done, or\n2. Explain in your reply why the task is obsolete, superseded, or user-cancelled, then retry the drop, or\n3. Ask the user to state the cancellation explicitly in chat; their message is forwarded to the judge.`;
         if (typeof evt.cancel === "function") {
           (evt.cancel as (r: string) => void)(msg);
         }
-        await pi.sendMessage({
-          customType: "typesafe-compliance-escalation",
-          content: msg + "\n\n" + report,
-          display: true,
-        });
+        await safeSendMessage(
+          pi,
+          {
+            customType: "typesafe-compliance-escalation",
+            content: msg + "\n\n" + report,
+            display: true,
+          },
+          { deliverAs: "steer" }
+        );
         throw new Error(msg);
       }
 
@@ -1497,11 +1603,15 @@ NEXT ACTIONS FOR AGENT:
         decidedBy: "human",
         reasons: [msg],
       });
-      await pi.sendMessage({
-        customType: "typesafe-compliance-escalation",
-        content: msg + "\n\n" + report,
-        display: true,
-      });
+      await safeSendMessage(
+        pi,
+        {
+          customType: "typesafe-compliance-escalation",
+          content: msg + "\n\n" + report,
+          display: true,
+        },
+        { deliverAs: "steer" }
+      );
       throw new Error(msg);
     }
 
@@ -1538,10 +1648,14 @@ NEXT ACTIONS FOR AGENT:
       if (typeof evt.cancel === "function") {
         (evt.cancel as (r: string) => void)(msg);
       }
-      await pi.sendMessage({
-        customType: "typesafe-compliance-escalation",
-        content: msg,
-      });
+      await safeSendMessage(
+        pi,
+        {
+          customType: "typesafe-compliance-escalation",
+          content: msg,
+        },
+        { deliverAs: "steer" }
+      );
       throw new Error(msg);
     }
 
@@ -1573,14 +1687,24 @@ NEXT ACTIONS FOR AGENT:
         test: testCommand ? `${testCommand} exit ${evidence.testExitCode}` : "not provided",
         reasons: microResult.reasons,
       });
-      const msg = `Task completion rejected by TypeSafe Dual Verification Gate (Gate 1 Micro-Check):\n- ${microResult.reasons.join("\n- ")}\nNEXT ACTIONS FOR AGENT:\n1. Fix test failures or build errors identified above.\n2. Run testCommand locally to verify all assertions pass cleanly before re-attempting completion.`;
+      const msg = buildGateRejectionMessage({
+        gate: "Gate 1 Micro-Check",
+        taskId,
+        reasons: microResult.reasons,
+        testCommand,
+        testExitCode: evidence.testExitCode,
+      });
       if (typeof evt.cancel === "function") {
         (evt.cancel as (r: string) => void)(msg);
       }
-      await pi.sendMessage({
-        customType: "typesafe-compliance",
-        content: msg + "\n\n" + report,
-      });
+      await safeSendMessage(
+        pi,
+        {
+          customType: "typesafe-compliance",
+          content: msg + "\n\n" + report,
+        },
+        { deliverAs: "steer" }
+      );
       throw new Error(msg);
     }
 
@@ -1629,7 +1753,6 @@ NEXT ACTIONS FOR AGENT:
         decidedBy: "judge",
         scores: {
           meetsCriteria: macroResult.meetsCriteriaNoul,
-          threshold: 0.80,
           drift: macroResult.driftChoice,
           scope: macroResult.scopeChoice,
         },
@@ -1638,16 +1761,36 @@ NEXT ACTIONS FOR AGENT:
         test: testCommand ? `${testCommand} exit ${evidence.testExitCode}` : "not provided",
         reasons: macroResult.reasons,
       });
-      const msg = `Task completion rejected by TypeSafe Dual Verification Gate (Gate 2 Macro-Check):\n- ${macroResult.reasons.join("\n- ")}\nNEXT ACTIONS FOR AGENT:\n1. Align implementation changes with the plan requirements.\n2. Re-read the phase acceptance criteria and remove any uncontracted drift.`;
+      const isUnavailable =
+        macroResult.error === "unavailable" ||
+        macroResult.reasons.some((r) => r.toLowerCase().includes("unavailable"));
+      const msg = buildGateRejectionMessage({
+        gate: "Gate 2 Macro-Check",
+        taskId,
+        reasons: macroResult.reasons,
+        testCommand,
+        testExitCode: evidence.testExitCode,
+        planRequirements,
+        scores: {
+          meetsCriteria: macroResult.meetsCriteriaNoul,
+          drift: macroResult.driftChoice,
+          scope: macroResult.scopeChoice,
+        },
+        isUnavailable,
+      });
       if (typeof evt.cancel === "function") {
         (evt.cancel as (r: string) => void)(msg);
       }
-      await pi.sendMessage({
-        customType: macroResult.escalateToUser
-          ? "typesafe-compliance-escalation"
-          : "typesafe-compliance",
-        content: msg + "\n\n" + report,
-      });
+      await safeSendMessage(
+        pi,
+        {
+          customType: macroResult.escalateToUser
+            ? "typesafe-compliance-escalation"
+            : "typesafe-compliance",
+          content: msg + "\n\n" + report,
+        },
+        { deliverAs: "steer" }
+      );
       throw new Error(msg);
     }
 
@@ -1661,7 +1804,6 @@ NEXT ACTIONS FOR AGENT:
       decidedBy: "judge",
       scores: {
         meetsCriteria: macroResult.meetsCriteriaNoul,
-        threshold: 0.80,
         drift: macroResult.driftChoice,
         scope: macroResult.scopeChoice,
       },

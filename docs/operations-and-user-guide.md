@@ -113,3 +113,12 @@ node tools/sync-baseline.cjs
 - If the TypeSafe API key expires or is rotated:
   1. Update `TYPESAFE_API_KEY` in your environment.
   2. The extension automatically computes the SHA-256 token hash prefix, detects the new key, and flushes stale HTTP connections without requiring an OMP process restart.
+
+### 5.4 Actionable Remediation Guidance on Blocked / Rejected Tasks
+- **Overview:** When a task operation (`todo done` or `todo drop`) is rejected by Gate 1 (Micro-Check) or Gate 2 (Macro-Check), TypeSafe Planner injects deterministic, machine-actionable instructions directly into the agent steering stream:
+  - **Gate 1 Test Failures:** Specifies the exact test command (`$ <testCommand>`) and exit code, instructing the agent to run the test suite locally to verify clean exit code 0 before retrying.
+  - **Gate 1 Test Evasion / Zero Evidence:** Forbids deleting or weakening assertions, requiring concrete code modifications or tests.
+  - **Gate 2 Scope Reductions:** Identifies omitted deliverables and planned criteria, directing in-place completion.
+  - **Gate 2 Architectural Drift:** Details drift dimensions and mandates confining modifications strictly to contracted task boundaries.
+  - **Infrastructure / Connectivity Outages:** Distinguishes external failures (`unavailable`) from code defects, instructing the agent not to modify codebase or tests evasively.
+  - **Prompt Injection Defense:** Dynamic XML entities (`&`, `<`, `>`, `"`) are automatically escaped in remediation blocks.

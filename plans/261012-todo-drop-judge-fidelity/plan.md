@@ -1,3 +1,16 @@
+---
+title: "TypeSafe todo drop gate and judge input fidelity"
+description: "Unblock todo drop, correct judge input fidelity, capture task baselines and scoped evidence, and format task reports."
+status: in-progress
+priority: P1
+effort: "4h"
+branch: master
+tags: [typesafe, todo-drop, judge-fidelity, egc, ratchet]
+blockedBy: []
+blocks: [261012-judge-threshold-lifecycle-alignment]
+created: 2026-10-12
+---
+
 # TypeSafe: unblock todo drop + accurate judge input
 
 ## Context

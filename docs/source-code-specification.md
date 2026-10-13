@@ -67,7 +67,7 @@ omp_extension/
      - **Stall Ratchet Timing**: On every `todo done` attempt, `consecutiveFailuresByTask` increments immediately *before* Gate 1 or Gate 2 runs. If `currentFailures >= 3`, execution halts immediately. Passing `params.resetFailures === true` deletes the map entry only *after* evaluating `currentFailures`, meaning a 3rd attempt still halts.
      - **Plan Closure Guard**: Intercepts `plan-cli check` commands and rejects them if uncompleted contracted tasks exist.
      - **Two Dual-Gate Implementation Paths**:
-       * **Live `todo done` Interception**: Calls `cook-expert-judge.ts` (`runTaskMicroCheck` for Gate 1 and `runPhaseMacroCheck` for Gate 2). Emits plain text messages via `pi.sendMessage` upon rejection. The counter clears (`consecutiveFailuresByTask.delete(taskId)`) only after Gate 2 approval.
+       * **Live `todo done` Interception**: Calls `cook-expert-judge.ts` (`runTaskMicroCheck` for Gate 1 and `runPhaseMacroCheck` for Gate 2). Formats actionable, deterministic remediation instructions via `buildGateRejectionMessage` detailing failing test commands, omitted deliverables, architectural drift, or service unavailability, and delivers them directly into the agent steering stream via `pi.sendMessage(..., { deliverAs: "steer" })` and the cancellation exception. The counter clears (`consecutiveFailuresByTask.delete(taskId)`) only after Gate 2 approval.
        * **Standalone Tool (`typesafe_verify_completion`)**: Calls `verification-gate.ts:verifyTaskCompletion`, which includes `<remediation>` blocks and evaluates `claude_account_untouched >= 0.95`.
   3. Tool Registration: Exposes 6 OMP tools (`typesafe_judge`, `typesafe_rerank`, `typesafe_evaluate_multi`, `typesafe_elevate_plan`, `typesafe_verify_completion`, `typesafe_expert_review`).
 ---
@@ -78,7 +78,7 @@ omp_extension/
   - `checkDeterministicPreconditions(evidence: TaskEvidenceResult): Gate1Result`
   - `constructGateQuestions(criteria: string[]): Record<string, GateQuestion>`
   - `verifyTaskCompletion(context: TaskVerificationContext, judgeClient?: GateJudgeClient): Promise<DualGateVerificationResult>`
-  - `resolveAutoApprovalThreshold(): number` (reads `TYPESAFE_AUTO_APPROVAL_THRESHOLD`, defaults to `0.80`)
+- `resolveAutoApprovalThreshold(): number` (reads `TYPESAFE_AUTO_APPROVAL_THRESHOLD`, defaults to `0.80`)
   - `generateFallbackRemediation(reasons: string[], options?: RemediationOptions): string`
 - **Gate 1 Checks**:
   1. **Claude Boundary**: Verifies no files under `.claude/` or `.claude.json` are modified.
@@ -197,7 +197,7 @@ omp_extension/
 ### 2.11. Remediation Generator: `src/remediation-generator.ts`
 
 - **Exports**: `generateRemediationBlock(params: RemediationDirective): string`
-- **Structure**: Generates `<remediation>` blocks containing `<instruction>`, `<immutable_constraints>`, `<failure_reasons>`, and `<action_items>`.
+ - **Structure**: Generates `<remediation>` blocks containing `<instruction>`, `<immutable_constraints>`, `<failure_reasons>`, and `<action_items>`, with XML entity escaping (`escapeXml`) applied to dynamic fields to prevent tag injection.
 
 ---
 

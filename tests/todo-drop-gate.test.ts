@@ -229,11 +229,97 @@ describe("TypeSafe Todo Drop Gate", () => {
     expect(confirmCalled).toBe(1);
     expect(confirmMessage).toContain("T1");
     expect(confirmMessage).toContain("0.55");
+    expect(confirmMessage).toContain("Agent drop reason:");
+    expect(confirmMessage).toContain("User request:");
     expect(activeContractedTasks.has("T1")).toBe(false);
 
     const reports = defaultPiInstance.messages.filter(m => m.customType === "typesafe-task-report");
     expect(reports.length).toBe(1);
     expect(reports[0].content).toContain("Decision: APPROVED (by: human)");
+  });
+  test("Drop confirmation dialog formats full context (task, reason, user request, score)", async () => {
+    activeContractedTasks.add("T1");
+    (globalThis as unknown as { mockJudgeNoul?: string }).mockJudgeNoul = "0.55";
+
+    let confirmMessage = "";
+    const ctx = {
+      cwd: __dirname,
+      hasUI: true,
+      ui: {
+        confirm: async (_title: string, message: string) => {
+          confirmMessage = message;
+          return true;
+        },
+      },
+      sessionManager: {
+        getBranch: () => [
+          {
+            type: "message",
+            message: { role: "user", content: "Please cancel the legacy T1 step." },
+          },
+        ],
+      },
+    };
+
+    const dropEvt: MockEvent = {
+      tool: "todo",
+      params: { op: "drop", task: "T1", reason: "Obsolete after refactoring" },
+      cancel: () => {},
+    };
+    await interceptor?.(dropEvt, ctx);
+
+    expect(confirmMessage).toContain("Tasks to drop: T1");
+    expect(confirmMessage).toContain("Agent drop reason: Obsolete after refactoring");
+    expect(confirmMessage).toContain("User request: Please cancel the legacy T1 step.");
+    expect(confirmMessage).toContain("0.55");
+    expect(activeContractedTasks.has("T1")).toBe(false);
+  });
+  test("Drop boundary: 0.29 rejects with NEXT ACTIONS and no UI confirm", async () => {
+    activeContractedTasks.add("T1");
+    (globalThis as unknown as { mockJudgeNoul?: string }).mockJudgeNoul = "0.29";
+
+    let cancelledReason: string | undefined;
+    let uiCalled = false;
+    let threw = false;
+    try {
+      await interceptor?.(
+        { tool: "todo", params: { op: "drop", task: "T1" }, cancel: (r: string) => { cancelledReason = r; } },
+        { cwd: __dirname, hasUI: true, ui: { confirm: async () => { uiCalled = true; return true; } } }
+      );
+    } catch (e: unknown) {
+      threw = true;
+      if (!cancelledReason && e instanceof Error) cancelledReason = e.message;
+    }
+    expect(threw || cancelledReason !== undefined).toBe(true);
+    expect(uiCalled).toBe(false);
+    expect(activeContractedTasks.has("T1")).toBe(true);
+    expect(cancelledReason).toContain("NEXT ACTIONS FOR AGENT");
+  });
+
+  test("Drop boundary: 0.35 in gray zone calls UI confirm", async () => {
+    activeContractedTasks.add("T1");
+    (globalThis as unknown as { mockJudgeNoul?: string }).mockJudgeNoul = "0.35";
+
+    let uiCalled = false;
+    await interceptor?.(
+      { tool: "todo", params: { op: "drop", task: "T1" }, cancel: () => {} },
+      { cwd: __dirname, hasUI: true, ui: { confirm: async () => { uiCalled = true; return true; } } }
+    );
+    expect(uiCalled).toBe(true);
+    expect(activeContractedTasks.has("T1")).toBe(false);
+  });
+
+  test("Drop boundary: 0.80 auto-approves without UI confirm", async () => {
+    activeContractedTasks.add("T1");
+    (globalThis as unknown as { mockJudgeNoul?: string }).mockJudgeNoul = "0.80";
+
+    let uiCalled = false;
+    await interceptor?.(
+      { tool: "todo", params: { op: "drop", task: "T1" }, cancel: () => {} },
+      { cwd: __dirname, hasUI: true, ui: { confirm: async () => { uiCalled = true; return true; } } }
+    );
+    expect(uiCalled).toBe(false);
+    expect(activeContractedTasks.has("T1")).toBe(false);
   });
 
   test("Drop gray zone (0.55) rejected if UI confirm is false or hasUI false", async () => {
@@ -268,7 +354,7 @@ describe("TypeSafe Todo Drop Gate", () => {
   });
 
   test("Judge error treated as undecided (human confirm)", async () => {
-    globalThis.fetch = (async () => ({ ok: false, status: 500, text: async () => "Internal Server Error" })) as unknown as typeof globalThis.fetch;
+    (globalThis as unknown as { mockJudgeNoul?: string }).mockJudgeNoul = "0.50";
 
     activeContractedTasks.add("T1");
     let uiCalled = false;
@@ -278,6 +364,28 @@ describe("TypeSafe Todo Drop Gate", () => {
     );
     expect(uiCalled).toBe(true);
     expect(activeContractedTasks.has("T1")).toBe(false);
+  });
+
+  test("Judge error treated as unavailable (fail-closed, no human confirm prompt)", async () => {
+    globalThis.fetch = (async () => ({ ok: false, status: 500, text: async () => "Internal Server Error" })) as unknown as typeof globalThis.fetch;
+
+    activeContractedTasks.add("T1");
+    let uiCalled = false;
+    let threw = false;
+    let cancelledReason: string | undefined;
+    try {
+      await interceptor?.(
+        { tool: "todo", params: { op: "drop", task: "T1" }, cancel: (r: string) => { cancelledReason = r; } },
+        { cwd: __dirname, hasUI: true, ui: { confirm: async () => { uiCalled = true; return true; } } }
+      );
+    } catch (e: unknown) {
+      threw = true;
+      if (!cancelledReason && e instanceof Error) cancelledReason = e.message;
+    }
+    expect(uiCalled).toBe(false);
+    expect(threw).toBe(true);
+    expect(activeContractedTasks.has("T1")).toBe(true);
+    expect(cancelledReason).toContain("TypeSafe drop gate rejected");
   });
 
   test("params auth rejected, host ctx.isHuman approved", async () => {

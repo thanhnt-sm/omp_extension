@@ -251,6 +251,36 @@ describe("TypeSafe Lifecycle Gating & Human Authorization Fix (TDD Tests)", () =
     expect(cancelledReason || "").toContain("Plan closure");
   });
 
+  test("intercepts write/edit to plan setting status: complete (without d)", async () => {
+    const { handlers } = createMockPi();
+    const interceptor = handlers.tool_call?.[0];
+    expect(interceptor).toBeDefined();
+    activeContractedTasks.add("Unfinished Task");
+
+    let cancelledReason: string | undefined;
+    const evt: MockEvent = {
+      tool: "write",
+      params: {
+        path: "plans/261012-test/plan.md",
+        content: "---\ntitle: test\nstatus: complete\n---",
+      },
+      cancel: (r: string) => {
+        cancelledReason = r;
+      },
+    };
+
+    let threw = false;
+    try {
+      await interceptor?.(evt, {});
+    } catch {
+      threw = true;
+    }
+
+    expect(threw || cancelledReason !== undefined).toBe(true);
+    expect(cancelledReason || "").toContain("Plan closure rejected");
+    expect(cancelledReason || "").toContain("Unfinished Task");
+  });
+
   test("intercepts bash command running plan-cli.cjs check", async () => {
     const { handlers } = createMockPi();
     const interceptor = handlers.tool_call?.[0];

@@ -1,5 +1,14 @@
 import type { RemediationDirective } from "./types/security";
 
+function escapeXml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
 export function generateRemediationBlock(params: RemediationDirective): string {
   const dynamicActionItems = [...params.actionItems];
   const dynamicConstraints = [...params.immutableConstraints];
@@ -29,16 +38,17 @@ export function generateRemediationBlock(params: RemediationDirective): string {
   const uniqueConstraints = [...new Set(dynamicConstraints)];
   const uniqueActionItems = [...new Set(dynamicActionItems)];
 
-  const constraintsXml = uniqueConstraints.map(c => `    <constraint>${c}</constraint>`).join("\n");
-  const reasonsXml = params.failureReasons.map(r => `    <reason>${r}</reason>`).join("\n");
-  const actionsXml = uniqueActionItems.map(a => `    <action>${a}</action>`).join("\n");
-  const taskTag = params.taskId ? `  <task_id>${params.taskId}</task_id>\n` : "";
-  const criteriaTag = params.criteria && params.criteria.length > 0
-    ? `  <target_criteria>\n${params.criteria.map(c => `    <criterion>${c}</criterion>`).join("\n")}\n  </target_criteria>\n`
-    : "";
+  const constraintsXml = uniqueConstraints.map((c) => `    <constraint>${escapeXml(c)}</constraint>`).join("\n");
+  const reasonsXml = params.failureReasons.map((r) => `    <reason>${escapeXml(r)}</reason>`).join("\n");
+  const actionsXml = uniqueActionItems.map((a) => `    <action>${escapeXml(a)}</action>`).join("\n");
+  const taskTag = params.taskId ? `  <task_id>${escapeXml(params.taskId)}</task_id>\n` : "";
+  const criteriaTag =
+    params.criteria && params.criteria.length > 0
+      ? `  <target_criteria>\n${params.criteria.map((c) => `    <criterion>${escapeXml(c)}</criterion>`).join("\n")}\n  </target_criteria>\n`
+      : "";
 
   return `<remediation>
-  <instruction>${params.instruction}</instruction>
+  <instruction>${escapeXml(params.instruction)}</instruction>
 ${taskTag}${criteriaTag}  <immutable_constraints>
 ${constraintsXml}
   </immutable_constraints>

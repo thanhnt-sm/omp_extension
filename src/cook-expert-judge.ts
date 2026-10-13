@@ -2,6 +2,8 @@ import { preparePayloadSafe, isSecretInKey, clampText } from "./payload-safety";
 import { encloseUntrusted } from "./xml-enclosure";
 import { resolveAutoApprovalThreshold } from "./verification-gate";
 
+export { resolveAutoApprovalThreshold } from "./verification-gate";
+
 export interface MicroCheckEvidence {
   gitStatus: string;
   gitDiff: string;
@@ -268,19 +270,37 @@ export async function runPhaseMacroCheck(
     }
   }
 
-  const response = await client.evaluate({ state: rawState, questions });
+  let response: ExpertJudgeResponse;
+  try {
+    response = await client.evaluate({ state: rawState, questions });
+  } catch {
+    return {
+      approved: false,
+      reasons: ["TypeSafe evaluation unavailable: judge request failed. Check connectivity and retry verification."],
+      escalateToUser: true,
+      error: "unavailable",
+    };
+  }
 
   if (response.error || !response.answers) {
     return {
       approved: false,
       reasons: [`TypeSafe verification error: ${response.error ?? "No answers returned"}`],
       escalateToUser: true,
-      error: response.error ?? "Unknown error",
+      error: "unavailable",
     };
   }
 
   const answers = response.answers;
   const meetsCriteriaNoul = answers.meets_criteria?.noul;
+  if (typeof meetsCriteriaNoul !== "number" || !Number.isFinite(meetsCriteriaNoul) || meetsCriteriaNoul < 0 || meetsCriteriaNoul > 1) {
+    return {
+      approved: false,
+      reasons: ["TypeSafe evaluation unavailable: meets_criteria must be a finite probability in [0,1]."],
+      escalateToUser: true,
+      error: "unavailable",
+    };
+  }
   const driftChoice = (answers.architectural_drift?.choice ?? answers.architectural_drift_guard?.choice) as DriftChoice | undefined;
   const scopeChoice = (answers.scope_mode?.choice ?? answers.scope_arbiter?.choice) as ScopeChoice | undefined;
   const riskScore = answers.risk_score?.score ?? answers.risk_security_triage?.score;
@@ -291,7 +311,7 @@ export async function runPhaseMacroCheck(
       approved: false,
       reasons: ["Incomplete TypeSafe evaluation: one or more required judgment dimensions were missing."],
       escalateToUser: true,
-      error: "incomplete_response",
+      error: "unavailable",
       meetsCriteriaNoul: meetsCriteriaNoul ?? 0,
       driftChoice: driftChoice ?? "unapproved_deviation",
       scopeChoice: scopeChoice ?? "REDUCTION",
@@ -300,12 +320,12 @@ export async function runPhaseMacroCheck(
     };
   }
   let approved = true;
-
   const threshold = resolveAutoApprovalThreshold();
   if (meetsCriteriaNoul < threshold) {
     approved = false;
     reasons.push(`Implementation score P=${meetsCriteriaNoul.toFixed(2)} is below required threshold ${threshold.toFixed(2)}.`);
   }
+
 
   if (driftChoice !== "no_drift") {
     approved = false;
@@ -489,7 +509,7 @@ export interface DropCheckContext {
 }
 
 export interface DropCheckResult {
-  decision: "approve" | "reject" | "undecided";
+  decision: "approve" | "reject" | "undecided" | "unavailable";
   dropJustifiedNoul?: number;
   reasons: string[];
   error?: string;
@@ -533,7 +553,7 @@ export async function runDropJustificationCheck(
     const response = await client.evaluate({ state: rawState, questions });
     if (response.error || !response.answers) {
       return {
-        decision: "undecided",
+        decision: "unavailable",
         reasons: [`TypeSafe drop evaluation unavailable: ${response.error ?? "No answers returned"}`],
         error: response.error ?? "Unknown error",
       };
@@ -542,8 +562,19 @@ export async function runDropJustificationCheck(
     const dropJustifiedNoul = response.answers.drop_justified?.noul;
     if (dropJustifiedNoul === undefined) {
       return {
-        decision: "undecided",
+        decision: "unavailable",
         reasons: ["TypeSafe drop evaluation unavailable: missing drop_justified answer"],
+      };
+    }
+    if (
+      typeof dropJustifiedNoul !== "number" ||
+      !Number.isFinite(dropJustifiedNoul) ||
+      dropJustifiedNoul < 0 ||
+      dropJustifiedNoul > 1
+    ) {
+      return {
+        decision: "unavailable",
+        reasons: [`TypeSafe drop evaluation unavailable: invalid or malformed drop_justified noul probability (${String(dropJustifiedNoul)})`],
       };
     }
 
@@ -555,6 +586,7 @@ export async function runDropJustificationCheck(
         reasons: [`Drop justified noul ${dropJustifiedNoul.toFixed(2)} >= threshold ${threshold.toFixed(2)}`],
       };
     }
+
     if (dropJustifiedNoul < DROP_REJECT_FLOOR) {
       return {
         decision: "reject",
@@ -566,11 +598,13 @@ export async function runDropJustificationCheck(
     return {
       decision: "undecided",
       dropJustifiedNoul,
-      reasons: [`Drop justified noul ${dropJustifiedNoul.toFixed(2)} is in undecided gray zone [${DROP_REJECT_FLOOR.toFixed(2)}, ${threshold.toFixed(2)})`],
+      reasons: [
+        `Drop justified noul ${dropJustifiedNoul.toFixed(2)} is in undecided gray zone [${DROP_REJECT_FLOOR.toFixed(2)}, ${threshold.toFixed(2)})`,
+      ],
     };
   } catch (err) {
     return {
-      decision: "undecided",
+      decision: "unavailable",
       reasons: [`TypeSafe drop evaluation unavailable: ${err instanceof Error ? err.message : String(err)}`],
       error: err instanceof Error ? err.message : String(err),
     };

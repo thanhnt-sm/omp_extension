@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { evaluatePlanDraft, type PlanJudgeClient } from "../src/plan-evaluator";
-import { verifyTaskCompletion, type GateJudgeClient } from "../src/verification-gate";
+import { type GateJudgeClient } from "../src/verification-gate";
+import { verifyInIsolatedWorkspace as verifyTaskCompletion } from "./isolated-verification";
 import registerExtension from "../typesafe-planner";
 
 describe("Phase 4: End-to-End Workflow & OMP Integration", () => {
