@@ -116,6 +116,23 @@ for (const relPath of filesToDeploy) {
   console.log(` -> Deployed: ${relPath}`);
 }
 
+// 3b. Sync Resolver to Global Claude Hooks Library
+try {
+  const os = require("os");
+  const globalHooksLib = path.join(os.homedir(), ".claude", "hooks", "lib");
+  const globalResolverPath = path.join(globalHooksLib, "typesafe-enabled-resolver.cjs");
+  const srcResolver = path.join(WORKSPACE_DIR, "src", "typesafe-enabled-resolver.cjs");
+  if (fs.existsSync(srcResolver)) {
+    if (!fs.existsSync(globalHooksLib)) {
+      fs.mkdirSync(globalHooksLib, { recursive: true });
+    }
+    fs.copyFileSync(srcResolver, globalResolverPath);
+    console.log(` -> Synced resolver to global hook: ${globalResolverPath}`);
+  }
+} catch (err) {
+  console.warn(`[WARNING] Could not sync global resolver hook:`, err.message);
+}
+
 // 4. Verify OMP Loader Pointer
 console.log(`\n[3/4] Checking OMP loader pointer...`);
 try {
