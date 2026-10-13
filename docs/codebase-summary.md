@@ -35,6 +35,10 @@ Tóm tắt cấu trúc, các thành phần cốt lõi và kiến trúc bảo v�
 
 ## 3. Quy chuẩn & Ràng buộc Kỹ thuật
 
+- **Gate 0 Remediation Ratchet**: Lưu vết chữ ký `diffHash` của lần từ chối trước cho từng task trong `pendingRemediations`. Ngăn chặn Agent gọi lại `todo done` mù quáng khi chưa sửa đổi mã nguồn hoặc chưa chạy lại test.
+- **Block Evasion Guard**: Chặn đứng việc Agent sử dụng thao tác `todo(op: "block")` để né tránh xử lý các task đang bị Gate 1 / Gate 2 từ chối, trừ khi có sự xác nhận của người dùng.
+- **High-Fidelity Next Actions**: Cung cấp hướng dẫn đầy đủ lên tới 3500 ký tự (yêu cầu lên tới 300 ký tự), xóa bỏ hoàn toàn hiện tượng cắt cụt chuỗi `[... chars truncated ...]`.
+- **Tri-Tier Resolver Fallback**: Nạp module resolver theo 3 tầng ưu tiên (`~/.claude/hooks/lib`, co-located `./src`, target baseline `Projects/omp_extension`), hỗ trợ kích hoạt wildcard `*` trên mọi thư mục.
 - **Tighten-Only Lattice Policy**: Đánh giá từ TypeSafe chỉ được phép tăng cấp độ kiểm duyệt hoặc từ chối, tuyệt đối không được phép tự động phê duyệt hoặc bỏ qua kiểm thử.
 - **Claude Zero-Touch Isolation**: Mọi kết nối phân tích ngữ nghĩa đi thẳng đến endpoint của TypeSafe (`https://api.typesafe.ai/v1/systemone`), không chạm vào token hoặc file cấu hình của Anthropic/Claude.
 - **Fail-Closed Execution**: Khi mất mạng, lỗi auth, hoặc API không khả dụng, hệ thống chuyển sang chế độ an toàn (chặn tự động hoàn thành và yêu cầu xác nhận từ con người).
