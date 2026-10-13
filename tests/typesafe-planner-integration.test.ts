@@ -3,8 +3,10 @@ import type { Mock } from "bun:test";
 import os from "node:os";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import registerExtension from "./typesafe-planner.ts";
-import { createEnvScope, withScopedEnv } from "./tests/helpers/test-env-harness";
+import { createRequire } from "node:module";
+const testRequire = createRequire(import.meta.url);
+import registerExtension, { resetLastCheckpoint } from "../typesafe-planner";
+import { createEnvScope, withScopedEnv } from "./helpers/test-env-harness";
 describe("TypeSafe Planner Integration", () => {
   let piMock: {
     zod: unknown;
@@ -47,6 +49,7 @@ describe("TypeSafe Planner Integration", () => {
     
     // Set required env vars with hermetic isolation
     restoreScope = createEnvScope({ TYPESAFE_API_KEY: "test_key" });
+    resetLastCheckpoint();
   });
 
   test("Phase 1: Module Loading - catches missing typesafe-policy-client.cjs gracefully without fatal throw", async () => {
@@ -56,6 +59,11 @@ describe("TypeSafe Planner Integration", () => {
     let moved = false;
     try {
       await fs.access(policyFilePath);
+      for (const k of Object.keys(testRequire.cache)) {
+        if (k.includes("typesafe-policy-client")) {
+          delete testRequire.cache[k];
+        }
+      }
       await fs.rename(policyFilePath, policyFilePath + ".bak");
       moved = true;
 
