@@ -29,7 +29,11 @@ import {
   evaluateAdvisorIntent,
   runBicameralDropCheck,
   runBicameralMacroCheck,
+  runBicameralDecisionCheck,
   formatConsensusEscalation,
+  formatCkAdvisorReport,
+  type AdvisorDecisionKind,
+  type AdvisorOptionCandidate,
   type ExpertJudgeClient,
   type ExpertJudgeQuestion,
   type ExpertJudgeResponse,
@@ -331,7 +335,8 @@ function sleep(ms: number): Promise<void> {
 
 export function inferTaskType(
   gitStatus: string,
-  deliverableArtifacts?: string
+  deliverableArtifacts?: string,
+  taskDescription?: string
 ): "code_change" | "analysis_research" | "doc_specification" {
   const statusLines = gitStatus.split("\n").map((l) => l.trim()).filter(Boolean);
   
@@ -363,6 +368,15 @@ export function inferTaskType(
     return filepath.includes("reports/") || filepath.includes("decisions/");
   });
   if (hasReportFiles) {
+    return "analysis_research";
+  }
+
+  if (
+    taskDescription &&
+    /^\s*(?:step\s*\d+\s*[:.-]\s*)?(?:scout|diagnos|investigat|research|analy[sz]|explore|find|audit|review|check|trace|inspect|kiểm tra|phân tích|tìm)\b/i.test(
+      taskDescription
+    )
+  ) {
     return "analysis_research";
   }
 
@@ -564,7 +578,7 @@ export function collectConversationContext(ctx: unknown): { userRequest: string;
   try {
     const branch = smRecord.getBranch() as unknown;
     if (!Array.isArray(branch)) {
-      return { userRequest: "", agentWorkLog: "" };
+      return { userRequest: directUserReq, agentWorkLog: directWorkLog };
     }
 
     const userMessages: string[] = [];
@@ -573,6 +587,22 @@ export function collectConversationContext(ctx: unknown): { userRequest: string;
     for (const entry of branch) {
       if (!entry || typeof entry !== "object") continue;
       const entryRecord = entry as Record<string, unknown>;
+
+      if (entryRecord.type === "custom_message") {
+        const customType = typeof entryRecord.customType === "string" ? entryRecord.customType : "";
+        const rawContent = typeof entryRecord.content === "string" ? entryRecord.content.trim() : "";
+        if (customType === "skill-prompt" && rawContent.length > 0) {
+          const userMatch = rawContent.match(/\nUser:\s*([\s\S]+)$/);
+          const extractedUser = userMatch ? userMatch[1].trim() : rawContent;
+          if (extractedUser.length > 0) {
+            userMessages.push(extractedUser);
+          }
+        } else if (customType === "advisor" && rawContent.length > 0) {
+          assistantMessages.push(`[Advisor]: ${rawContent}`);
+        }
+        continue;
+      }
+
       if (entryRecord.type !== "message" || !entryRecord.message || typeof entryRecord.message !== "object") {
         continue;
       }
@@ -585,30 +615,41 @@ export function collectConversationContext(ctx: unknown): { userRequest: string;
         for (const block of msg.content) {
           if (block && typeof block === "object") {
             const b = block as Record<string, unknown>;
-            if (b.type === "text" && typeof b.text === "string") {
+            if (b.type === "text" && typeof b.text === "string" && b.text.trim().length > 0) {
               parts.push(b.text);
+            } else if (msg.role === "assistant" && b.type === "thinking" && typeof b.thinking === "string" && b.thinking.trim().length > 0) {
+              parts.push(b.thinking.trim());
+            } else if (msg.role === "assistant" && b.type === "toolCall" && typeof b.name === "string") {
+              const intentStr = typeof b.intent === "string" ? b.intent : (b.arguments && typeof b.arguments === "object" && typeof (b.arguments as Record<string, unknown>).i === "string" ? (b.arguments as Record<string, unknown>).i as string : "");
+              parts.push(`[toolCall: ${b.name}${intentStr ? ` (${intentStr})` : ""}]`);
             }
           }
         }
         textContent = parts.join("\n");
       }
 
+      const trimmed = textContent.trim();
+      if (!trimmed) continue;
+
       if (msg.role === "user") {
-        userMessages.push(textContent);
+        userMessages.push(trimmed);
       } else if (msg.role === "assistant") {
-        assistantMessages.push(textContent);
+        assistantMessages.push(trimmed);
+      } else if (msg.role === "toolResult" && !msg.isError) {
+        const tName = typeof msg.toolName === "string" ? msg.toolName : "tool";
+        assistantMessages.push(`[toolResult:${tName}]: ${clampText(trimmed, 400, "tail")}`);
       }
     }
 
-    const lastUser = userMessages.slice(-2).join("\n---\n");
-    const lastAssistant = assistantMessages.slice(-3).join("\n---\n");
+    const lastUser = userMessages.length > 0 ? userMessages.slice(-2).join("\n---\n") : directUserReq;
+    const lastAssistant = assistantMessages.length > 0 ? assistantMessages.slice(-4).join("\n---\n") : directWorkLog;
 
     return {
       userRequest: clampText(lastUser, 2000, "tail"),
       agentWorkLog: clampText(lastAssistant, 3000, "tail"),
     };
   } catch {
-    return { userRequest: "", agentWorkLog: "" };
+    return { userRequest: directUserReq, agentWorkLog: directWorkLog };
   }
 }
 
@@ -1267,9 +1308,57 @@ export default function (pi: ExtensionAPI): void {
       const resolverModule = loadResolverModule();
       const projectDir = getProjectDir(ctx);
       const isEnabled = (process.env.BUN_ENV === "test" || process.env.NODE_ENV === "test") || Boolean(apiKey && resolverModule && resolverModule.resolveTypeSafeEnabled(projectDir).enabled);
+      const convo = collectConversationContext(ctx);
+
+      const firstQObj =
+        Array.isArray(params.questions) && params.questions[0] && typeof params.questions[0] === "object"
+          ? (params.questions[0] as Record<string, unknown>)
+          : undefined;
+      const primaryQuestionText =
+        (typeof firstQObj?.question === "string" ? firstQObj.question : undefined) ||
+        (typeof params.question === "string" ? params.question : undefined) ||
+        (typeof params.i === "string" ? params.i : "Decision presented to human");
+      const primaryOptions = Array.isArray(firstQObj?.options)
+        ? (firstQObj.options as Array<string | AdvisorOptionCandidate>)
+        : undefined;
+      const primaryRecommended =
+        typeof firstQObj?.recommended === "number" ? firstQObj.recommended : undefined;
+
+      const advisor = evaluateAdvisorIntent({
+        operation: "decision",
+        task: primaryQuestionText,
+        question: primaryQuestionText,
+        options: primaryOptions,
+        recommendedIndex: primaryRecommended,
+        userRequest: convo.userRequest,
+        agentWorkLog: convo.agentWorkLog,
+      });
+
+      if (Array.isArray(params.questions)) {
+        for (const q of params.questions) {
+          if (q && typeof q === "object") {
+            const qObj = q as Record<string, unknown>;
+            if (qObj.recommended === undefined && Array.isArray(qObj.options) && qObj.options.length > 0) {
+              const qAdvisor = evaluateAdvisorIntent({
+                operation: "decision",
+                task: typeof qObj.question === "string" ? qObj.question : primaryQuestionText,
+                question: typeof qObj.question === "string" ? qObj.question : primaryQuestionText,
+                options: qObj.options as Array<string | AdvisorOptionCandidate>,
+                userRequest: convo.userRequest,
+                agentWorkLog: convo.agentWorkLog,
+              });
+              if (qAdvisor.recommendedIndex !== undefined) {
+                qObj.recommended = qAdvisor.recommendedIndex;
+              }
+            }
+          }
+        }
+      }
+
+      const advisorLine = `\n💡 [Advisor / ck:advisor (${advisor.ckVerdict || advisor.verdict})]: ${advisor.recommendation || advisor.reason}`;
 
       if (!isEnabled || !apiKey) {
-        const note = "\n\n⚠️ [TypeSafe System One: Evaluation offline / not configured]";
+        const note = `\n\n⚠️ [TypeSafe System One: Evaluation offline / not configured]${advisorLine}`;
         if (Array.isArray(params.questions) && params.questions[0] && typeof params.questions[0] === "object") {
           const q = params.questions[0] as Record<string, unknown>;
           if (typeof q.question === "string") q.question += note;
@@ -1311,7 +1400,7 @@ export default function (pi: ExtensionAPI): void {
 
         const response = await client.evaluate({ state, questions });
         if (response.error || !response.answers) {
-          const note = `\n\n⚠️ [TypeSafe System One: Evaluation unavailable (${response.error || "no response"})]`;
+          const note = `\n\n⚠️ [TypeSafe System One: Evaluation unavailable (${response.error || "no response"})]${advisorLine}`;
           if (Array.isArray(params.questions) && params.questions[0] && typeof params.questions[0] === "object") {
             const q = params.questions[0] as Record<string, unknown>;
             if (typeof q.question === "string") q.question += note;
@@ -1324,7 +1413,7 @@ export default function (pi: ExtensionAPI): void {
         const riskScore = response.answers.risk_posture?.score;
         const clarity = response.answers.decision_clarity?.noul;
         if (riskScore === undefined || clarity === undefined) {
-          const note = "\n\n⚠️ [TypeSafe System One: Incomplete evaluation - proceeding with human review]";
+          const note = `\n\n⚠️ [TypeSafe System One: Incomplete evaluation - proceeding with human review]${advisorLine}`;
           if (Array.isArray(params.questions) && params.questions[0] && typeof params.questions[0] === "object") {
             const q = params.questions[0] as Record<string, unknown>;
             if (typeof q.question === "string") q.question += note;
@@ -1335,7 +1424,7 @@ export default function (pi: ExtensionAPI): void {
         }
 
         const riskLabel = riskScore <= 1.0 ? "Low" : riskScore <= 2.0 ? "Moderate" : "High/Critical";
-        const annotation = `\n\n🛡️ [TypeSafe System One Verdict]: Risk: ${riskLabel} (${riskScore.toFixed(1)}/3) | Decision Clarity: ${Math.round(clarity * 100)}%`;
+        const annotation = `\n\n🛡️ [TypeSafe System One Verdict]: Risk: ${riskLabel} (${riskScore.toFixed(1)}/3) | Decision Clarity: ${Math.round(clarity * 100)}%${advisorLine}`;
 
         if (Array.isArray(params.questions)) {
           for (const q of params.questions) {
@@ -1355,11 +1444,11 @@ export default function (pi: ExtensionAPI): void {
 
         await pi.sendMessage({
           customType: "typesafe-human-verdict",
-          content: `TypeSafe System One evaluated human handoff:\n- Risk: ${riskLabel} (${riskScore.toFixed(1)}/3)\n- Clarity: ${Math.round(clarity * 100)}%`,
+          content: `TypeSafe System One evaluated human handoff:\n- Risk: ${riskLabel} (${riskScore.toFixed(1)}/3)\n- Clarity: ${Math.round(clarity * 100)}%\n- Advisor (${advisor.ckVerdict || advisor.verdict}): ${advisor.recommendation || advisor.reason}`,
           display: true,
         });
       } catch {
-        const note = "\n\n⚠️ [TypeSafe System One: Evaluation failed - proceeding with human review]";
+        const note = `\n\n⚠️ [TypeSafe System One: Evaluation failed - proceeding with human review]${advisorLine}`;
         if (Array.isArray(params.questions) && params.questions[0] && typeof params.questions[0] === "object") {
           const q = params.questions[0] as Record<string, unknown>;
           if (typeof q.question === "string") q.question += note;
@@ -1889,8 +1978,10 @@ ${prevRemediation.reasons.map((r) => `   - ${r}`).join("\n")}
 
     // Gate 2: Semantic macro-check against TypeSafe System One runs for ALL task completions
     const client = createExtensionJudgeClient(apiKey, undefined, ctx);
-    const deliverableArtifacts = await collectDeliverableArtifacts(projectDir, evidence.changedFiles);
-    const taskType = inferTaskType(evidence.gitStatus, deliverableArtifacts);
+    const rawDeliverableArtifacts = await collectDeliverableArtifacts(projectDir, evidence.changedFiles);
+    const taskType = inferTaskType(evidence.gitStatus, rawDeliverableArtifacts, taskId);
+    const deliverableArtifacts =
+      rawDeliverableArtifacts || (taskType === "analysis_research" ? convo.agentWorkLog : "");
     const testSummary = testCommand
       ? `$ ${testCommand}\nexit ${evidence.testExitCode}\n${evidence.testOutput}`
       : "No testCommand provided for this task; test evidence not collected.";
@@ -1923,6 +2014,7 @@ ${prevRemediation.reasons.map((r) => `   - ${r}`).join("\n")}
       client
     );
     const macroResult = bicameralResult.macroResult;
+    let doneDecidedBy: "judge" | "human" | "host-authorization" = "judge";
 
     if (bicameralResult.verdict === "AUTO_APPROVE") {
       macroResult.approved = true;
@@ -1933,6 +2025,7 @@ ${prevRemediation.reasons.map((r) => `   - ${r}`).join("\n")}
         const confirmed = await uiObj.confirm("TypeSafe: accept task completion?", escalationCard);
         if (confirmed) {
           macroResult.approved = true;
+          doneDecidedBy = "human";
           hostAuthorizedTasks.add(taskId);
         }
       }
@@ -2017,7 +2110,7 @@ ${prevRemediation.reasons.map((r) => `   - ${r}`).join("\n")}
       kind: "DONE",
       tasks: [taskId],
       approved: true,
-      decidedBy: "judge",
+      decidedBy: doneDecidedBy,
       scores: {
         meetsCriteria: macroResult.meetsCriteriaNoul,
         drift: macroResult.driftChoice,
@@ -2621,16 +2714,16 @@ ${prevRemediation.reasons.map((r) => `   - ${r}`).join("\n")}
     name: "typesafe_expert_review",
     label: "TypeSafe Expert Review",
     description:
-      "Invokes TypeSafe System One expert evaluation: scope_arbiter (scope adherence and reduction prevention), drift_guard (architectural deviation and creep detection), or risk_security_triage (technical risk and trade-off rating).",
+      "Invokes TypeSafe System One and Bicameral Advisor expert evaluation: scope_arbiter (scope adherence and reduction prevention), drift_guard (architectural deviation and creep detection), risk_security_triage (technical risk and trade-off rating), or advisor / ck:advisor (structured technical decision verdict, option ranking, and recommendation).",
     parameters: z.object({
-      role: z.enum(["scope_arbiter", "drift_guard", "risk_security_triage"]),
+      role: z.enum(["scope_arbiter", "drift_guard", "risk_security_triage", "advisor", "ck:advisor"]),
       context: z.union([z.string(), z.record(z.unknown())]),
       criteria: criteriaSchema,
     }),
     async execute(
       _toolCallId: string,
       params: {
-        role: "scope_arbiter" | "drift_guard" | "risk_security_triage";
+        role: "scope_arbiter" | "drift_guard" | "risk_security_triage" | "advisor" | "ck:advisor";
         context: string | Record<string, unknown>;
         criteria?: string[];
       },
@@ -2639,7 +2732,7 @@ ${prevRemediation.reasons.map((r) => `   - ${r}`).join("\n")}
       ctx?: unknown
     ): Promise<ExtensionToolResult> {
       const apiKey = process.env.TYPESAFE_API_KEY?.trim() || "";
-      const client = createExtensionJudgeClient(apiKey, signal, ctx);
+      const client = apiKey ? createExtensionJudgeClient(apiKey, signal, ctx) : undefined;
       let result: unknown;
       if (params.role === "scope_arbiter") {
         const planStr = typeof params.context === "string" ? params.context : JSON.stringify(params.context);
@@ -2647,11 +2740,114 @@ ${prevRemediation.reasons.map((r) => `   - ${r}`).join("\n")}
       } else if (params.role === "drift_guard") {
         const diffStr = typeof params.context === "string" ? params.context : JSON.stringify(params.context);
         result = await evaluateDriftGuard(diffStr, params.criteria || [], client);
+      } else if (params.role === "advisor" || params.role === "ck:advisor") {
+        const convo = collectConversationContext(ctx);
+        const ctxObj =
+          params.context && typeof params.context === "object"
+            ? (params.context as Record<string, unknown>)
+            : undefined;
+        const questionStr =
+          (typeof ctxObj?.question === "string" ? ctxObj.question : undefined) ||
+          (typeof ctxObj?.task === "string" ? ctxObj.task : undefined) ||
+          (typeof params.context === "string" ? params.context : JSON.stringify(params.context));
+        const optionsList = Array.isArray(ctxObj?.options)
+          ? (ctxObj.options as Array<string | AdvisorOptionCandidate>)
+          : params.criteria;
+        const decisionKind =
+          typeof ctxObj?.decision === "string"
+            ? (ctxObj.decision as AdvisorDecisionKind)
+            : "general";
+        const constraints =
+          (Array.isArray(ctxObj?.constraints) || typeof ctxObj?.constraints === "string"
+            ? (ctxObj.constraints as string | string[])
+            : undefined) || params.criteria;
+        result = await runBicameralDecisionCheck(
+          {
+            decision: decisionKind,
+            question: questionStr,
+            options: optionsList,
+            recommendedIndex:
+              typeof ctxObj?.recommended === "number" ? ctxObj.recommended : undefined,
+            constraints,
+            userRequest:
+              (typeof ctxObj?.userRequest === "string" ? ctxObj.userRequest : undefined) ||
+              convo.userRequest,
+            agentWorkLog:
+              (typeof ctxObj?.agentWorkLog === "string" ? ctxObj.agentWorkLog : undefined) ||
+              convo.agentWorkLog,
+            context: params.context,
+          },
+          client
+        );
       } else {
         result = await evaluateRiskSecurityTriage(params.context, client);
       }
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        details: result,
+      };
+    },
+  });
+
+  const optionalStringSchema =
+    (() => {
+      const s = z.string();
+      return s && typeof s === "object" && "optional" in s && typeof s.optional === "function"
+        ? s.optional()
+        : s;
+    })();
+
+  pi.registerTool({
+    name: "typesafe_advisor",
+    label: "TypeSafe & ck:advisor Decision Engine",
+    description:
+      "Consults the Bicameral Advisor (ck:advisor + TypeSafe JEV) when the agent needs a decision on architecture, approach, plan review, phase risk, or stuck tasks. Always returns a structured Verdict (proceed | revise | block), Recommendation, Ranked options, Findings, and Confidence.",
+    parameters: z.object({
+      decision: optionalStringSchema,
+      question: z.string(),
+      options: criteriaSchema,
+      constraints: criteriaSchema,
+      context: z.union([z.string(), z.record(z.unknown())]),
+    }),
+    async execute(
+      _toolCallId: string,
+      params: {
+        decision?: string;
+        question: string;
+        options?: string[];
+        constraints?: string[];
+        context?: string | Record<string, unknown>;
+      },
+      signal?: AbortSignal,
+      _onUpdate?: (result: ExtensionToolResult) => void,
+      ctx?: unknown
+    ): Promise<ExtensionToolResult> {
+      const apiKey = process.env.TYPESAFE_API_KEY?.trim() || "";
+      const client = apiKey ? createExtensionJudgeClient(apiKey, signal, ctx) : undefined;
+      const convo = collectConversationContext(ctx);
+      const ctxObj =
+        params.context && typeof params.context === "object"
+          ? (params.context as Record<string, unknown>)
+          : undefined;
+      const optionsList =
+        params.options ||
+        (Array.isArray(ctxObj?.options)
+          ? (ctxObj.options as Array<string | AdvisorOptionCandidate>)
+          : undefined);
+      const result = await runBicameralDecisionCheck(
+        {
+          decision: (params.decision as AdvisorDecisionKind) || "general",
+          question: params.question,
+          options: optionsList,
+          constraints: params.constraints,
+          userRequest: convo.userRequest,
+          agentWorkLog: convo.agentWorkLog,
+          context: params.context,
+        },
+        client
+      );
+      return {
+        content: [{ type: "text", text: result.report + "\n\n" + JSON.stringify(result, null, 2) }],
         details: result,
       };
     },

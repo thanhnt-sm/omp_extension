@@ -3,12 +3,15 @@ import {
   evaluateAdvisorIntent,
   arbitrateConsensus,
   formatConsensusEscalation,
+  formatCkAdvisorReport,
   evaluateBicameralDoneConsensus,
+  runBicameralDecisionCheck,
   type AdvisorContext,
   type AdvisorIntentResult,
   type JevResult,
   type BicameralConsensusDecision,
 } from "../src/bicameral-consensus";
+import { collectConversationContext } from "../typesafe-planner";
 
 describe("Phase 2: Bicameral Consensus Engine & Advisor Intent Evaluator", () => {
   describe("Lobe 1: evaluateAdvisorIntent", () => {
@@ -287,6 +290,125 @@ describe("Phase 2: Bicameral Consensus Engine & Advisor Intent Evaluator", () =>
 
       expect(decision.verdict).toBe("RECONCILE_PLAN");
       expect(decision.reasons.some((r) => r.includes("token expiration"))).toBe(true);
+    });
+  });
+
+  describe("Advisor & ck:advisor Decision Answering (runBicameralDecisionCheck & evaluateAdvisorIntent)", () => {
+    test("evaluateAdvisorIntent(operation: 'decision') ranks options and returns concrete recommendation", () => {
+      const res = evaluateAdvisorIntent({
+        operation: "decision",
+        task: "Select database engine",
+        question: "Which database should we use for local state storage?",
+        options: [
+          { label: "Postgres", description: "External relational cluster" },
+          { label: "SQLite", description: "Embedded local file database aligned with standard convention", recommended: true },
+        ],
+        userRequest: "Use a lightweight local SQLite database",
+      });
+
+      expect(res.verdict).toBe("ALLOW");
+      expect(res.ckVerdict).toBe("proceed");
+      expect(res.recommendedOption).toBe("SQLite");
+      expect(res.recommendedIndex).toBe(1);
+      expect(res.recommendation).toContain("SQLite");
+      expect(res.rankedOptions?.length).toBe(2);
+      expect(res.rankedOptions?.[0].option).toBe("SQLite");
+    });
+
+    test("evaluateAdvisorIntent blocks options that violate workspace safety boundaries", () => {
+      const res = evaluateAdvisorIntent({
+        operation: "decision",
+        task: "Modify global extension",
+        question: "Should we edit .omp/agent/extensions/typesafe-planner.ts directly?",
+        options: [
+          { label: "Edit .omp/agent/extensions/typesafe-planner.ts directly" },
+        ],
+      });
+
+      expect(res.verdict).toBe("DISALLOW");
+      expect(res.ckVerdict).toBe("block");
+      expect(res.findings?.some((f) => f.severity === "high" || f.severity === "critical")).toBe(true);
+    });
+
+    test("runBicameralDecisionCheck returns full 6-section ck:advisor contract and JEV consensus", async () => {
+      const mockClient = {
+        evaluate: async () => ({
+          answers: {
+            risk_posture: { score: 0.5, confidence: 0.95 },
+            decision_clarity: { noul: 0.92, confidence: 0.90 },
+            recommended_option: { choice: "Fix root cause in bicameral-consensus.ts", confidence: 0.94 },
+          },
+        }),
+      };
+
+      const decision = await runBicameralDecisionCheck(
+        {
+          decision: "approach",
+          question: "How should we resolve the missing advisor decision output?",
+          options: [
+            { label: "Suppress warnings", description: "Ignore uncertain state" },
+            { label: "Fix root cause in bicameral-consensus.ts", description: "Implement option ranking and ck:advisor contract", recommended: true },
+          ],
+          userRequest: "tim xem rootcause o dau, sua dung rootcause",
+          agentWorkLog: "Traced evaluateAdvisorIntent and collectConversationContext in typesafe-planner.ts",
+        },
+        mockClient
+      );
+
+      expect(decision.verdict).toBe("AUTO_APPROVE");
+      expect(decision.ckVerdict).toBe("proceed");
+      expect(decision.recommendedOption).toBe("Fix root cause in bicameral-consensus.ts");
+      expect(decision.recommendedIndex).toBe(1);
+      expect(decision.report).toContain("## Verdict\nproceed");
+      expect(decision.report).toContain("## Recommendation");
+      expect(decision.report).toContain("## Ranked options");
+      expect(decision.report).toContain("## Findings");
+      expect(decision.report).toContain("## Confidence");
+      expect(decision.report).toContain("## Open questions");
+    });
+
+    test("collectConversationContext extracts skill-prompt user request, advisor notes, thinking, toolCall, and toolResult", () => {
+      const convo = collectConversationContext({
+        sessionManager: {
+          getBranch: () => [
+            {
+              type: "custom_message",
+              customType: "skill-prompt",
+              content: "[IMPORTANT: User invoked the \"ck:fix\" skill]\nUser: kiem tra fix loi advisor khong tra ra cau tra loi",
+            },
+            {
+              type: "message",
+              message: {
+                role: "assistant",
+                content: [
+                  { type: "thinking", thinking: "Root cause traced to collectConversationContext and evaluateAdvisorIntent." },
+                  { type: "toolCall", name: "grep", arguments: { i: "Search for advisor in src" } },
+                ],
+              },
+            },
+            {
+              type: "message",
+              message: {
+                role: "toolResult",
+                toolName: "bash",
+                isError: false,
+                content: [{ type: "text", text: "280 pass, 0 fail" }],
+              },
+            },
+            {
+              type: "custom_message",
+              customType: "advisor",
+              content: "<advisory severity=\"nit\">Proceed with root cause fix.</advisory>",
+            },
+          ],
+        },
+      });
+
+      expect(convo.userRequest).toContain("kiem tra fix loi advisor khong tra ra cau tra loi");
+      expect(convo.agentWorkLog).toContain("Root cause traced");
+      expect(convo.agentWorkLog).toContain("[toolCall: grep (Search for advisor in src)]");
+      expect(convo.agentWorkLog).toContain("[toolResult:bash]: 280 pass, 0 fail");
+      expect(convo.agentWorkLog).toContain("[Advisor]: <advisory");
     });
   });
 });

@@ -28,7 +28,9 @@ function createZodMock() {
         if (
           obj.role === "scope_arbiter" ||
           obj.role === "drift_guard" ||
-          obj.role === "risk_security_triage"
+          obj.role === "risk_security_triage" ||
+          obj.role === "advisor" ||
+          obj.role === "ck:advisor"
         ) {
           return { success: true, data: val };
         }
@@ -39,7 +41,21 @@ function createZodMock() {
   };
 
   return {
-    object: () => schema,
+    object: (shape?: Record<string, { safeParse?: (v: unknown) => { success: boolean } }>) => ({
+      ...schema,
+      safeParse: (val: unknown) => {
+        if (val && typeof val === "object") {
+          const obj = val as Record<string, unknown>;
+          if (shape?.role?.safeParse) {
+            return shape.role.safeParse(obj.role).success
+              ? { success: true, data: val }
+              : { success: false, error: new Error("Invalid role") };
+          }
+          return schema.safeParse(val);
+        }
+        return { success: false, error: new Error("Invalid object") };
+      },
+    }),
     union: () => schema,
     string: () => schema,
     number: () => schema,
@@ -104,6 +120,8 @@ describe("Phase 3: OMP Extension Interception Bridge", () => {
 
     expect(schema.safeParse({ role: "drift_guard", context: "diff" }).success).toBe(true);
     expect(schema.safeParse({ role: "risk_security_triage", context: "triage" }).success).toBe(true);
+    expect(schema.safeParse({ role: "advisor", context: "decision" }).success).toBe(true);
+    expect(schema.safeParse({ role: "ck:advisor", context: "decision" }).success).toBe(true);
     expect(schema.safeParse({ role: "invalid_role", context: "diff" }).success).toBe(false);
   });
 
@@ -327,6 +345,50 @@ describe("Phase 3: OMP Extension Interception Bridge", () => {
       await interceptor(askEvent, { cwd: process.cwd() });
       expect(cancelled).toBe(false);
       expect(askParams.questions[0].question).toContain("TypeSafe System One: Evaluation unavailable");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("typesafe_advisor and typesafe_expert_review(role: 'ck:advisor') return concrete decision recommendation", async () => {
+    const { tools } = createMockPi();
+    expect(tools.typesafe_advisor).toBeDefined();
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      return new Response(
+        JSON.stringify({
+          answers: {
+            risk_posture: { score: 0.5, confidence: 0.9 },
+            decision_clarity: { noul: 0.95 },
+            recommended_option: { choice: "SQLite", confidence: 0.92 },
+          },
+        })
+      );
+    }) as unknown as typeof fetch;
+
+    try {
+      const res1 = (await tools.typesafe_expert_review.execute("call_adv_1", {
+        role: "ck:advisor",
+        context: {
+          decision: "approach",
+          question: "Choose database engine",
+          options: [{ label: "SQLite" }, { label: "Postgres" }],
+        },
+      })) as { details: { ckVerdict: string; recommendedOption: string; report: string } };
+
+      expect(res1.details.ckVerdict).toBe("proceed");
+      expect(res1.details.recommendedOption).toBe("SQLite");
+      expect(res1.details.report).toContain("## Verdict\nproceed");
+
+      const res2 = (await tools.typesafe_advisor.execute("call_adv_2", {
+        decision: "approach",
+        question: "Choose storage",
+        options: ["SQLite", "Postgres"],
+      })) as { details: { ckVerdict: string; recommendedOption: string } };
+
+      expect(res2.details.ckVerdict).toBe("proceed");
+      expect(res2.details.recommendedOption).toBe("SQLite");
     } finally {
       globalThis.fetch = originalFetch;
     }

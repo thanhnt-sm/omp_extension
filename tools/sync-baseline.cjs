@@ -96,6 +96,8 @@ const filesToDeploy = [
   "tsconfig.json",
   ".gitignore",
   ...rootMarkdownFiles,
+  ...getFilesRecursive(path.join(WORKSPACE_DIR, "agents"), "agents"),
+  ...getFilesRecursive(path.join(WORKSPACE_DIR, ".omp", "agents"), path.join(".omp", "agents")),
   ...getFilesRecursive(path.join(WORKSPACE_DIR, "docs"), "docs"),
   ...getFilesRecursive(path.join(WORKSPACE_DIR, "src"), "src"),
   ...getFilesRecursive(path.join(WORKSPACE_DIR, "tests"), "tests"),
@@ -131,6 +133,27 @@ try {
   }
 } catch (err) {
   console.warn(`[WARNING] Could not sync global resolver hook:`, err.message);
+}
+
+// 3c. Sync Advisor Agents to Global OMP Agents Directory
+try {
+  const os = require("os");
+  const globalOmpAgentsDir = path.join(os.homedir(), ".omp", "agent", "agents");
+  const srcAgentsDir = path.join(WORKSPACE_DIR, "agents");
+  if (fs.existsSync(srcAgentsDir)) {
+    if (!fs.existsSync(globalOmpAgentsDir)) {
+      fs.mkdirSync(globalOmpAgentsDir, { recursive: true });
+    }
+    for (const agentFile of fs.readdirSync(srcAgentsDir)) {
+      if (!agentFile.endsWith(".md")) continue;
+      const srcFile = path.join(srcAgentsDir, agentFile);
+      const destFile = path.join(globalOmpAgentsDir, agentFile);
+      fs.copyFileSync(srcFile, destFile);
+      console.log(` -> Synced OMP agent definition: ${destFile}`);
+    }
+  }
+} catch (err) {
+  console.warn(`[WARNING] Could not sync global OMP agent definitions:`, err.message);
 }
 
 // 4. Verify OMP Loader Pointer

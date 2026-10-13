@@ -41,15 +41,19 @@ export interface TaskEvidenceResult {
 export interface WorkspaceSnapshot {
   files: Map<string, string>;
   truncated: boolean;
+  headSha?: string;
 }
 
 export async function captureWorkspaceSnapshot(cwd: string): Promise<WorkspaceSnapshot> {
-  const statusRes = await executeTestCommand("git status --porcelain -uall", cwd, 5000);
+  const [statusRes, headRes] = await Promise.all([
+    executeTestCommand("git status --porcelain -uall", cwd, 5000),
+    executeTestCommand("git rev-parse HEAD", cwd, 5000),
+  ]);
+  const headSha = headRes.exitCode === 0 ? headRes.output.trim() : undefined;
   const files = new Map<string, string>();
   if (statusRes.exitCode !== 0) {
-    return { files, truncated: false };
+    return { files, truncated: false, headSha };
   }
-
   const lines = statusRes.output.split(/\r?\n/).filter((l) => l.trim().length > 0);
   let truncated = false;
   for (let i = 0; i < lines.length; i++) {
@@ -81,7 +85,7 @@ export async function captureWorkspaceSnapshot(cwd: string): Promise<WorkspaceSn
     }
   }
 
-  return { files, truncated };
+  return { files, truncated, headSha };
 }
 
 export function diffSnapshots(before: WorkspaceSnapshot, after: WorkspaceSnapshot): string[] {
@@ -291,7 +295,11 @@ export async function collectTaskEvidence(
       trackedDiff = diffRes.output.trim();
     }
     let untrackedDiff = "";
-    if (!trackedDiff && untrackedChanged.length === 0) {
+    const commitChangedSinceBaseline =
+      !options.baseline.headSha ||
+      !after.headSha ||
+      options.baseline.headSha !== after.headSha;
+    if (!trackedDiff && untrackedChanged.length === 0 && commitChangedSinceBaseline) {
       try {
         const [recentLogRes, commitDiffRes] = await Promise.all([
           executeTestCommand("git log -n 1 --oneline", cwd, 5000),

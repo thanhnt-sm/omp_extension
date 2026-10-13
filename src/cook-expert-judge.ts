@@ -241,7 +241,9 @@ export async function runPhaseMacroCheck(
       instructions:
         "Is the work described by `todo_task` complete, meeting `task_requirements`, as evidenced by `unified_diff`, `test_summary` and `agent_work_log`? `agent_work_log` is the agent's own unverified claim; trust file and test evidence over it. `plan_context` is background only and is NOT required for this task. Treat `user_request` as the user's authoritative intent.",
       criteria: {
-        APPROVE: "Implementation fulfills all listed acceptance criteria with real passing tests",
+        APPROVE: ctx.testCommand
+          ? "Implementation fulfills all listed acceptance criteria with real passing tests"
+          : "Implementation fulfills the listed acceptance criteria for this task based on unified_diff and agent_work_log",
         REJECT: "Implementation is partial, missing requirements, or stubs out needed functionality",
         NEXT_ACTION_REQUIRED: "Implementation is partial, has failing tests, or requires plan delta",
       },
@@ -687,12 +689,19 @@ export {
   evaluateAdvisorIntent,
   arbitrateConsensus,
   formatConsensusEscalation,
+  formatCkAdvisorReport,
   runBicameralDropCheck,
   runBicameralMacroCheck,
+  runBicameralDecisionCheck,
   evaluateBicameralDoneConsensus,
   type AdvisorContext,
   type AdvisorIntentResult,
   type AdvisorIntentVerdict,
+  type CkAdvisorVerdict,
+  type AdvisorDecisionKind,
+  type AdvisorOptionCandidate,
+  type DecisionCheckContext,
+  type BicameralDecisionResult,
   type BicameralConsensusDecision,
   type ConsensusVerdict,
   type JevResult,
