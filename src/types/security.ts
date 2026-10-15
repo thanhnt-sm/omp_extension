@@ -3,6 +3,8 @@ export interface ASTAnalysisResult {
   issues: string[];
   deletedAssertions: string[];
   modifiedSuites: string[];
+  /** True when the shared test-evasion heuristic found any conservative signal. */
+  testEvasion: boolean;
 }
 
 export interface XMLEnclosureSchema {
@@ -24,4 +26,5 @@ export interface RemediationDirective {
   actionItems: string[];
   taskId?: string;
   criteria?: string[];
+  testEvasion?: boolean;
 }

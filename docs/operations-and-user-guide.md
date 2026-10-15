@@ -44,24 +44,38 @@ export { default } from "D:/100.Software/Github/omp_extension/typesafe-planner.t
 
 ## 3. Operational Baseline Synchronization (`sync-baseline`)
 
-When you develop or fix code in this workspace, you must synchronize it to the deployment directory linked by OMP.
+Synchronize only from this workspace through the sole deployment entry point:
 
-### 3.1 Using Automated Script
-Run the automated batch script:
-```cmd
-tools\sync-baseline.bat
-```
-Or execute the Node.js runner:
 ```bash
 node tools/sync-baseline.cjs
 ```
 
-### 3.2 What `sync-baseline` Executes:
-1. **Timestamped Backup:** Automatically captures a full snapshot of the target directory to `omp_extension_backup_<TIMESTAMP>`.
-2. **Atomic Sync:** Deploys modified runtime files (`src/`, `typesafe-planner.ts`, `tests/`, etc.).
-3. **Pointer Validation:** Verifies that `~/.omp/agent/extensions/typesafe-planner.ts` is correctly linked.
-4. **Verification Run:** Runs `bun test` in the target directory to ensure 100% test pass before completion.
+Use `node tools/sync-baseline.cjs --dry-run` first whenever the target's managed state is uncertain. A dry run performs the complete read-only preflight and reports managed actions/conflicts, but **does not** create a lock, backup, stage, journal, or modify any path.
 
+### 3.1 Managed transaction boundaries
+
+- The deployment manifest is `<target>/.sync-manifest.json`. It records SHA-256 hashes only for files managed by the transaction.
+- Managed destinations are the target inventory plus the exact allowlisted resolver, TypeSafe MCP files, and `advisor.md`/`ck-advisor.md` agent files. It never manages or deletes `.claude` configuration, skills, or the OMP extension proxy.
+- Existing byte-identical files can be recorded as managed without content mutation. Differing unowned files, or files modified since their recorded deployment hash, are conflicts and abort the run. There is no force/adopt/repair mode.
+- A disappeared workspace file is pruned only when the destination remains unchanged from its prior managed hash. Unknown target files are left intact.
+- The OMP extension pointer remains immutable: preflight requires exactly the expected single export statement and the transaction never rewrites it.
+
+### 3.2 Safety, recovery, and verification
+
+- A sibling exclusive lock is taken after preflight; planning and ownership checks are repeated while it is held. A pre-existing lock is never stolen—perform operator recovery before retrying.
+- Staging and retained backups/journals are outside all mutable roots. The journal records intent and verified preimages before each changed or pruned path; a failed apply, hash check, manifest write, or verification invokes reverse rollback only for transaction-touched paths.
+- A completed run reports either `DEPLOYED_VERIFIED` or `DEPLOYED_UNVERIFIED` (`OMP_SKIP_VERIFY_TESTS=1`). The latter is not promotion evidence. `RECOVERED` means rollback completed after a failure; `RECOVERY_INCOMPLETE` means an external change or rollback failure requires operator intervention using the retained backup/journal.
+- Normal deployment runs `bun test` in the isolated target after all writes and manifest verification. Do not use fault injection outside isolated fixtures; `OMP_FAULT_INJECT` exists only to test transaction recovery boundaries.
+
+### 3.3 Restart requirement
+
+After a verified deployment, stop and start the OMP host/session. Bun/Node cache extension modules in memory at host launch, so a successful filesystem transaction does not update an already-running OMP process.
+
+### 3.4 P6 promotion audit status
+
+The audited sync invocation was a read-only dry run. Immutable-pointer validation blocked it before any managed deployment transaction began. Consequently, it created no lock, staging area, backup, journal, manifest change, proxy change, or deployed files, and it left no transaction to roll forward, roll back, or recover.
+
+This is an external operator-owned blocker, not a successful deployment or promotion. The audit did not modify the proxy, deploy content, or restart OMP. Workspace test results do not substitute for deployment verification: P6 remains pending until the operator corrects the immutable pointer, a supervised managed deployment succeeds, OMP is restarted, and a live native session supplies the required runtime-origin and lifecycle proof.
 ---
 ## 4. Operational Readiness & Session Management
 

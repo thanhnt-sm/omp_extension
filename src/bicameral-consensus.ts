@@ -430,18 +430,25 @@ export function evaluateAdvisorIntent(ctx: AdvisorContext): AdvisorIntentResult 
 
   if (ctx.operation === "drop") {
     const taskOverlapWithReq = computeTokenOverlap(taskText, userReq);
-    // 1. Explicit user cancellation detected in user request
-    const explicitCancelVerb =
-      /\b(?:cancel|cancelled|cancelling|drop|dropped|dropping|skip|skipped|skipping|omit|omitted|deprecate|deprecated|supersede|superseded|don't need|no longer need|not needed|not required|bỏ qua|hủy|không cần)\b/i.test(
-        userReq
-      );
-    const contextualRemoveVerb =
-      /\b(?:remove|removed|removing|delete|deleted|ignore|ignored|xóa)\b/i.test(userReq) &&
-      (taskOverlapWithReq > 0 || /\b(?:task|tasks|step|steps|todo|phase|item)\b/i.test(userReq));
-    const userWantsCancel =
-      explicitCancelVerb ||
-      contextualRemoveVerb ||
-      (CANCELLATION_PATTERNS.some((p) => p.test(userReq)) && taskOverlapWithReq > 0);
+    const userWantsCancel = userReq
+      .split(/[.!?;\n]+/)
+      .some((clause) => {
+        const clauseOverlap = computeTokenOverlap(taskText, clause);
+        const cancellationTargetsTask =
+          clauseOverlap > 0 ||
+          /\b(?:this|current)\s+(?:task|todo|item|step)\b/i.test(clause);
+        const explicitCancelVerb =
+          /\b(?:cancel|cancelled|cancelling|drop|dropped|dropping|skip|skipped|skipping|omit|omitted|deprecate|deprecated|supersede|superseded|don't need|no longer need|not needed|not required|bỏ qua|hủy|không cần)\b/i.test(
+            clause
+          );
+        const contextualRemoveVerb =
+          /\b(?:remove|removed|removing|delete|deleted|ignore|ignored|xóa)\b/i.test(clause);
+        return cancellationTargetsTask && (
+          explicitCancelVerb ||
+          contextualRemoveVerb ||
+          CANCELLATION_PATTERNS.some((pattern) => pattern.test(clause))
+        );
+      });
     if (userWantsCancel) {
       const reason = "User explicitly authorized or requested dropping the task in context";
       const cancelConf = Number(
@@ -457,11 +464,32 @@ export function evaluateAdvisorIntent(ctx: AdvisorContext): AdvisorIntentResult 
       };
     }
 
-    // 2. Clean build or verified test success obsolescence
+    // 2. A task the user still explicitly requests cannot be made obsolete by
+    // clean-build inference. Cancellation above is the only scoped override.
+    if (userReq.length > 0) {
+      const taskWords = extractContentTokens(taskText);
+      const matchesUserRequest = taskWords.some((w) => userReq.toLowerCase().includes(w));
+      if (matchesUserRequest) {
+        const reason = "User requested task implementation and no valid cancellation was expressed";
+        const disallowConf = Number(
+          Math.min(0.94, Math.max(0.82, 0.82 + taskOverlapWithReq * 0.11)).toFixed(2)
+        );
+        return {
+          verdict: "DISALLOW",
+          ckVerdict: "block",
+          confidence: disallowConf,
+          reason,
+          recommendation: reason,
+          userIntentDetected: true,
+        };
+      }
+    }
+
+    // 3. Clean build or verified test success can establish obsolescence only
+    // after task-scoped cancellation and explicit user conflict are ruled out.
     const hasBuildEvidence =
       ctx.hasCleanBuildEvidence === true ||
       CLEAN_BUILD_PATTERNS.some((p) => p.test(combinedContext));
-
     if (hasBuildEvidence) {
       const reason = "Clean build or verified test success confirms task is obsolete or already satisfied";
       const buildOverlap = computeTokenOverlap(taskText, combinedContext);
@@ -476,26 +504,6 @@ export function evaluateAdvisorIntent(ctx: AdvisorContext): AdvisorIntentResult 
         recommendation: reason,
         userIntentDetected: false,
       };
-    }
-
-    // 3. User explicitly requested this task and no cancellation was expressed
-    if (userReq.length > 0) {
-      const taskWords = extractContentTokens(taskText);
-      const matchesUserRequest = taskWords.some((w) => userReq.toLowerCase().includes(w));
-      if (matchesUserRequest) {
-        const reason = "User requested task implementation and no valid cancellation or obsolescence evidence exists";
-        const disallowConf = Number(
-          Math.min(0.94, Math.max(0.82, 0.82 + taskOverlapWithReq * 0.11)).toFixed(2)
-        );
-        return {
-          verdict: "DISALLOW",
-          ckVerdict: "block",
-          confidence: disallowConf,
-          reason,
-          recommendation: reason,
-          userIntentDetected: true,
-        };
-      }
     }
 
     // 4. Ambiguous intent

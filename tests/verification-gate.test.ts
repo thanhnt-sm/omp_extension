@@ -74,6 +74,23 @@ describe("Phase 3: Execution Compliance & Dual Verification Gate", () => {
     expect(g1.reasons.some((r) => r.includes("Claude boundary"))).toBe(true);
   });
 
+  test("Gate 1 exposes the shared test-evasion classification", () => {
+    const evidence: TaskEvidenceResult = {
+      gitStatus: "M tests/service.test.ts",
+      gitDiff: "--- a/tests/service.test.ts\n+++ b/tests/service.test.ts\n+test.todo('restore coverage');",
+      testExitCode: 0,
+      testOutput: "PASS",
+      criteria: ["Implement service"],
+      cleanWorkingTree: false,
+      timestamp: new Date().toISOString(),
+    };
+
+    const g1 = checkDeterministicPreconditions(evidence);
+    expect(g1.passed).toBe(false);
+    expect(g1.testEvasion).toBe(true);
+    expect(g1.reasons).toContain("Detected skipped or todo test suite in additions.");
+  });
+
   test("Gate 1 failure skips Gate 2 remote call completely (zero tokens)", async () => {
     let judgeCalled = false;
     const mockJudge: GateJudgeClient = {

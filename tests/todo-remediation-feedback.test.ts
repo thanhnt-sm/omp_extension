@@ -28,12 +28,24 @@ describe("TypeSafe Actionable Blocked-Todo Guidance & Remediation", () => {
         "Zero evidence: no test execution or git modifications observed for task completion.",
       ],
       testExitCode: null,
+      testEvasion: true,
     });
 
-    expect(msg).toContain("Restore deleted test assertions.");
+    expect(msg).toContain("Review removed coverage or meaningful behavior before re-attempting completion.");
     expect(msg).toContain("Produce real implementation code changes or execute tests");
     expect(msg).toContain("NEXT ACTIONS FOR AGENT:");
     expect(msg.length).toBeLessThanOrEqual(1200);
+  });
+
+  test("Gate 1 remediation consumes the explicit test-evasion classification", () => {
+    const msg = buildGateRejectionMessage({
+      gate: "Gate 1 Micro-Check",
+      taskId: "Implement cryptographic signing",
+      reasons: ["Unrelated wording that does not name the heuristic."],
+      testEvasion: true,
+    });
+
+    expect(msg).toContain("Review removed coverage or meaningful behavior before re-attempting completion.");
   });
 
   test("Gate 2 Macro-Check: formats scope reduction with planned requirements and scores", () => {

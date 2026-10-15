@@ -1,5 +1,4 @@
 import { createRequire } from "node:module";
-import os from "node:os";
 import path from "node:path";
 
 const nodeRequire = createRequire(import.meta.url);
@@ -31,30 +30,22 @@ interface RedactPatternsModule {
 }
 
 function loadRedactModule(): RedactModule | null {
-  const candidates = [
-    path.join(os.homedir(), ".claude", "mcp", "typesafe", "typesafe-redact.cjs"),
-    path.join(__dirname, "typesafe-redact.cjs"),
-  ];
-  for (const modPath of candidates) {
-    try {
-      const mod = nodeRequire(modPath) as RedactModule;
-      if (mod && typeof mod.preparePayload === "function") return mod;
-    } catch {}
-  }
+  try {
+    const mod = nodeRequire(path.join(__dirname, "typesafe-redact.cjs")) as RedactModule;
+    if (mod && typeof mod.preparePayload === "function") {
+      return mod;
+    }
+  } catch {}
   return null;
 }
 
 function loadPatternsModule(): RedactPatternsModule | null {
-  const candidates = [
-    path.join(os.homedir(), ".claude", "mcp", "typesafe", "typesafe-redact-patterns.cjs"),
-    path.join(__dirname, "typesafe-redact-patterns.cjs"),
-  ];
-  for (const modPath of candidates) {
-    try {
-      const mod = nodeRequire(modPath) as RedactPatternsModule;
-      if (mod && typeof mod.detectSecret === "function") return mod;
-    } catch {}
-  }
+  try {
+    const mod = nodeRequire(path.join(__dirname, "typesafe-redact-patterns.cjs")) as RedactPatternsModule;
+    if (mod && typeof mod.detectSecret === "function") {
+      return mod;
+    }
+  } catch {}
   return null;
 }
 
@@ -76,16 +67,11 @@ export function redactAnthropicSecrets(text: string): string {
 /**
  * Checks if a string contains a secret pattern (Anthropic key or general credential).
  */
-export function isSecretInKey(key: string): boolean {
+export function isSecretInKey(key: string, patterns = loadPatternsModule()): boolean {
   if (ANTHROPIC_KEY_REGEX.test(key)) return true;
   if (CLAUDE_SESSION_KEY_REGEX.test(key)) return true;
   if (CLAUDE_TOKEN_REGEX.test(key)) return true;
-
-  const patterns = loadPatternsModule();
-  if (patterns && typeof patterns.detectSecret === "function") {
-    return patterns.detectSecret(key);
-  }
-  return false;
+  return patterns ? patterns.detectSecret(key) : true;
 }
 
 /**
@@ -211,11 +197,15 @@ export function preparePayloadSafe<T extends TypeSafePayload>(
   opts?: SafePayloadOptions
 ): T {
   const maxBytes = opts?.maxBytes ?? DEFAULT_MAX_BYTES;
-
+  const redactMod = loadRedactModule();
+  const patternsMod = loadPatternsModule();
+  if (!redactMod || !patternsMod) {
+    throw new Error("payload_safety_unavailable");
+  }
   // 1. Secret in key check
   if (payload.questions && typeof payload.questions === "object") {
     for (const key of Object.keys(payload.questions)) {
-      if (isSecretInKey(key)) {
+      if (isSecretInKey(key, patternsMod)) {
         throw new Error("payload rejected: secret in key");
       }
     }
@@ -292,20 +282,17 @@ export function preparePayloadSafe<T extends TypeSafePayload>(
     }
   }
 
-  // 4. Delegate to shared kit redaction module if available
-  const redactMod = loadRedactModule();
-  if (redactMod && typeof redactMod.preparePayload === "function") {
-    try {
-      scrubbed = redactMod.preparePayload(scrubbed, {
-        maxBytes,
-        apiKey: opts?.apiKey,
-      }) as T;
-    } catch (err: unknown) {
-      if (err instanceof Error && err.message.includes("secret in key")) {
-        throw new Error("payload rejected: secret in key");
-      }
-      throw err;
+  // 4. Delegate to the required bundled redaction module.
+  try {
+    scrubbed = redactMod.preparePayload(scrubbed, {
+      maxBytes,
+      apiKey: opts?.apiKey,
+    }) as T;
+  } catch (err: unknown) {
+    if (err instanceof Error && err.message.includes("secret in key")) {
+      throw new Error("payload rejected: secret in key");
     }
+    throw err;
   }
 
   // 5. Final bounding guarantee

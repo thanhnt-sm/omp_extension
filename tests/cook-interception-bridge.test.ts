@@ -96,9 +96,9 @@ describe("Phase 3: OMP Extension Interception Bridge", () => {
       },
     };
 
-    registerExtension(mockPi as unknown as Parameters<typeof registerExtension>[0]);
+    const state = registerExtension(mockPi as unknown as Parameters<typeof registerExtension>[0]);
 
-    return { tools, handlers, messages };
+    return { tools, handlers, messages, state };
   }
 
   test("registers typesafe_expert_review tool with proper schema", () => {
@@ -200,19 +200,21 @@ describe("Phase 3: OMP Extension Interception Bridge", () => {
   });
 
   test("intercepts todo done and executes Gate 1 micro-check, rejecting failing tests", async () => {
-    const { handlers } = createMockPi();
+    const { handlers, state } = createMockPi();
     const interceptor = handlers.tool_call![0];
+    state.phases = [{ name: "P", tasks: [{ content: "Failing test task", status: "pending" }] }];
 
     let cancelledReason: string | undefined;
-    const doneEvent: MockEvent = {
+    const doneEvent: MockEvent & { toolCallId: string } = {
       tool: "todo",
+      toolCallId: "failing-test-task",
       params: {
         op: "done",
         task: "Failing test task",
         testCommand: "bun -e \"process.exit(1)\"",
       },
-      cancel: (r: string) => {
-        cancelledReason = r;
+      cancel: (reason: string) => {
+        cancelledReason = reason;
       },
     };
 

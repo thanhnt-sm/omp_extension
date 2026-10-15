@@ -68,6 +68,22 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
       expect(res.reasons.some((r) => r.includes("assertion"))).toBe(true);
     });
 
+    test("reuses analyzer classification for skip-oriented test evasion", async () => {
+      const evidence: MicroCheckEvidence = {
+        gitStatus: "M tests/feature.test.ts",
+        gitDiff: "--- a/tests/feature.test.ts\n+++ b/tests/feature.test.ts\n+test.skip('disabled', () => {});",
+        testExitCode: 0,
+        testOutput: "PASS 4 tests",
+        cleanWorkingTree: false,
+      };
+
+      const res = await runTaskMicroCheck(evidence);
+      expect(res.passed).toBe(false);
+      expect(res.assertionDeleted).toBe(false);
+      expect(res.testEvasion).toBe(true);
+      expect(res.reasons).toContain("Detected skipped or todo test suite in additions.");
+    });
+
     test("blocks modification of .claude directory or credentials", async () => {
       const evidence: MicroCheckEvidence = {
         gitStatus: "M .claude/config.json",

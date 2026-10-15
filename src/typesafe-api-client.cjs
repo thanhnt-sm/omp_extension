@@ -11,7 +11,15 @@
  * result directly from it.
  */
 
-const { preparePayload } = require('./typesafe-redact.cjs');
+const crypto = require('node:crypto');
+let preparePayload;
+function loadPreparePayload() {
+  if (preparePayload) return preparePayload;
+  const loaded = require('./typesafe-redact.cjs');
+  if (!loaded || typeof loaded.preparePayload !== 'function') throw new Error('redact_unavailable');
+  preparePayload = loaded.preparePayload;
+  return preparePayload;
+}
 
 const VALID_TYPES = new Set(['noul', 'choice', 'score']);
 const API_URL = 'https://api.typesafe.ai/v1/systemone';
@@ -63,12 +71,59 @@ const RETRY_POLICY = Object.freeze({
   cooldownMs: RATE_LIMIT_COOLDOWN_MS,
 });
 
-// Process-wide cool-down state (one MCP server process = one key). `until` is
-// on the MONOTONIC clock; `status` is the retryable status to replay.
-const defaultRateLimitState = { until: 0, status: 0 };
+// State is keyed by a full SHA-256 digest, never a raw credential. A request
+// captures the active generation; asynchronous completion may update state only
+// if that exact credential generation remains active.
+const defaultRateLimitState = {};
 
 function monotonicNow() {
   return performance.now();
+}
+
+function hashCredential(apiKey) {
+  return crypto.createHash('sha256').update(String(apiKey)).digest('hex');
+}
+
+function credentialStore(state) {
+  const store = state && typeof state === 'object' ? state : defaultRateLimitState;
+  if (!(store.entries instanceof Map)) store.entries = new Map();
+  if (!Number.isSafeInteger(store.generation)) store.generation = 0;
+  if (typeof store.activeHash !== 'string') store.activeHash = '';
+  return store;
+}
+
+function observeCredential(apiKey, state) {
+  const store = credentialStore(state);
+  const hash = hashCredential(apiKey);
+  if (store.activeHash !== hash) {
+    store.activeHash = hash;
+    store.generation += 1;
+  }
+  const token = { hash, generation: store.generation };
+  let entry = store.entries.get(hash);
+  if (!entry || entry.generation !== token.generation) {
+    entry = { generation: token.generation, until: 0, status: 0, authFailed: false, alerted: false };
+    store.entries.set(hash, entry);
+  }
+  return { store, token, entry };
+}
+
+function isCurrentCredential(store, token) {
+  return store.activeHash === token.hash && store.generation === token.generation;
+}
+
+function resetRateLimitState(state = defaultRateLimitState) {
+  const store = credentialStore(state);
+  store.entries.clear();
+  store.activeHash = '';
+  store.generation = 0;
+}
+
+function checkCredentialCooldown(apiKey, options = {}) {
+  const now = typeof options.nowImpl === 'function' ? options.nowImpl : monotonicNow;
+  const { entry } = observeCredential(apiKey, options.rateLimitState);
+  if (entry.authFailed) return { status: entry.status || 401, authFailed: true };
+  return entry.until > now() ? { status: entry.status, cooldown: true, until: entry.until } : null;
 }
 
 function isNonEmptyString(v) {
@@ -183,154 +238,228 @@ function sanitizeAnswers(questions, rawAnswers) {
   return answers;
 }
 
-/**
- * Race a promise against a hard timeout that fires regardless of whether the
- * underlying implementation honors the AbortSignal (important for test
- * mocks that never resolve). The AbortController is still passed through so
- * a real fetch() can abort the in-flight request instead of leaking it.
- */
-function withTimeout(promise, controller, timeoutMs) {
+function abortError(name = 'AbortError') {
+  const err = new Error(name === 'TimeoutError' ? 'timeout' : 'aborted');
+  err.name = name;
+  return err;
+}
+
+function withTimeout(promise, controller, timeoutMs, options = {}) {
+  const setTimer = options.setTimeoutImpl || setTimeout;
+  const clearTimer = options.clearTimeoutImpl || clearTimeout;
+  const signal = options.signal;
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
+    let settled = false;
+    const finish = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimer(timer);
+      if (signal) signal.removeEventListener('abort', onAbort);
+      fn(value);
+    };
+    const onAbort = () => {
       controller.abort();
-      const err = new Error('timeout');
-      err.name = 'TimeoutError';
-      reject(err);
-    }, timeoutMs);
-    promise.then(
-      (v) => { clearTimeout(timer); resolve(v); },
-      (e) => { clearTimeout(timer); reject(e); },
-    );
+      finish(reject, abortError());
+    };
+    const timer = setTimer(() => {
+      controller.abort();
+      finish(reject, abortError('TimeoutError'));
+    }, Math.max(1, timeoutMs));
+    if (signal) {
+      if (signal.aborted) return onAbort();
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
+    promise.then((value) => finish(resolve, value), (error) => finish(reject, error));
+  });
+}
+
+function defaultSleep(ms, signal, setTimeoutImpl = setTimeout, clearTimeoutImpl = clearTimeout) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeoutImpl(timer);
+      if (signal) signal.removeEventListener('abort', onAbort);
+      fn(value);
+    };
+    const onAbort = () => finish(reject, abortError());
+    const timer = setTimeoutImpl(() => finish(resolve), Math.max(0, ms));
+    if (signal) {
+      if (signal.aborted) return onAbort();
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
+  });
+}
+
+async function cancelBodyBounded(response, options = {}) {
+  const body = response && response.body;
+  if (!body || typeof body.cancel !== 'function') return;
+  const timeoutMs = Number.isFinite(options.timeoutMs) ? Math.max(0, options.timeoutMs) : 250;
+  const setTimer = options.setTimeoutImpl || setTimeout;
+  const clearTimer = options.clearTimeoutImpl || clearTimeout;
+  await new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (!settled) {
+        settled = true;
+        clearTimer(timer);
+        resolve();
+      }
+    };
+    const timer = setTimer(finish, timeoutMs);
+    Promise.resolve().then(() => body.cancel()).then(finish, finish);
   });
 }
 
 /**
  * Parse a Retry-After header value into a delay in ms, or null if absent /
- * unparseable. Accepts delta-seconds ("120") or an HTTP-date (relative to the
- * injected WALL clock; a date in the past => 0). An all-digit value longer
- * than 9 digits is Infinity ("give up"), not null ("ignore"). Never throws.
+ * unparseable. An oversized delta is Infinity: it is not a retry delay.
  */
 function parseRetryAfter(value, wallNowMs) {
   if (typeof value !== 'string') return null;
   const v = value.trim();
   if (/^\d+$/.test(v)) return v.length > 9 ? Infinity : parseInt(v, 10) * 1000;
   if (v.length <= 64 && /[A-Za-z]{3}/.test(v)) {
-    const t = Date.parse(v);
-    if (Number.isFinite(t)) return Math.max(0, t - wallNowMs);
+    const time = Date.parse(v);
+    const now = Number.isFinite(wallNowMs) ? wallNowMs : Date.now();
+    if (Number.isFinite(time)) return Math.max(0, time - now);
   }
   return null;
 }
 
-/**
- * Delay before the next attempt, or null to stop retrying: the server's
- * Retry-After + a small jitter if given (null when Retry-After exceeds the cap
- * — we never retry earlier than asked), else exponential backoff with full
- * jitter.
- */
 function nextRetryDelayMs(attemptsMade, retryAfterMs, randomImpl) {
   if (typeof retryAfterMs === 'number') {
-    if (retryAfterMs > MAX_RETRY_AFTER_MS) return null; // also covers Infinity
+    if (!Number.isFinite(retryAfterMs) || retryAfterMs > MAX_RETRY_AFTER_MS) return null;
     return retryAfterMs + Math.floor(randomImpl() * RETRY_AFTER_JITTER_MS);
   }
   const ceiling = Math.min(BACKOFF_CAP_MS, BACKOFF_BASE_MS * 2 ** (attemptsMade - 1));
   return Math.floor(randomImpl() * ceiling);
 }
 
-/**
- * Run performRequest with bounded retry on 429/529. Throws only what a single
- * attempt throws (timeout/network) — those are never retried. Returns the
- * final outcome (a retryable http_error once attempts/budget run out, which
- * also arms the cool-down). While a cool-down is active it returns that
- * http_error immediately WITHOUT touching the network.
- * `debugLog` (optional) receives `typesafe: attempts=N last=STATUS` — numbers only.
- */
-async function requestWithRetry(o) {
-  const { fetchImpl, apiKey, body, timeoutMs, maxAttempts, totalBudgetMs, nowImpl, wallNowImpl, sleepImpl, randomImpl, rateLimitState } = o;
+async function requestWithRetry(options) {
+  const o = options || {};
+  const fetchImpl = o.fetchImpl || globalThis.fetch;
+  const apiKey = o.apiKey;
+  const body = o.body;
+  const timeoutMs = Number.isFinite(o.timeoutMs) && o.timeoutMs > 0 ? o.timeoutMs : 10000;
+  const maxAttempts = Number.isInteger(o.maxAttempts) && o.maxAttempts > 0 ? o.maxAttempts : DEFAULT_MAX_ATTEMPTS;
+  const totalBudgetMs = Number.isFinite(o.totalBudgetMs) && o.totalBudgetMs > 0 ? o.totalBudgetMs : DEFAULT_TOTAL_BUDGET_MS;
+  const now = typeof o.nowImpl === 'function' ? o.nowImpl : monotonicNow;
+  const wallNow = typeof o.wallNowImpl === 'function' ? o.wallNowImpl : Date.now;
+  const sleep = typeof o.sleepImpl === 'function' ? o.sleepImpl : defaultSleep;
+  const random = typeof o.randomImpl === 'function' ? o.randomImpl : Math.random;
+  const setTimer = o.setTimeoutImpl || setTimeout;
+  const clearTimer = o.clearTimeoutImpl || clearTimeout;
+  const { store, token, entry } = observeCredential(apiKey, o.rateLimitState);
   const debug = (attempts, last) => {
     if (typeof o.debugLog !== 'function') return;
-    try { o.debugLog(`typesafe: attempts=${attempts} last=${last}`); } catch (_) { /* diagnostics must never affect the call */ }
+    try { o.debugLog(`typesafe: attempts=${attempts} last=${last}`); } catch (_) {}
   };
-
-  // L-B: a cool-down can never legitimately lie further ahead than cooldownMs.
-  // If it does, the state was armed with a different clock (e.g. a Date.now()
-  // caller sharing the module-level state) — treat it as expired and reset it
-  // instead of failing closed forever.
-  if (rateLimitState.until - nowImpl() > RATE_LIMIT_COOLDOWN_MS) {
-    rateLimitState.until = 0;
-    rateLimitState.status = 0;
+  if (o.signal && o.signal.aborted) throw abortError();
+  if (entry.authFailed) {
+    debug(0, entry.status || 401);
+    return { kind: 'auth', status: entry.status || 401, authFailed: true };
   }
-  if (rateLimitState.until > nowImpl()) {
-    debug(0, rateLimitState.status);
-    return { kind: 'http_error', status: rateLimitState.status };
+  if (entry.until > now()) {
+    debug(0, entry.status);
+    return { kind: 'http_error', status: entry.status, cooldown: true };
   }
 
-  const deadline = nowImpl() + totalBudgetMs;
-  let outcome;
+  const deadline = now() + totalBudgetMs;
+  let outcome = { kind: 'http_error', status: 529 };
   let attempts = 0;
   let last = 0;
   try {
-    for (;;) {
-      const remaining = deadline - nowImpl();
-      if (attempts > 0 && remaining < MIN_USEFUL_ATTEMPT_MS) break; // L3: a sleep may overshoot; never send with <1 s left
-      // L-A: another concurrent call may have exhausted its retries (arming the shared cool-down)
-      // while this one slept — stop and fail closed instead of piling more requests on.
-      if (attempts > 0 && rateLimitState.until > nowImpl()) break;
-      attempts++;
-      last = 0;
-      const controller = new AbortController(); // one per attempt: an aborted controller cannot be reused
+    while (attempts < maxAttempts) {
+      const remaining = deadline - now();
+      if (remaining < MIN_USEFUL_ATTEMPT_MS) throw abortError('TimeoutError');
+      if (o.signal && o.signal.aborted) throw abortError();
+      const current = checkCredentialCooldown(apiKey, { rateLimitState: store, nowImpl: now });
+      if (attempts > 0 && current) {
+        outcome = { kind: 'http_error', status: current.status, cooldown: true };
+        break;
+      }
+      attempts += 1;
+      const controller = new AbortController();
       outcome = await withTimeout(
-        performRequest(fetchImpl, apiKey, body, controller.signal, wallNowImpl),
+        performRequest(fetchImpl, apiKey, body, controller.signal, wallNow, {
+          timeoutMs: Math.min(250, Math.max(0, remaining)),
+          setTimeoutImpl: setTimer,
+          clearTimeoutImpl: clearTimer,
+        }),
         controller,
-        Math.max(1, Math.min(timeoutMs, remaining)),
+        Math.min(timeoutMs, remaining),
+        { signal: o.signal, setTimeoutImpl: setTimer, clearTimeoutImpl: clearTimer },
       );
       last = outcome.status === undefined ? 200 : outcome.status;
-      if (outcome.kind !== 'http_error' || !RETRYABLE_STATUS.has(outcome.status) || attempts >= maxAttempts) break;
-      const delay = nextRetryDelayMs(attempts, outcome.retryAfterMs, randomImpl);
-      // Fail closed NOW (no pointless sleep) if the wait + a useful attempt cannot fit the budget.
-      if (delay === null || nowImpl() + delay + MIN_USEFUL_ATTEMPT_MS > deadline) break;
-      await sleepImpl(delay);
+      if (outcome.kind !== 'http_error' || !RETRYABLE_STATUS.has(outcome.status)) break;
+      const delay = nextRetryDelayMs(attempts, outcome.retryAfterMs, random);
+      if (delay === null || now() + delay + MIN_USEFUL_ATTEMPT_MS > deadline) break;
+      const sleepController = new AbortController();
+      await withTimeout(
+        Promise.resolve(sleep(delay, sleepController.signal)),
+        sleepController,
+        Math.max(1, deadline - now()),
+        { signal: o.signal, setTimeoutImpl: setTimer, clearTimeoutImpl: clearTimer },
+      );
     }
   } finally {
     debug(attempts, last);
   }
 
-  // Arm only if not already active: a call that stopped because of someone else's cool-down must not extend it.
-  if (outcome.kind === 'http_error' && RETRYABLE_STATUS.has(outcome.status) && rateLimitState.until <= nowImpl()) {
-    rateLimitState.until = nowImpl() + RATE_LIMIT_COOLDOWN_MS;
-    rateLimitState.status = outcome.status;
+  if (isCurrentCredential(store, token) && outcome.kind === 'auth') {
+    entry.authFailed = true;
+    entry.status = outcome.status;
+  }
+  if (outcome.kind === 'http_error' && RETRYABLE_STATUS.has(outcome.status) && isCurrentCredential(store, token)) {
+    const receivedAt = now();
+    const retryAfterMs = outcome.retryAfterMs;
+    const serverUntil = Number.isFinite(retryAfterMs) && retryAfterMs > 0 ? receivedAt + retryAfterMs : 0;
+    const cooldownUntil = Math.max(receivedAt + RATE_LIMIT_COOLDOWN_MS, serverUntil);
+    if (cooldownUntil > entry.until) {
+      entry.until = cooldownUntil;
+      entry.status = outcome.status;
+    }
   }
   return outcome;
 }
 
-/**
- * Fetch + read the response body as one timed unit, so a stalled body read
- * (headers arrive, bytes never do) is bounded by the same timeout as the
- * connection itself. Returns a tagged outcome instead of throwing for
- * expected HTTP/parse failures; only truly unexpected errors (network,
- * abort) propagate to the caller's try/catch.
- */
-async function performRequest(fetchImpl, apiKey, body, signal, wallNowImpl) {
-  const res = await fetchImpl(API_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body,
-    signal,
-  });
-  if (res.status === 401 || res.status === 403) return { kind: 'auth', status: res.status };
-  if (!res.ok) {
-    if (!RETRYABLE_STATUS.has(res.status)) return { kind: 'http_error', status: res.status };
-    // Retryable: read Retry-After defensively (mocks / odd responses may lack
-    // headers) and release the unread body so the connection is not held.
-    const header = res.headers && typeof res.headers.get === 'function' ? res.headers.get('retry-after') : null;
-    try {
-      if (res.body && typeof res.body.cancel === 'function') await res.body.cancel();
-    } catch (_) { /* best-effort cleanup only */ }
-    return { kind: 'http_error', status: res.status, retryAfterMs: parseRetryAfter(header, wallNowImpl()) };
-  }
+async function performRequest(fetchImpl, apiKey, body, signal, wallNowImpl, cleanupOptions) {
+  let response;
+  const cancelOnAbort = () => {
+    void cancelBodyBounded(response, cleanupOptions);
+  };
+  signal.addEventListener('abort', cancelOnAbort, { once: true });
   try {
-    return { kind: 'ok', data: await res.json() };
-  } catch (_) {
-    return { kind: 'bad_response' };
+    response = await fetchImpl(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body,
+      signal,
+    });
+    if (signal.aborted) {
+      await cancelBodyBounded(response, cleanupOptions);
+      throw abortError();
+    }
+    if (response.status === 401 || response.status === 403) {
+      await cancelBodyBounded(response, cleanupOptions);
+      return { kind: 'auth', status: response.status };
+    }
+    if (!response.ok) {
+      const header = response.headers && typeof response.headers.get === 'function' ? response.headers.get('retry-after') : null;
+      const retryAfterMs = parseRetryAfter(header, wallNowImpl());
+      await cancelBodyBounded(response, cleanupOptions);
+      return { kind: 'http_error', status: response.status, retryAfterMs };
+    }
+    try {
+      return { kind: 'ok', data: await response.json() };
+    } catch (_) {
+      await cancelBodyBounded(response, cleanupOptions);
+      return { kind: 'bad_response' };
+    }
+  } finally {
+    signal.removeEventListener('abort', cancelOnAbort);
   }
 }
 
@@ -341,16 +470,15 @@ async function performRequest(fetchImpl, apiKey, body, signal, wallNowImpl) {
  */
 async function judgeTypeSafe({
   fetchImpl, apiKey, args, homeDir, timeoutMs = 10000,
-  // Retry knobs (all optional; defaults are real clock/timers). Injectable for tests.
-  // nowImpl is MONOTONIC (budget, cool-down); wallNowImpl only converts an
-  // HTTP-date Retry-After into a delay. debugLog gets numbers-only lines.
   maxAttempts = DEFAULT_MAX_ATTEMPTS, totalBudgetMs = DEFAULT_TOTAL_BUDGET_MS,
   nowImpl = monotonicNow, wallNowImpl = Date.now,
-  sleepImpl = (ms) => new Promise((resolve) => setTimeout(resolve, ms)), randomImpl = Math.random,
-  rateLimitState = defaultRateLimitState, debugLog,
+  sleepImpl, randomImpl = Math.random, rateLimitState, debugLog, signal,
+  setTimeoutImpl, clearTimeoutImpl,
 }) {
   const validation = validateInput(args);
   if (!validation.ok) return { ok: false, code: validation.message, authError: false };
+  const cooldown = checkCredentialCooldown(apiKey, { rateLimitState, nowImpl });
+  if (cooldown) return { ok: false, code: `http_${cooldown.status}`, authError: cooldown.authFailed === true };
 
   // `model` must be part of the SAME object preparePayload sees, so its bytes
   // are accounted for by the cap pass rather than added after the fact.
@@ -359,8 +487,12 @@ async function judgeTypeSafe({
   // if it doesn't match any known token pattern (H2).
   let payload;
   try {
-    payload = preparePayload(
-      { state: args.state, model: MODEL, questions: args.questions },
+    payload = loadPreparePayload()(
+      {
+        state: args.state,
+        model: isNonEmptyString(args.model) ? args.model.trim() : MODEL,
+        questions: args.questions,
+      },
       { maxBytes: MAX_BODY_BYTES, homeDirs: homeDir ? [homeDir] : undefined, apiKey },
     );
   } catch (err) {
@@ -391,8 +523,9 @@ async function judgeTypeSafe({
   let outcome;
   try {
     outcome = await requestWithRetry({
-      fetchImpl, apiKey, body, timeoutMs, maxAttempts: attempts, totalBudgetMs: budget,
+      fetchImpl, apiKey, body, signal, timeoutMs, maxAttempts: attempts, totalBudgetMs: budget,
       nowImpl, wallNowImpl, sleepImpl, randomImpl, rateLimitState, debugLog,
+      setTimeoutImpl, clearTimeoutImpl,
     });
   } catch (err) {
     const isAbort = err && (err.name === 'AbortError' || err.name === 'TimeoutError');
@@ -411,4 +544,15 @@ async function judgeTypeSafe({
   return { ok: true, answers };
 }
 
-module.exports = { validateInput, sanitizeAnswers, getChoiceOptions, judgeTypeSafe, parseRetryAfter, RETRY_POLICY };
+module.exports = {
+  validateInput,
+  sanitizeAnswers,
+  getChoiceOptions,
+  judgeTypeSafe,
+  requestWithRetry,
+  checkCredentialCooldown,
+  cancelBodyBounded,
+  resetRateLimitState,
+  parseRetryAfter,
+  RETRY_POLICY,
+};

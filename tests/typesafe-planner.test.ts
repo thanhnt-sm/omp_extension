@@ -154,116 +154,23 @@ describe("TypeSafe JEV Alignment: taskType inference & deliverableArtifacts", ()
   });
 });
 
-describe("Phase 3: Advisory Pre-Flight & Fast-Path Drop", () => {
-  test("typesafe_verify_completion advisory hook returns evaluation without mutating activeContractedTasks", async () => {
-    const { activeContractedTasks } = await import("../typesafe-planner");
-    activeContractedTasks.add("task-advisory-1");
-
-    const registeredTools: Record<string, { name: string; execute: Function }> = {};
+describe("P3: advisory and native todo lifecycle", () => {
+  test("completion advisory never mutates factory-owned todo state", async () => {
+    const registeredTools: Record<string, { execute: Function }> = {};
     const mockPi = {
       zod: {
-        object: (x: unknown) => x,
-        union: (x: unknown) => x,
+        object: (value: unknown) => value, union: (value: unknown) => value,
         string: () => ({ optional: () => "string", min: () => "string" }),
-        number: () => ({ optional: () => "number" }),
-        record: (x: unknown) => x,
-        enum: (x: unknown) => x,
-        unknown: () => ({ optional: () => "unknown" }),
-        array: (x: unknown) => ({ min: () => x, optional: () => x }),
+        number: () => ({ optional: () => "number" }), record: (value: unknown) => value,
+        enum: (value: unknown) => value, unknown: () => ({ optional: () => "unknown" }),
+        array: (value: unknown) => ({ min: () => value, optional: () => value }),
       },
-      on: () => {},
-      sendMessage: async () => {},
-      registerTool: (tool: { name: string; execute: Function }) => {
-        registeredTools[tool.name] = tool;
-      },
+      on() {}, sendMessage: async () => {}, registerTool(tool: { name: string; execute: Function }) { registeredTools[tool.name] = tool; },
     };
-
-    registerExtension(mockPi as unknown as Parameters<typeof registerExtension>[0]);
+    const state = registerExtension(mockPi as never);
+    state.phases = [{ name: "P", tasks: [{ content: "task-advisory-1", status: "in_progress" }] }];
     expect(registeredTools.typesafe_verify_completion).toBeDefined();
-
-    // Invoking verify completion must NOT delete activeContractedTasks
-    expect(activeContractedTasks.has("task-advisory-1")).toBe(true);
-    activeContractedTasks.delete("task-advisory-1");
-  });
-
-  test("todo(op: 'drop') fast-paths without Gate 1/2 failure but sends UI warning notification", async () => {
-    const { activeContractedTasks } = await import("../typesafe-planner");
-    let toolCallHandler: ((event: unknown, ctx: unknown) => Promise<void>) | undefined;
-    const sentMessages: Array<{ content?: string; customType?: string }> = [];
-
-    const mockPi = {
-      zod: {
-        object: (x: unknown) => x,
-        union: (x: unknown) => x,
-        string: () => ({ optional: () => "string", min: () => "string" }),
-        number: () => ({ optional: () => "number" }),
-        record: (x: unknown) => x,
-        enum: (x: unknown) => x,
-        unknown: () => ({ optional: () => "unknown" }),
-        array: (x: unknown) => ({ min: () => x, optional: () => x }),
-      },
-      on: (event: string, handler: (event: unknown, ctx: unknown) => Promise<void>) => {
-        if (event === "tool_call") toolCallHandler = handler;
-      },
-      sendMessage: async (msg: { content?: string; customType?: string }) => {
-        sentMessages.push(msg);
-      },
-      registerTool: () => {},
-    };
-
-    registerExtension(mockPi as unknown as Parameters<typeof registerExtension>[0]);
-    expect(toolCallHandler).toBeDefined();
-
-    activeContractedTasks.add("task-to-drop");
-    const event = {
-      toolName: "todo",
-      params: { op: "drop", task: "task-to-drop", isHuman: true },
-    };
-
-    await expect(toolCallHandler(event, { isHuman: true })).resolves.toBeUndefined();
-    expect(activeContractedTasks.has("task-to-drop")).toBe(false);
-    expect(sentMessages.some((m) => m.customType === "typesafe-task-report" && m.content && m.content.includes('DROP "task-to-drop"'))).toBe(true);
-  });
-
-  test("unauthorized todo(op: 'drop') of contracted task triggers EGC escalation gate", async () => {
-    const { activeContractedTasks } = await import("../typesafe-planner");
-    let toolCallHandler: ((event: unknown, ctx: unknown) => Promise<void>) | undefined;
-    const sentMessages: Array<{ content?: string; customType?: string }> = [];
-
-    const mockPi = {
-      zod: {
-        object: (x: unknown) => x,
-        union: (x: unknown) => x,
-        string: () => ({ optional: () => "string", min: () => "string" }),
-        number: () => ({ optional: () => "number" }),
-        record: (x: unknown) => x,
-        enum: (x: unknown) => x,
-        unknown: () => ({ optional: () => "unknown" }),
-        array: (x: unknown) => ({ min: () => x, optional: () => x }),
-      },
-      on: (event: string, handler: (event: unknown, ctx: unknown) => Promise<void>) => {
-        if (event === "tool_call") toolCallHandler = handler;
-      },
-      sendMessage: async (msg: { content?: string; customType?: string }) => {
-        sentMessages.push(msg);
-      },
-      registerTool: () => {},
-    };
-
-    registerExtension(mockPi as unknown as Parameters<typeof registerExtension>[0]);
-    expect(toolCallHandler).toBeDefined();
-
-    activeContractedTasks.add("contracted-drop-task");
-    const event = {
-      toolName: "todo",
-      params: { op: "drop", task: "contracted-drop-task" },
-    };
-
-    if (toolCallHandler) {
-      await expect(toolCallHandler(event, {})).rejects.toThrow("TypeSafe drop gate rejected");
-    }
-    expect(sentMessages.some((m) => m.customType === "typesafe-compliance-escalation")).toBe(true);
-    activeContractedTasks.delete("contracted-drop-task");
+    expect(state.activeContractedTasks.has("task-advisory-1")).toBe(true);
   });
 });
 

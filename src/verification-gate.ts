@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 import {
   collectTaskEvidence,
   type TaskEvidenceResult,
@@ -7,6 +8,22 @@ import { analyzeDiffForTestEvasion } from "./ast-analyzer";
 import { generateRemediationBlock } from "./remediation-generator";
 import { AuthManager } from "./auth-manager";
 
+type ApiClient = {
+  requestWithRetry: (options: { fetchImpl: typeof fetch; apiKey: string; body: string }) => Promise<
+    { kind: "ok"; data: unknown } | { kind: "auth" | "http_error"; status: number } | { kind: "bad_response" }
+  >;
+  checkCredentialCooldown: (apiKey: string) => { status: number } | null;
+  sanitizeAnswers: (questions: Record<string, unknown>, rawAnswers: unknown) => Record<string, unknown> | null;
+};
+function loadApiClient(): ApiClient | null {
+  try {
+    const client = createRequire(import.meta.url)("./typesafe-api-client.cjs") as ApiClient;
+    return typeof client.requestWithRetry === "function" && typeof client.sanitizeAnswers === "function" ? client : null;
+  } catch {
+    return null;
+  }
+}
+
 const globalAuthManager = new AuthManager();
 
 export interface Gate1Result {
@@ -15,6 +32,7 @@ export interface Gate1Result {
   cleanTree: boolean;
   testPassed: boolean;
   claudeSafe: boolean;
+  testEvasion?: boolean;
 }
 
 export interface Gate2Result {
@@ -126,6 +144,7 @@ export function checkDeterministicPreconditions(evidence: TaskEvidenceResult): G
     cleanTree: evidence.cleanWorkingTree,
     testPassed,
     claudeSafe,
+    testEvasion: astResult.testEvasion,
   };
 }
 
@@ -185,6 +204,7 @@ export interface RemediationOptions {
   taskId?: string;
   criteria?: string[];
   testCommand?: string;
+  testEvasion?: boolean;
 }
 
 /**
@@ -212,6 +232,7 @@ export function generateFallbackRemediation(
     ],
     taskId: options?.taskId,
     criteria: options?.criteria,
+    testEvasion: options?.testEvasion,
   });
 }
 
@@ -230,54 +251,37 @@ async function defaultGateJudgeClient(
   error?: string;
 }> {
   const apiKey = process.env.TYPESAFE_API_KEY?.trim();
-  if (!apiKey) {
-    return { error: "TYPESAFE_API_KEY is missing from environment" };
-  }
-
+  if (!apiKey) return { error: "TYPESAFE_API_KEY is missing from environment" };
   if (!globalAuthManager.canAttempt(apiKey)) {
-    const authState = globalAuthManager.getState(apiKey);
-    return { error: `Authentication blocked by AuthManager: ${authState.status}` };
+    return { error: `Authentication blocked by AuthManager: ${globalAuthManager.getState(apiKey).status}` };
   }
+  const apiClient = loadApiClient();
+  if (!apiClient) return { error: "typesafe_api_client_unavailable" };
+  const cooldown = apiClient.checkCredentialCooldown(apiKey);
+  if (cooldown) return { error: `http_${cooldown.status}` };
 
-  const payload: TypeSafePayload = {
-    state,
-    questions,
-    model: "jev-latest",
-  };
-
+  const payload: TypeSafePayload = { state, questions, model: "jev-latest" };
   const safePayload = preparePayloadSafe(payload, { apiKey });
-
   try {
-    const res = await fetch("https://api.typesafe.ai/v1/systemone", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
+    const outcome = await apiClient.requestWithRetry({
+      fetchImpl: globalThis.fetch,
+      apiKey,
       body: JSON.stringify(safePayload),
-      signal: AbortSignal.timeout(10000),
     });
-
-    if (!res.ok) {
-      if (res.status === 401 || res.status === 403) {
-        globalAuthManager.recordFailure(apiKey, res.status);
-      }
-      return { error: `http_${res.status}` };
+    if (outcome.kind !== "ok") {
+      if (outcome.kind === "auth") globalAuthManager.recordFailure(apiKey, outcome.status);
+      return { error: "status" in outcome ? `http_${outcome.status}` : "bad_response" };
     }
-
     globalAuthManager.recordSuccess(apiKey);
-
-    const json = (await res.json()) as { answers?: Record<string, unknown> };
-    return {
-      answers: json.answers as {
-        deliverables_verdict?: { choice: string; confidence?: number };
-        meets_criteria?: { noul: number };
-        plan_drift?: { choice: string };
-        claude_account_untouched?: { noul: number };
-      },
-    };
+    const rawAnswers = outcome.data && typeof outcome.data === "object" && "answers" in outcome.data
+      ? outcome.data.answers
+      : undefined;
+    const answers = apiClient.sanitizeAnswers(safePayload.questions, rawAnswers);
+    return answers
+      ? { answers: answers as { meets_criteria?: { noul: number }; plan_drift?: { choice: string }; claude_account_untouched?: { noul: number } } }
+      : { error: "bad_response" };
   } catch (err: unknown) {
-    return { error: err instanceof Error ? err.message : "network_error" };
+    return { error: err instanceof Error && (err.name === "AbortError" || err.name === "TimeoutError") ? "timeout" : "network_error" };
   }
 }
 
@@ -311,6 +315,7 @@ export async function verifyTaskCompletion(
         taskId: context.taskId,
         criteria: evidence.criteria,
         testCommand: context.testCommand,
+        testEvasion: gate1.testEvasion,
       }),
       escalateToUser: false,
     };

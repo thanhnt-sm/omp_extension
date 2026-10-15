@@ -290,7 +290,7 @@ describe("TypeSafe Adversarial Edge Cases & Live Security Matrix (14 Scenarios)"
     expect(parsed.answers["State Mutation"].noul).toBeLessThan(0.40);
   });
 
-  test("Case 12 (High): Live TypeSafe Plan Draft Elevation (Usage registered)", async () => {
+  test("Case 12 (High): unavailable plan elevation fails closed", async () => {
     const res = await registeredTools.typesafe_elevate_plan.execute("call-live-plan", {
       planTitle: "Zero-Trust Encryption Migration",
       planContent:
@@ -299,9 +299,8 @@ describe("TypeSafe Adversarial Edge Cases & Live Security Matrix (14 Scenarios)"
     });
 
     const parsed = JSON.parse(res.content[0].text);
-    expect(parsed.approved).toBeDefined();
-    expect(parsed.score).toBeGreaterThan(0);
-    expect(parsed.noul).toBeGreaterThan(0);
+    expect(parsed.approved).toBe(false);
+    expect(parsed.debate.approved).toBe(false);
   });
 
   test("Case 13 (High): Large Payload Truncation guarantees bounds <= 32768 bytes", async () => {

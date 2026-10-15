@@ -37,7 +37,7 @@ describe("Phase 2 Client Integration: evaluateDebate on extension judge client",
 
     const parsed = JSON.parse(res.content[0].text);
     expect(parsed.debate).toBeDefined();
-    expect(parsed.debate.approved).toBe(true);
+    expect(parsed.debate.approved).toBe(false);
     expect(parsed.debate.modelTier).toBeDefined();
   });
 });

@@ -45,16 +45,17 @@ describe("Structured Remediation Feedback Loops", () => {
     expect(xml).toContain("<action>Run full test suite to verify fixes: bun test</action>");
   });
 
-  test("synthesizes restoration directives for test evasion", () => {
+  test("uses explicit test-evasion classification for coverage-review guidance", () => {
     const directive: RemediationDirective = {
       instruction: "Do not evade tests.",
       immutableConstraints: [],
-      failureReasons: ["Test evasion detected: deleted assertion"],
+      failureReasons: ["Heuristic classification failed."],
       actionItems: [],
+      testEvasion: true,
     };
 
     const xml = generateRemediationBlock(directive);
-    expect(xml).toContain("<action>Restore deleted test assertions and ensure tests pass legitimately.</action>");
+    expect(xml).toContain("<action>Review removed coverage or meaningful behavior before re-attempting completion.</action>");
     expect(xml).toContain("<constraint>Do not delete existing assertions or test blocks.</constraint>");
   });
 

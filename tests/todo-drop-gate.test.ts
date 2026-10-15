@@ -1,524 +1,224 @@
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import registerExtension, { activeContractedTasks, resetLastCheckpoint } from "../typesafe-planner";
+import { describe, expect, test } from "bun:test";
+import registerExtension from "../typesafe-planner";
 
-interface MockToolDefinition {
-  name: string;
-  description: string;
-  parameters: {
-    safeParse: (val: unknown) => { success: boolean; data?: unknown; error?: unknown };
-  };
-  execute: (id: string, params: unknown, signal?: AbortSignal, ctx?: unknown) => Promise<unknown>;
-}
-
-interface MockEvent {
-  tool?: string;
-  name?: string;
-  toolName?: string;
-  params?: Record<string, unknown>;
-  args?: Record<string, unknown>;
-  input?: Record<string, unknown>;
-  cancel?: (reason: string) => void;
-}
-
-interface MockPiMessage {
-  customType?: string;
-  content?: string;
-  display?: boolean;
-}
-
-function createZodMock() {
-  const schema = {
-    safeParse: (val: unknown) => {
-      if (val && typeof val === "object") {
-        return { success: true, data: val };
-      }
-      return { success: false, error: new Error("Invalid") };
-    },
-    optional: () => schema,
-    default: () => schema,
-    describe: () => schema,
-    min: () => schema,
-  };
-
-  return {
-    object: () => schema,
-    union: () => schema,
-    string: () => schema,
-    number: () => schema,
-    boolean: () => schema,
-    record: () => schema,
-    enum: (vals: string[]) => ({
-      ...schema,
-      safeParse: (val: unknown) => {
-        return typeof val === "string" && vals.includes(val)
-          ? { success: true, data: val }
-          : { success: false, error: new Error("Enum mismatch") };
-      },
-    }),
-    unknown: () => schema,
-    array: () => ({
-      ...schema,
-      min: () => schema,
-    }),
-  };
-}
-
-function createMockPi() {
-  const tools: Record<string, MockToolDefinition> = {};
+function createPi() {
   const handlers: Record<string, Array<(event: unknown, ctx: unknown) => Promise<void>>> = {};
-  const messages: MockPiMessage[] = [];
-
-  const mockPi = {
-    zod: createZodMock(),
-    registerTool(def: MockToolDefinition) {
-      tools[def.name] = def;
-    },
-    on(event: string, handler: (event: unknown, ctx: unknown) => Promise<void>) {
-      if (!handlers[event]) handlers[event] = [];
-      handlers[event].push(handler);
-    },
-    async sendMessage(msg: MockPiMessage) {
-      messages.push(msg);
+  const messages: Array<{ customType?: string; content?: string }> = [];
+  const schema = { optional: () => schema, min: () => schema };
+  return {
+    handlers,
+    messages,
+    pi: {
+      zod: { object: () => schema, union: () => schema, string: () => schema, number: () => schema, record: () => schema, enum: () => schema, unknown: () => schema, array: () => schema },
+      on(event: string, handler: (event: unknown, ctx: unknown) => Promise<void>) { (handlers[event] ??= []).push(handler); },
+      registerTool() {},
+      async sendMessage(message: { customType?: string; content?: string }) { messages.push(message); },
     },
   };
-
-  return { tools, handlers, messages, mockPi };
 }
 
-const defaultPiInstance = createMockPi();
-registerExtension(defaultPiInstance.mockPi as unknown as Parameters<typeof registerExtension>[0]);
+function registerTestExtension(pi: ReturnType<typeof createPi>["pi"]) {
+  return registerExtension(pi as never, { env: { TYPESAFE_API_KEY: "" } });
+}
 
-describe("TypeSafe Todo Drop Gate", () => {
-  const originalFetch = globalThis.fetch;
-  let fetchStateBody: Record<string, unknown> | null = null;
-  const interceptor = defaultPiInstance.handlers.tool_call?.[0];
-
-  beforeEach(() => {
-    resetLastCheckpoint();
-    activeContractedTasks.clear();
-    defaultPiInstance.messages.length = 0;
-    fetchStateBody = null;
-    globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
-      const urlStr = url.toString();
-      if (urlStr.includes("systemone")) {
-        if (init?.body) {
-          try {
-            const parsed: unknown = JSON.parse(init.body as string);
-            if (parsed && typeof parsed === "object" && "state" in parsed) {
-              const stateVal = parsed.state;
-              if (stateVal && typeof stateVal === "object") {
-                fetchStateBody = stateVal as Record<string, unknown>;
-              }
-            }
-            const isDrop = parsed && typeof parsed === "object" && "question" in parsed && typeof parsed.question === "string" && parsed.question.includes("drop_justified");
-            if (isDrop || (fetchStateBody && "tasks_to_drop" in fetchStateBody)) {
-              const X = parseFloat((globalThis as unknown as { mockJudgeNoul?: string }).mockJudgeNoul || "0.95");
-              return {
-                ok: true,
-                status: 200,
-                json: async () => ({
-                  answers: {
-                    drop_justified: { noul: X, confidence: 0.9 },
-                    drop_verdict: {
-                      choice: X >= 0.80 ? "APPROVE" : X < 0.30 ? "REJECT" : "ESCALATE",
-                      confidence: X,
-                    },
-                  },
-                }),
-              } as Response;
-            }
-            return {
-              ok: true,
-              status: 200,
-              json: async () => ({
-                answers: {
-                  meets_criteria: { noul: 0.95 },
-                  deliverables_verdict: { choice: "APPROVE", confidence: 0.9 },
-                  architectural_drift: { choice: "no_drift", confidence: 0.9 },
-                  scope_mode: { choice: "HOLD", confidence: 0.9 },
-                },
-              }),
-            } as Response;
-          } catch (e) {
-            console.error(e);
-          }
-        }
-      }
-      return originalFetch(url, init);
-    }) as typeof globalThis.fetch;
+describe("P3 native drop transaction", () => {
+  test("phase drop stages all active phase tasks and commits only its result", async () => {
+    const fixture = createPi();
+    const state = registerTestExtension(fixture.pi);
+    state.phases = [
+      { name: "P1", tasks: [{ content: "A", status: "in_progress" }, { content: "B", status: "pending" }] },
+      { name: "P2", tasks: [{ content: "C", status: "pending" }] },
+    ];
+    const params = { op: "drop", phase: "P1" };
+    await fixture.handlers.tool_call[0]({ tool: "todo", toolCallId: "drop-p1", params }, { cwd: process.cwd(), isHuman: true });
+    expect(state.stagedCalls.get("drop-p1")?.affectedTasks).toEqual(["A", "B"]);
+    expect(state.activeContractedTasks.has("A")).toBe(true);
+    await fixture.handlers.tool_result[0]({ tool: "todo", toolCallId: "drop-p1", params, details: { op: "drop", phases: [
+      { name: "P1", tasks: [{ content: "A", status: "abandoned" }, { content: "B", status: "abandoned" }] },
+      { name: "P2", tasks: [{ content: "C", status: "in_progress" }] },
+    ] } }, {});
+    expect(state.activeContractedTasks.has("A")).toBe(false);
+    expect(state.activeContractedTasks.has("C")).toBe(true);
   });
 
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
-    delete (globalThis as unknown as { mockJudgeNoul?: string }).mockJudgeNoul;
-    activeContractedTasks.clear();
+  test("requires bicameral verification before any agent-issued task deletion can stage", async () => {
+    const fixture = createPi();
+    const state = registerTestExtension(fixture.pi);
+    state.phases = [{ name: "P1", tasks: [{ content: "A", status: "pending" }] }];
+    const params = { op: "drop", task: "A" };
+
+    await expect(
+      fixture.handlers.tool_call[0]({ tool: "todo", toolCallId: "drop-headless", params }, { cwd: process.cwd() })
+    ).rejects.toThrow("typesafe_verification_unavailable");
+    expect(state.stagedCalls.size).toBe(0);
   });
 
-  test("Drop with judge noul 0.95 resolves and sends report", async () => {
-    activeContractedTasks.add("T1");
-    (globalThis as unknown as { mockJudgeNoul?: string }).mockJudgeNoul = "0.95";
+  test("does not invoke UI before bicameral verification is available", async () => {
+    const fixture = createPi();
+    const state = registerTestExtension(fixture.pi);
+    state.phases = [{ name: "P1", tasks: [{ content: "A", status: "pending" }] }];
+    const params = { op: "drop", task: "A" };
+    const confirmations: Array<[string, string]> = [];
 
-    let cancelledReason: string | undefined;
-    const dropEvt: MockEvent = {
-      tool: "todo",
-      params: { op: "drop", task: "T1" },
-      cancel: (r: string) => { cancelledReason = r; },
-    };
-
-    let threw = false;
-    try {
-      await interceptor?.(dropEvt, { cwd: __dirname });
-    } catch { threw = true; }
-
-    expect(threw).toBe(false);
-    expect(cancelledReason).toBeUndefined();
-    expect(activeContractedTasks.has("T1")).toBe(false);
-
-    const reports = defaultPiInstance.messages.filter(m => m.customType === "typesafe-task-report");
-    expect(reports.length).toBe(1);
-    expect(reports[0].content).toContain('DROP "T1"');
-    expect(reports[0].content).toContain("Decision: APPROVED (by: judge)");
-    expect(reports[0].content).toContain("drop_justified=0.95");
-  });
-
-  test("Drop with noul 0.10 cancels/throws and keeps T1", async () => {
-    activeContractedTasks.add("T1");
-    (globalThis as unknown as { mockJudgeNoul?: string }).mockJudgeNoul = "0.10";
-
-    let cancelledReason: string | undefined;
-    const dropEvt: MockEvent = {
-      tool: "todo",
-      params: { op: "drop", task: "T1" },
-      cancel: (r: string) => { cancelledReason = r; },
-    };
-
-    let threw = false;
-    let uiConfirmCalled = false;
-    try {
-      await interceptor?.(dropEvt, {
-        cwd: __dirname,
-        ui: { confirm: async () => { uiConfirmCalled = true; return true; } },
-      });
-    } catch (e: unknown) {
-      threw = true;
-      if (!cancelledReason && e instanceof Error) cancelledReason = e.message;
-    }
-
-    expect(threw || cancelledReason !== undefined).toBe(true);
-    expect(cancelledReason).toContain("TypeSafe drop gate rejected");
-    expect(cancelledReason).toContain("NEXT ACTIONS FOR AGENT");
-    expect(activeContractedTasks.has("T1")).toBe(true);
-    expect(uiConfirmCalled).toBe(false);
-  });
-
-  test("Drop gray zone (0.55) approved by UI confirm", async () => {
-    activeContractedTasks.add("T1");
-    (globalThis as unknown as { mockJudgeNoul?: string }).mockJudgeNoul = "0.55";
-
-    let confirmMessage = "";
-    let confirmCalled = 0;
-    const ctx = {
-      cwd: __dirname,
-      hasUI: true,
-      ui: {
-        confirm: async (_title: string, message: string) => {
-          confirmCalled++;
-          confirmMessage = message;
-          return true;
-        },
-      },
-    };
-
-    const dropEvt: MockEvent = { tool: "todo", params: { op: "drop", task: "T1" }, cancel: () => {} };
-    await interceptor?.(dropEvt, ctx);
-
-    expect(confirmCalled).toBe(1);
-    expect(confirmMessage).toContain("T1");
-    expect(confirmMessage).toContain("0.55");
-    expect(confirmMessage).toContain("Agent drop reason:");
-    expect(confirmMessage).toContain("User request:");
-    expect(activeContractedTasks.has("T1")).toBe(false);
-
-    const reports = defaultPiInstance.messages.filter(m => m.customType === "typesafe-task-report");
-    expect(reports.length).toBe(1);
-    expect(reports[0].content).toContain("Decision: APPROVED (by: human)");
-  });
-  test("Drop confirmation dialog formats full context (task, reason, user request, score)", async () => {
-    activeContractedTasks.add("T1");
-    (globalThis as unknown as { mockJudgeNoul?: string }).mockJudgeNoul = "0.55";
-
-    let confirmMessage = "";
-    const ctx = {
-      cwd: __dirname,
-      hasUI: true,
-      ui: {
-        confirm: async (_title: string, message: string) => {
-          confirmMessage = message;
-          return true;
-        },
-      },
-      sessionManager: {
-        getBranch: () => [
-          {
-            type: "message",
-            message: { role: "user", content: "Please cancel the legacy T1 step." },
+    await expect(
+      fixture.handlers.tool_call[0](
+        { tool: "todo", toolCallId: "drop-confirmed", params },
+        {
+          cwd: process.cwd(),
+          hasUI: true,
+          ui: {
+            confirm: async (title: string, message: string) => {
+              confirmations.push([title, message]);
+              return true;
+            },
           },
-        ],
+        }
+      )
+    ).rejects.toThrow("typesafe_verification_unavailable");
+
+    expect(confirmations).toEqual([]);
+    expect(state.stagedCalls.size).toBe(0);
+  });
+
+  test("does not invoke UI rejection handling before bicameral verification is available", async () => {
+    const fixture = createPi();
+    const state = registerTestExtension(fixture.pi);
+    state.phases = [{ name: "P1", tasks: [{ content: "A", status: "pending" }] }];
+
+    await expect(
+      fixture.handlers.tool_call[0](
+        { tool: "todo", toolCallId: "drop-rejected", params: { op: "drop", task: "A" } },
+        { cwd: process.cwd(), hasUI: true, ui: { confirm: async () => false } }
+      )
+    ).rejects.toThrow("typesafe_verification_unavailable");
+    expect(state.stagedCalls.size).toBe(0);
+  });
+
+  test("does not invoke a failing UI before bicameral verification is available", async () => {
+    const fixture = createPi();
+    const state = registerTestExtension(fixture.pi);
+    state.phases = [{ name: "P1", tasks: [{ content: "A", status: "pending" }] }];
+
+    await expect(
+      fixture.handlers.tool_call[0](
+        { tool: "todo", toolCallId: "drop-ui-error", params: { op: "drop", task: "A" } },
+        { cwd: process.cwd(), hasUI: true, ui: { confirm: async () => { throw new Error("UI unavailable"); } } }
+      )
+    ).rejects.toThrow("typesafe_verification_unavailable");
+    expect(state.stagedCalls.size).toBe(0);
+  });
+
+  test("does not treat an unverified authorization claim as a bicameral or human approval", async () => {
+    const fixture = createPi();
+    const state = registerTestExtension(fixture.pi);
+    state.phases = [{ name: "P1", tasks: [{ content: "A", status: "pending" }] }];
+    const params = { op: "drop", task: "A" };
+
+    await expect(
+      fixture.handlers.tool_call[0](
+        { tool: "todo", toolCallId: "drop-unverified", params },
+        { cwd: process.cwd(), authorized: true }
+      )
+    ).rejects.toThrow("typesafe_verification_unavailable");
+    expect(state.stagedCalls.size).toBe(0);
+  });
+
+  test("does not carry a prior drop authorization to a reappended task", async () => {
+    const fixture = createPi();
+    const state = registerTestExtension(fixture.pi);
+    state.phases = [{ name: "P1", tasks: [{ content: "A", status: "pending" }] }];
+    const dropParams = { op: "drop", task: "A" };
+    await fixture.handlers.tool_call[0](
+      { tool: "todo", toolCallId: "drop-A", params: dropParams },
+      { cwd: process.cwd(), isHuman: true }
+    );
+    await fixture.handlers.tool_result[0](
+      {
+        tool: "todo",
+        toolCallId: "drop-A",
+        params: dropParams,
+        details: { op: "drop", phases: [{ name: "P1", tasks: [{ content: "A", status: "abandoned" }] }] },
       },
-    };
-
-    const dropEvt: MockEvent = {
-      tool: "todo",
-      params: { op: "drop", task: "T1", reason: "Obsolete after refactoring" },
-      cancel: () => {},
-    };
-    await interceptor?.(dropEvt, ctx);
-
-    expect(confirmMessage).toContain("Tasks to drop: T1");
-    expect(confirmMessage).toContain("Agent drop reason: Obsolete after refactoring");
-    expect(confirmMessage).toContain("User request: Please cancel the legacy T1 step.");
-    expect(confirmMessage).toContain("0.55");
-    expect(activeContractedTasks.has("T1")).toBe(false);
-  });
-  test("Drop boundary: 0.29 rejects with NEXT ACTIONS and no UI confirm", async () => {
-    activeContractedTasks.add("T1");
-    (globalThis as unknown as { mockJudgeNoul?: string }).mockJudgeNoul = "0.29";
-
-    let cancelledReason: string | undefined;
-    let uiCalled = false;
-    let threw = false;
-    try {
-      await interceptor?.(
-        { tool: "todo", params: { op: "drop", task: "T1" }, cancel: (r: string) => { cancelledReason = r; } },
-        { cwd: __dirname, hasUI: true, ui: { confirm: async () => { uiCalled = true; return true; } } }
-      );
-    } catch (e: unknown) {
-      threw = true;
-      if (!cancelledReason && e instanceof Error) cancelledReason = e.message;
-    }
-    expect(threw || cancelledReason !== undefined).toBe(true);
-    expect(uiCalled).toBe(false);
-    expect(activeContractedTasks.has("T1")).toBe(true);
-    expect(cancelledReason).toContain("NEXT ACTIONS FOR AGENT");
-  });
-
-  test("Drop boundary: 0.35 in gray zone calls UI confirm", async () => {
-    activeContractedTasks.add("T1");
-    (globalThis as unknown as { mockJudgeNoul?: string }).mockJudgeNoul = "0.35";
-
-    let uiCalled = false;
-    await interceptor?.(
-      { tool: "todo", params: { op: "drop", task: "T1" }, cancel: () => {} },
-      { cwd: __dirname, hasUI: true, ui: { confirm: async () => { uiCalled = true; return true; } } }
+      {}
     );
-    expect(uiCalled).toBe(true);
-    expect(activeContractedTasks.has("T1")).toBe(false);
-  });
 
-  test("Drop boundary: 0.80 auto-approves without UI confirm", async () => {
-    activeContractedTasks.add("T1");
-    (globalThis as unknown as { mockJudgeNoul?: string }).mockJudgeNoul = "0.80";
-
-    let uiCalled = false;
-    await interceptor?.(
-      { tool: "todo", params: { op: "drop", task: "T1" }, cancel: () => {} },
-      { cwd: __dirname, hasUI: true, ui: { confirm: async () => { uiCalled = true; return true; } } }
+    const initParams = { op: "init", list: [{ phase: "P2", items: ["A"] }] };
+    await fixture.handlers.tool_call[0](
+      { tool: "todo", toolCallId: "init-A", params: initParams },
+      { cwd: process.cwd(), isHuman: true }
     );
-    expect(uiCalled).toBe(false);
-    expect(activeContractedTasks.has("T1")).toBe(false);
-  });
-
-  test("Drop gray zone (0.55) rejected if UI confirm is false or hasUI false", async () => {
-    (globalThis as unknown as { mockJudgeNoul?: string }).mockJudgeNoul = "0.55";
-
-    // Subtest: UI returns false
-    activeContractedTasks.add("T1");
-    let threw = false;
-    try {
-      await interceptor?.(
-        { tool: "todo", params: { op: "drop", task: "T1" }, cancel: () => {} },
-        { cwd: __dirname, hasUI: true, ui: { confirm: async () => false } }
-      );
-    } catch { threw = true; }
-    expect(threw).toBe(true);
-    expect(activeContractedTasks.has("T1")).toBe(true);
-
-    // Subtest: hasUI false
-    activeContractedTasks.clear();
-    activeContractedTasks.add("T2");
-    threw = false;
-    let uiCalled = false;
-    try {
-      await interceptor?.(
-        { tool: "todo", params: { op: "drop", task: "T2" }, cancel: () => {} },
-        { cwd: __dirname, hasUI: false, ui: { confirm: async () => { uiCalled = true; return true; } } }
-      );
-    } catch { threw = true; }
-    expect(threw).toBe(true);
-    expect(uiCalled).toBe(false);
-    expect(activeContractedTasks.has("T2")).toBe(true);
-  });
-
-  test("Judge error treated as undecided (human confirm)", async () => {
-    (globalThis as unknown as { mockJudgeNoul?: string }).mockJudgeNoul = "0.50";
-
-    activeContractedTasks.add("T1");
-    let uiCalled = false;
-    await interceptor?.(
-      { tool: "todo", params: { op: "drop", task: "T1" }, cancel: () => {} },
-      { cwd: __dirname, hasUI: true, ui: { confirm: async () => { uiCalled = true; return true; } } }
+    await fixture.handlers.tool_result[0](
+      {
+        tool: "todo",
+        toolCallId: "init-A",
+        params: initParams,
+        details: { op: "init", phases: [{ name: "P2", tasks: [{ content: "A", status: "pending" }] }] },
+      },
+      {}
     );
-    expect(uiCalled).toBe(true);
-    expect(activeContractedTasks.has("T1")).toBe(false);
+
+    await expect(
+      fixture.handlers.tool_call[0](
+        { tool: "todo", toolCallId: "redrop-A", params: dropParams },
+        { cwd: process.cwd() }
+      )
+    ).rejects.toThrow("typesafe_verification_unavailable");
   });
 
-  test("Judge error treated as unavailable (fail-closed, no human confirm prompt)", async () => {
-    globalThis.fetch = (async () => ({ ok: false, status: 500, text: async () => "Internal Server Error" })) as unknown as typeof globalThis.fetch;
-
-    activeContractedTasks.add("T1");
-    let uiCalled = false;
-    let threw = false;
-    let cancelledReason: string | undefined;
-    try {
-      await interceptor?.(
-        { tool: "todo", params: { op: "drop", task: "T1" }, cancel: (r: string) => { cancelledReason = r; } },
-        { cwd: __dirname, hasUI: true, ui: { confirm: async () => { uiCalled = true; return true; } } }
-      );
-    } catch (e: unknown) {
-      threw = true;
-      if (!cancelledReason && e instanceof Error) cancelledReason = e.message;
-    }
-    expect(uiCalled).toBe(false);
-    expect(threw).toBe(true);
-    expect(activeContractedTasks.has("T1")).toBe(true);
-    expect(cancelledReason).toContain("TypeSafe drop gate rejected");
+  test("synthetic ops wrapper and missing native ID are rejected before staging", async () => {
+    const fixture = createPi();
+    const state = registerTestExtension(fixture.pi);
+    state.phases = [{ name: "P1", tasks: [{ content: "A", status: "pending" }] }];
+    await expect(fixture.handlers.tool_call[0]({ tool: "todo", params: { ops: [{ op: "drop", task: "A" }] } }, { cwd: process.cwd() })).rejects.toThrow("todo_ops_unsupported");
+    await expect(fixture.handlers.tool_call[0]({ tool: "todo", params: { op: "drop", task: "A" } }, { cwd: process.cwd() })).rejects.toThrow("todo_call_id_missing");
+    expect(state.stagedCalls.size).toBe(0);
   });
 
-  test("params auth rejected, host ctx.isHuman approved", async () => {
-    (globalThis as unknown as { mockJudgeNoul?: string }).mockJudgeNoul = "0.10";
-    activeContractedTasks.add("T1");
+  test("init replacement stages without modifying state before native commit", async () => {
+    const fixture = createPi();
+    const state = registerTestExtension(fixture.pi);
+    state.phases = [{ name: "P1", tasks: [{ content: "A", status: "in_progress" }] }];
+    const params = { op: "init", list: [{ phase: "P2", items: ["B"] }] };
+    await fixture.handlers.tool_call[0]({ tool: "todo", toolCallId: "init-p2", params }, { cwd: process.cwd(), isHuman: true });
+    expect(state.phases[0].tasks[0].content).toBe("A");
+    await fixture.handlers.tool_result[0]({ tool: "todo", toolCallId: "init-p2", params, details: { op: "init", phases: [{ name: "P2", tasks: [{ content: "B", status: "in_progress" }] }] } }, {});
+    expect(state.phases[0].tasks[0].content).toBe("B");
+  });
 
-    // params auth rejected
-    let threw = false;
-    try {
-      await interceptor?.(
-        { tool: "todo", params: { op: "drop", task: "T1", isHuman: true }, cancel: () => {} },
-        { cwd: __dirname }
-      );
-    } catch { threw = true; }
-    expect(threw).toBe(true);
-    expect(activeContractedTasks.has("T1")).toBe(true);
+  test("replacing init clears stale evidence and failure state for a same-content new incarnation", async () => {
+    const fixture = createPi();
+    const state = registerTestExtension(fixture.pi);
+    state.phases = [{ name: "P1", tasks: [{ content: "A", status: "in_progress" }] }];
+    state.taskBaselines.set("A", { files: new Map([["old.ts", "stale"]]), truncated: false });
+    state.pendingRemediations.set("A", {
+      taskId: "A",
+      gate: "Gate 1 Micro-Check",
+      diffHash: "stale",
+      reasons: ["stale"],
+      nextActions: ["stale"],
+      timestamp: 1,
+    });
+    state.consecutiveFailuresByTask.set("A", 2);
+    state.lastFailureReasonByTask.set("A", "stale");
+    const params = { op: "init", list: [{ phase: "P2", items: ["A"] }] };
 
-    // ctx isHuman approved
-    await interceptor?.(
-      { tool: "todo", params: { op: "drop", task: "T1" }, cancel: () => {} },
-      { cwd: __dirname, isHuman: true }
+    await fixture.handlers.tool_call[0](
+      { tool: "todo", toolCallId: "replace-A", params },
+      { cwd: process.cwd(), isHuman: true }
     );
-    expect(activeContractedTasks.has("T1")).toBe(false);
-  });
-
-  test("init items covering active tasks allowed, omitting triggers drop gate", async () => {
-    (globalThis as unknown as { mockJudgeNoul?: string }).mockJudgeNoul = "0.95";
-    activeContractedTasks.add("T1");
-    activeContractedTasks.add("T2");
-
-    // Covering
-    await interceptor?.(
-      { tool: "todo", params: { op: "init", items: ["T1", "T2", "T3"] }, cancel: () => {} },
-      { cwd: __dirname }
+    await fixture.handlers.tool_result[0](
+      {
+        tool: "todo",
+        toolCallId: "replace-A",
+        params,
+        details: { op: "init", phases: [{ name: "P2", tasks: [{ content: "A", status: "pending" }] }] },
+      },
+      {}
     );
-    expect(fetchStateBody).toBeNull();
-    expect(activeContractedTasks.has("T1")).toBe(true);
 
-    // Omitting T1
-    await interceptor?.(
-      { tool: "todo", params: { op: "init", items: ["T2"] }, cancel: () => {} },
-      { cwd: __dirname }
-    );
-    expect(fetchStateBody).not.toBeNull();
-    expect(String(fetchStateBody?.tasks_to_drop)).toContain("T1");
-    expect(String(fetchStateBody?.tasks_to_drop)).not.toContain("T2");
-    expect(activeContractedTasks.has("T1")).toBe(false);
-  });
-
-  test("Mixed ops: one judge call covers both", async () => {
-    (globalThis as unknown as { mockJudgeNoul?: string }).mockJudgeNoul = "0.95";
-    activeContractedTasks.add("T1");
-    activeContractedTasks.add("T2");
-
-    let fetchCount = 0;
-    const oldFetch = globalThis.fetch;
-    globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
-      fetchCount++;
-      return oldFetch(url, init);
-    }) as typeof globalThis.fetch;
-
-    await interceptor?.(
-      { tool: "todo", params: { ops: [{ op: "drop", task: "T1" }, { op: "drop", task: "T2" }] }, cancel: () => {} },
-      { cwd: __dirname }
-    );
-    expect(fetchCount).toBe(1);
-    expect(String(fetchStateBody?.tasks_to_drop)).toContain("T1");
-    expect(String(fetchStateBody?.tasks_to_drop)).toContain("T2");
-    expect(activeContractedTasks.has("T1")).toBe(false);
-    expect(activeContractedTasks.has("T2")).toBe(false);
-  });
-
-  test("Stall ratchet resets or approves by human", async () => {
-    activeContractedTasks.add("T3");
-
-    const failEvt: MockEvent = {
-      tool: "todo",
-      params: { op: "done", task: "T3", testCommand: 'bun -e "process.exit(1)"' },
-      cancel: () => {},
-    };
-    let errCancel = "";
-    const ctxRej = { cwd: process.cwd(), hasUI: true, ui: { confirm: async () => false } };
-    try { await interceptor?.(failEvt, ctxRej); } catch {}
-    try { await interceptor?.(failEvt, ctxRej); } catch {}
-
-    let confirmCalled = false;
-    const ctxApp = {
-      cwd: process.cwd(),
-      hasUI: true,
-      ui: { confirm: async () => { confirmCalled = true; return true; } },
-    };
-    await interceptor?.(failEvt, ctxApp);
-
-    expect(confirmCalled).toBe(true);
-    expect(activeContractedTasks.has("T3")).toBe(false);
-
-    activeContractedTasks.add("T4");
-    const cancelledReasons: string[] = [];
-    const failEvt4: MockEvent = {
-      tool: "todo",
-      params: { op: "done", task: "T4", testCommand: 'bun -e "process.exit(1)"' },
-      cancel: (r: string) => { cancelledReasons.push(r); },
-    };
-    try { await interceptor?.(failEvt4, ctxRej); } catch {}
-    try { await interceptor?.(failEvt4, ctxRej); } catch {}
-    let threw = false;
-    let errReason = "";
-    try {
-      await interceptor?.(failEvt4, ctxRej);
-    } catch (e: unknown) {
-      threw = true;
-      if (e instanceof Error) errReason = e.message;
-    }
-    const reason3 = errReason || cancelledReasons[cancelledReasons.length - 1] || "";
-    expect(threw || reason3 !== "").toBe(true);
-    expect(reason3).toContain("stall ratchet");
-
-    threw = false;
-    errReason = "";
-    try {
-      await interceptor?.(failEvt4, ctxRej);
-    } catch (e: unknown) {
-      threw = true;
-      if (e instanceof Error) errReason = e.message;
-    }
-    const reason4 = errReason || cancelledReasons[cancelledReasons.length - 1] || "";
-    expect(threw || reason4 !== "").toBe(true);
-    expect(reason4).toContain("Gate 1 Micro-Check");
+    expect(state.taskBaselines.has("A")).toBe(false);
+    expect(state.pendingRemediations.has("A")).toBe(false);
+    expect(state.consecutiveFailuresByTask.has("A")).toBe(false);
+    expect(state.lastFailureReasonByTask.has("A")).toBe(false);
   });
 });

@@ -23,16 +23,16 @@ export function generateRemediationBlock(params: RemediationDirective): string {
         dynamicActionItems.push(`Run full test suite to verify fixes: bun test`);
       }
     }
-    
-    if (reason.toLowerCase().includes("test evasion") || reason.toLowerCase().includes("deleted assertion")) {
-      dynamicActionItems.push("Restore deleted test assertions and ensure tests pass legitimately.");
-      dynamicConstraints.push("Do not delete existing assertions or test blocks.");
-    }
-    
+
     if (reason.toLowerCase().includes("drift") || reason.toLowerCase().includes("scope creep")) {
       dynamicActionItems.push("Revert unapproved architectural changes and restrict modifications to planned boundaries.");
       dynamicConstraints.push("Strictly adhere to planned architecture and boundaries.");
     }
+  }
+
+  if (params.testEvasion) {
+    dynamicActionItems.push("Review removed coverage or meaningful behavior before re-attempting completion.");
+    dynamicConstraints.push("Do not delete existing assertions or test blocks.");
   }
 
   const uniqueConstraints = [...new Set(dynamicConstraints)];

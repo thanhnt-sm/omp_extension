@@ -1,6 +1,23 @@
+import { createRequire } from "node:module";
 import { preparePayloadSafe, type TypeSafePayload } from "./payload-safety";
 import { encloseUntrusted } from "./xml-enclosure";
 import { resolveAutoApprovalThreshold } from "./verification-gate";
+
+type ApiClient = {
+  requestWithRetry: (options: { fetchImpl: typeof fetch; apiKey: string; body: string }) => Promise<
+    { kind: "ok"; data: unknown } | { kind: "auth" | "http_error"; status: number } | { kind: "bad_response" }
+  >;
+  checkCredentialCooldown: (apiKey: string) => { status: number } | null;
+  sanitizeAnswers: (questions: Record<string, unknown>, rawAnswers: unknown) => Record<string, unknown> | null;
+};
+function loadApiClient(): ApiClient | null {
+  try {
+    const client = createRequire(import.meta.url)("./typesafe-api-client.cjs") as ApiClient;
+    return typeof client.requestWithRetry === "function" && typeof client.sanitizeAnswers === "function" ? client : null;
+  } catch {
+    return null;
+  }
+}
 
 export interface PlanQuestion {
   type: "choice" | "score" | "noul";
@@ -212,44 +229,32 @@ async function defaultJudgeClient(
   error?: string;
 }> {
   const apiKey = process.env.TYPESAFE_API_KEY?.trim();
-  if (!apiKey) {
-    return { error: "TYPESAFE_API_KEY is missing from environment" };
-  }
+  if (!apiKey) return { error: "TYPESAFE_API_KEY is missing from environment" };
+  const apiClient = loadApiClient();
+  if (!apiClient) return { error: "typesafe_api_client_unavailable" };
+  const cooldown = apiClient.checkCredentialCooldown(apiKey);
+  if (cooldown) return { error: `http_${cooldown.status}` };
 
-  const payload: TypeSafePayload = {
-    state,
-    questions,
-    model: "jev-latest",
-  };
-
+  const payload: TypeSafePayload = { state, questions, model: "jev-latest" };
   const safePayload = preparePayloadSafe(payload, { apiKey });
-
   try {
-    const res = await fetch("https://api.typesafe.ai/v1/systemone", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
+    const outcome = await apiClient.requestWithRetry({
+      fetchImpl: globalThis.fetch,
+      apiKey,
       body: JSON.stringify(safePayload),
-      signal: AbortSignal.timeout(10000),
     });
-
-    if (!res.ok) {
-      return { error: `http_${res.status}` };
+    if (outcome.kind !== "ok") {
+      return { error: "status" in outcome ? `http_${outcome.status}` : "bad_response" };
     }
-
-    const json = (await res.json()) as { answers?: Record<string, unknown> };
-    return {
-      answers: json.answers as {
-        scope_mode?: { choice: string };
-        algorithm_depth?: { score: number };
-        task_actionability?: { noul: number };
-        claude_isolation_adherence?: { noul: number };
-      },
-    };
+    const rawAnswers = outcome.data && typeof outcome.data === "object" && "answers" in outcome.data
+      ? outcome.data.answers
+      : undefined;
+    const answers = apiClient.sanitizeAnswers(safePayload.questions, rawAnswers);
+    return answers
+      ? { answers: answers as { scope_mode?: { choice: string }; algorithm_depth?: { score: number }; task_actionability?: { noul: number }; claude_isolation_adherence?: { noul: number } } }
+      : { error: "bad_response" };
   } catch (err: unknown) {
-    return { error: err instanceof Error ? err.message : "network_error" };
+    return { error: err instanceof Error && (err.name === "AbortError" || err.name === "TimeoutError") ? "timeout" : "network_error" };
   }
 }
 

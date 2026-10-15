@@ -1,6 +1,25 @@
+import { createRequire } from "node:module";
 import { preparePayloadSafe, isSecretInKey, clampText } from "./payload-safety";
 import { encloseUntrusted } from "./xml-enclosure";
+import { analyzeDiffForTestEvasion } from "./ast-analyzer";
+
 import { resolveAutoApprovalThreshold } from "./verification-gate";
+
+type ApiClient = {
+  requestWithRetry: (options: { fetchImpl: typeof fetch; apiKey: string; body: string }) => Promise<
+    { kind: "ok"; data: unknown } | { kind: "auth" | "http_error"; status: number } | { kind: "bad_response" }
+  >;
+  checkCredentialCooldown: (apiKey: string) => { status: number } | null;
+  sanitizeAnswers: (questions: Record<string, unknown>, rawAnswers: unknown) => Record<string, unknown> | null;
+};
+function loadApiClient(): ApiClient | null {
+  try {
+    const client = createRequire(import.meta.url)("./typesafe-api-client.cjs") as ApiClient;
+    return typeof client.requestWithRetry === "function" && typeof client.sanitizeAnswers === "function" ? client : null;
+  } catch {
+    return null;
+  }
+}
 
 export { resolveAutoApprovalThreshold } from "./verification-gate";
 
@@ -22,6 +41,7 @@ export interface MicroCheckResult {
   testPassed: boolean;
   claudeSafe: boolean;
   assertionDeleted?: boolean;
+  testEvasion?: boolean;
   nonGitFallbackUsed?: boolean;
 }
 
@@ -93,33 +113,33 @@ export interface ExpertJudgeClient {
 
 const defaultJudgeClient: ExpertJudgeClient = {
   async evaluate({ state, questions }) {
-    const apiKey = process.env.TYPESAFE_API_KEY;
-    if (!apiKey) {
-      return { error: "TYPESAFE_API_KEY environment variable is missing" };
-    }
+    const apiKey = process.env.TYPESAFE_API_KEY?.trim();
+    if (!apiKey) return { error: "TYPESAFE_API_KEY environment variable is missing" };
+    const apiClient = loadApiClient();
+    if (!apiClient) return { error: "typesafe_api_client_unavailable" };
+    const cooldown = apiClient.checkCredentialCooldown(apiKey);
+    if (cooldown) return { error: `http_${cooldown.status}` };
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
       const sanitized = preparePayloadSafe({
         state,
         questions: questions as Record<string, { type: "choice" | "score" | "noul"; instructions: string; criteria?: string[] }>,
+        model: "jev-latest",
+      }, { apiKey });
+      const outcome = await apiClient.requestWithRetry({
+        fetchImpl: globalThis.fetch,
+        apiKey,
+        body: JSON.stringify(sanitized),
       });
-      const res = await fetch("https://api.typesafe.ai/v1/systemone", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({ model: "jev-latest", ...sanitized }),
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-      if (!res.ok) {
-        return { error: `TypeSafe API returned HTTP ${res.status}: ${res.statusText}` };
+      if (outcome.kind !== "ok") {
+        return { error: "status" in outcome ? `http_${outcome.status}` : "bad_response" };
       }
-      return (await res.json()) as ExpertJudgeResponse;
+      const rawAnswers = outcome.data && typeof outcome.data === "object" && "answers" in outcome.data
+        ? outcome.data.answers
+        : undefined;
+      const answers = apiClient.sanitizeAnswers(sanitized.questions, rawAnswers);
+      return answers ? { answers: answers as ExpertJudgeResponse["answers"] } : { error: "bad_response" };
     } catch (err) {
-      return { error: `TypeSafe network error: ${err instanceof Error ? err.message : String(err)}` };
+      return { error: err instanceof Error && (err.name === "AbortError" || err.name === "TimeoutError") ? "timeout" : "network_error" };
     }
   },
 };
@@ -145,13 +165,10 @@ export async function runTaskMicroCheck(evidence: MicroCheckEvidence): Promise<M
     reasons.push(`Test suite failed with exit code ${evidence.testExitCode}. Test failure must be resolved before completing task.`);
   }
 
-  const deletedAssertionMatches =
-    evidence.gitDiff.match(/(?:^|\n)-[ \t]*(?:expect\(|assert\(|assert\.[a-zA-Z]+\()/g) || [];
-  const addedAssertionMatches =
-    evidence.gitDiff.match(/(?:^|\n)\+[ \t]*(?:expect\(|assert\(|assert\.[a-zA-Z]+\()/g) || [];
-  const assertionDeleted = deletedAssertionMatches.length > addedAssertionMatches.length;
-  if (assertionDeleted) {
-    reasons.push("Test evasion detected: git diff contains deleted assertions (expect/assert). Deleting tests to fake completion is prohibited.");
+  const testEvasion = analyzeDiffForTestEvasion(evidence.gitDiff);
+  const assertionDeleted = testEvasion.deletedAssertions.length > 0;
+  if (testEvasion.testEvasion) {
+    reasons.push(...testEvasion.issues);
   }
   const hasGitEvidence = (evidence.gitStatus?.trim().length ?? 0) > 0 || (evidence.gitDiff?.trim().length ?? 0) > 0;
   const hasTestEvidence = evidence.testExitCode !== null || (evidence.testOutput?.trim().length ?? 0) > 0;
@@ -165,13 +182,14 @@ export async function runTaskMicroCheck(evidence: MicroCheckEvidence): Promise<M
     );
   }
 
-  const passed = claudeSafe && testPassed && !assertionDeleted && !zeroEvidence && evidence.taskDoneProven !== false && evidence.todoCompleted !== false;
+  const passed = claudeSafe && testPassed && !testEvasion.testEvasion && !zeroEvidence && evidence.taskDoneProven !== false && evidence.todoCompleted !== false;
   return {
     passed,
     reasons,
     testPassed,
     claudeSafe,
     assertionDeleted,
+    testEvasion: testEvasion.testEvasion,
     nonGitFallbackUsed: evidence.nonGitFallbackUsed ?? false,
   };
 }

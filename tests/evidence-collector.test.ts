@@ -6,6 +6,7 @@ import path from "node:path";
 import {
   assertPathIsClaudeSafe,
   collectTaskEvidence,
+  executeTestCommand,
   extractCriteriaFromPlan,
   sanitizeEnvironment,
   SecurityViolationError,
@@ -79,8 +80,8 @@ describe("Phase 1: Deterministic Evidence Collector & Claude Isolation", () => {
       "| 1 | [Setup Enriched Payload](./phase-01-setup.md) | Pending |",
       "| 2 | [Task-Aware Rubrics](./phase-02-task.md) | Pending |"
     ].join("\n");
-    const tmpDir = os.tmpdir();
-    const planPath = path.join(tmpDir, `plan-${Date.now()}.md`);
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "typesafe-evidence-"));
+    const planPath = path.join(tmpDir, "plan.md");
     const phasePath = path.join(tmpDir, "phase-01-setup.md");
     await fs.writeFile(planPath, samplePlan);
     await fs.writeFile(phasePath, [
@@ -98,8 +99,7 @@ describe("Phase 1: Deterministic Evidence Collector & Claude Isolation", () => {
       expect(evidence.criteria).toContain("PhaseCriteriaAlpha");
       expect(evidence.criteria).toContain("PhaseCriteriaBeta");
     } finally {
-      await fs.unlink(planPath).catch(() => {});
-      await fs.unlink(phasePath).catch(() => {});
+      await fs.rm(tmpDir, { recursive: true, force: true });
     }
   });
 
@@ -294,5 +294,39 @@ describe("Phase 1: Deterministic Evidence Collector & Claude Isolation", () => {
     } finally {
       await fs.rm(tempRepo, { recursive: true, force: true }).catch(() => {});
     }
+  });
+
+  test("collectTaskEvidence reuses same-operation snapshot and test result without executing the test command", async () => {
+    const tempRepo = await fs.mkdtemp(path.join(os.tmpdir(), "typesafe-evidence-shared-"));
+    try {
+      execSync("git init", { cwd: tempRepo, stdio: "ignore" });
+      await fs.writeFile(path.join(tempRepo, "changed.ts"), "export const changed = true;\n", "utf8");
+      const afterSnapshot = await captureWorkspaceSnapshot(tempRepo);
+      const evidence = await collectTaskEvidence({
+        cwd: tempRepo,
+        baseline: { files: new Map(), truncated: false },
+        testCommand: "bun -e \"process.exit(99)\"",
+        afterSnapshot,
+        testResult: { exitCode: 0, output: "shared test result" },
+      });
+      expect(evidence.testExitCode).toBe(0);
+      expect(evidence.testOutput).toBe("shared test result");
+      expect(evidence.changedFiles).toContain("changed.ts");
+    } finally {
+      await fs.rm(tempRepo, { recursive: true, force: true });
+    }
+  });
+
+  test("executeTestCommand rejects an already-aborted signal before spawning work", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const result = await executeTestCommand(
+      'bun -e "process.exit(99)"',
+      process.cwd(),
+      15000,
+      controller.signal
+    );
+    expect(result.exitCode).toBe(130);
+    expect(result.output).toContain("aborted");
   });
 });

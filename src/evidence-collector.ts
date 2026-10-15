@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
 import * as fsSync from "node:fs";
 import { promises as fs } from "node:fs";
@@ -11,6 +11,16 @@ export class SecurityViolationError extends Error {
   }
 }
 
+export interface TestCommandResult {
+  exitCode: number;
+  output: string;
+}
+
+export interface WorkspaceSnapshotOptions {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+}
+
 export interface TaskEvidenceOptions {
   cwd?: string;
   taskId?: string;
@@ -21,6 +31,9 @@ export interface TaskEvidenceOptions {
   taskDoneProven?: boolean;
   todoCompleted?: boolean;
   baseline?: WorkspaceSnapshot;
+  afterSnapshot?: WorkspaceSnapshot;
+  testResult?: TestCommandResult;
+  signal?: AbortSignal;
 }
 
 export interface TaskEvidenceResult {
@@ -44,10 +57,14 @@ export interface WorkspaceSnapshot {
   headSha?: string;
 }
 
-export async function captureWorkspaceSnapshot(cwd: string): Promise<WorkspaceSnapshot> {
+export async function captureWorkspaceSnapshot(
+  cwd: string,
+  options: WorkspaceSnapshotOptions = {}
+): Promise<WorkspaceSnapshot> {
+  const timeoutMs = options.timeoutMs ?? 15000;
   const [statusRes, headRes] = await Promise.all([
-    executeTestCommand("git status --porcelain -uall", cwd, 15000),
-    executeTestCommand("git rev-parse HEAD", cwd, 15000),
+    executeTestCommand("git status --porcelain -uall", cwd, timeoutMs, options.signal),
+    executeTestCommand("git rev-parse HEAD", cwd, timeoutMs, options.signal),
   ]);
   const headSha = headRes.exitCode === 0 ? headRes.output.trim() : undefined;
   const files = new Map<string, string>();
@@ -242,12 +259,32 @@ export function extractCriteriaFromPlan(
 export async function executeTestCommand(
   command: string,
   cwd: string,
-  timeoutMs = 15000
-): Promise<{ exitCode: number; output: string }> {
-  const cleanEnv = sanitizeEnvironment();
-  const { promise, resolve } = Promise.withResolvers<{ exitCode: number; output: string }>();
+  timeoutMs = 15000,
+  signal?: AbortSignal
+): Promise<TestCommandResult> {
+  if (signal?.aborted) {
+    return { exitCode: 130, output: "[Command aborted before start]" };
+  }
 
-  const child = spawn(command, {
+  const cleanEnv = sanitizeEnvironment();
+  const { promise, resolve } = Promise.withResolvers<TestCommandResult>();
+  let settled = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let child: ChildProcess | undefined;
+
+  const finish = (result: TestCommandResult) => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", abort);
+    resolve(result);
+  };
+  const abort = () => {
+    child?.kill();
+    finish({ exitCode: 130, output: "[Command aborted]" });
+  };
+
+  child = spawn(command, {
     cwd,
     env: cleanEnv,
     shell: true,
@@ -262,25 +299,27 @@ export async function executeTestCommand(
     output += chunk.toString("utf8");
   });
 
-  const timer = setTimeout(() => {
-    child.kill();
-    resolve({
+  timer = setTimeout(() => {
+    child?.kill();
+    finish({
       exitCode: 124,
       output: output + `\n[Command timed out after ${timeoutMs}ms]`,
     });
   }, timeoutMs);
+  signal?.addEventListener("abort", abort, { once: true });
+  if (signal?.aborted) {
+    abort();
+  }
 
   child.on("close", (code) => {
-    clearTimeout(timer);
-    resolve({
+    finish({
       exitCode: code ?? 1,
       output,
     });
   });
 
   child.on("error", (err) => {
-    clearTimeout(timer);
-    resolve({
+    finish({
       exitCode: 1,
       output: output + `\n[Process spawn error: ${err.message}]`,
     });
@@ -297,6 +336,9 @@ export async function collectTaskEvidence(
   options: TaskEvidenceOptions
 ): Promise<TaskEvidenceResult> {
   const cwd = options.cwd ?? process.cwd();
+  const deadline = options.timeoutMs ?? 15000;
+  const run = (command: string, timeoutMs = deadline) =>
+    executeTestCommand(command, cwd, Math.min(timeoutMs, deadline), options.signal);
 
   if (options.planPath) {
     assertPathIsClaudeSafe(options.planPath);
@@ -308,11 +350,14 @@ export async function collectTaskEvidence(
   let changedFiles: string[] = [];
 
   if (options.baseline && !options.baseline.truncated) {
-    const after = await captureWorkspaceSnapshot(cwd);
+    const after = options.afterSnapshot ?? await captureWorkspaceSnapshot(cwd, {
+      signal: options.signal,
+      timeoutMs: deadline,
+    });
     changedFiles = diffSnapshots(options.baseline, after);
     diffScope = "task-baseline";
 
-    const statusRes = await executeTestCommand("git status --porcelain -uall", cwd, 15000);
+    const statusRes = await run("git status --porcelain -uall");
     const porcelainLines = statusRes.output.split(/\r?\n/).filter((l) => l.trim().length > 0);
     const statusEntries: string[] = [];
     const trackedChanged: string[] = [];
@@ -343,7 +388,7 @@ export async function collectTaskEvidence(
     let trackedDiff = "";
     if (trackedChanged.length > 0) {
       const filesArg = trackedChanged.map((f) => `"${f}"`).join(" ");
-      const diffRes = await executeTestCommand(`git diff HEAD -- ${filesArg}`, cwd, 5000);
+      const diffRes = await run(`git diff HEAD -- ${filesArg}`, 5000);
       trackedDiff = diffRes.output.trim();
     }
     let untrackedDiff = "";
@@ -354,13 +399,13 @@ export async function collectTaskEvidence(
     if (!trackedDiff && untrackedChanged.length === 0 && commitChangedSinceBaseline) {
       try {
         const [recentLogRes, commitDiffRes] = await Promise.all([
-          executeTestCommand("git log -n 1 --oneline", cwd, 5000),
-          executeTestCommand("git diff HEAD~1..HEAD", cwd, 5000),
+          run("git log -n 1 --oneline", 5000),
+          run("git diff HEAD~1..HEAD", 5000),
         ]);
         if (recentLogRes.exitCode === 0 && commitDiffRes.exitCode === 0 && commitDiffRes.output.trim()) {
           gitStatus = `Committed in ${recentLogRes.output.trim()}`;
           trackedDiff = commitDiffRes.output.trim();
-          const statRes = await executeTestCommand("git diff --name-only HEAD~1..HEAD", cwd, 5000);
+          const statRes = await run("git diff --name-only HEAD~1..HEAD", 5000);
           changedFiles = statRes.output.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
         }
       } catch {}
@@ -368,7 +413,7 @@ export async function collectTaskEvidence(
       trackedDiff = statusEntries.join("\n");
     } else if (!trackedDiff && untrackedChanged.length === 0 && porcelainLines.length > 0) {
       gitStatus = porcelainLines.join("\n");
-      const fullDiffRes = await executeTestCommand("git diff HEAD", cwd, 5000);
+      const fullDiffRes = await run("git diff HEAD", 5000);
       trackedDiff = fullDiffRes.output.trim();
       changedFiles = porcelainLines.map((l) => {
         let p = l.slice(3).trim();
@@ -391,10 +436,10 @@ export async function collectTaskEvidence(
     gitDiff = prioritizeCodeDiffBlocks([trackedDiff, untrackedDiff.trim()].filter(Boolean).join("\n\n"));
   } else {
     const [gitStatusRes, gitDiffRes] = await Promise.all([
-      executeTestCommand("git status --porcelain -uall", cwd, 5000),
-      executeTestCommand("git diff HEAD", cwd, 5000).then(async (res) => {
+      run("git status --porcelain -uall", 5000),
+      run("git diff HEAD", 5000).then(async (res) => {
         if (res.exitCode !== 0) {
-          return executeTestCommand("git diff", cwd, 5000);
+          return run("git diff", 5000);
         }
         return res;
       }),
@@ -405,14 +450,14 @@ export async function collectTaskEvidence(
     if (!gitStatus && !gitDiff) {
       try {
         const [recentLogRes, commitDiffRes] = await Promise.all([
-          executeTestCommand("git log -n 1 --oneline", cwd, 5000),
-          executeTestCommand("git diff HEAD~1..HEAD", cwd, 5000),
+          run("git log -n 1 --oneline", 5000),
+          run("git diff HEAD~1..HEAD", 5000),
         ]);
         if (recentLogRes.exitCode === 0 && commitDiffRes.exitCode === 0 && commitDiffRes.output.trim()) {
           gitStatus = `Committed in ${recentLogRes.output.trim()}`;
           gitDiff = commitDiffRes.output.trim();
           diffScope = "task-baseline";
-          const statRes = await executeTestCommand("git diff --name-only HEAD~1..HEAD", cwd, 5000);
+          const statRes = await run("git diff --name-only HEAD~1..HEAD", 5000);
           changedFiles = statRes.output.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
         }
       } catch {}
@@ -444,8 +489,11 @@ export async function collectTaskEvidence(
   }
   let testExitCode: number | null = null;
   let testOutput = "";
-  if (options.testCommand) {
-    const testRes = await executeTestCommand(options.testCommand, cwd, options.timeoutMs ?? 15000);
+  if (options.testResult) {
+    testExitCode = options.testResult.exitCode;
+    testOutput = options.testResult.output;
+  } else if (options.testCommand) {
+    const testRes = await run(options.testCommand);
     testExitCode = testRes.exitCode;
     testOutput = testRes.output;
   }

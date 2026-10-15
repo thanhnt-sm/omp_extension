@@ -129,24 +129,20 @@ export async function runMultiPersonaDebate(
       model: targetModel,
     });
   } else {
-    response = {
-      modelUsed: targetModel,
-      answers: {
-        architect: { score: 3 },
-        security: { score: 3 },
-        performance: { score: 3 },
-        ux: { score: 3 },
-        devils_advocate: { score: 3 },
-      },
-    };
+    response = { modelUsed: targetModel, error: "TypeSafe debate client is unavailable" };
   }
 
   const answers = response.answers || {};
-  const architectScore = answers.architect?.score ?? 2;
-  const securityScore = answers.security?.score ?? 2;
-  const performanceScore = answers.performance?.score ?? 2;
-  const uxScore = answers.ux?.score ?? 2;
-  const devilsScore = answers.devils_advocate?.score ?? 2;
+  const requiredPersonas = ["architect", "security", "performance", "ux", "devils_advocate"];
+  const unavailable = Boolean(response.error) || requiredPersonas.some((persona) => {
+    const answer = answers[persona];
+    return !answer || !Number.isFinite(answer.score);
+  });
+  const architectScore = unavailable ? 0 : answers.architect.score;
+  const securityScore = unavailable ? 0 : answers.security.score;
+  const performanceScore = unavailable ? 0 : answers.performance.score;
+  const uxScore = unavailable ? 0 : answers.ux.score;
+  const devilsScore = unavailable ? 0 : answers.devils_advocate.score;
 
   const personas = {
     architect: { score: architectScore, verdict: answers.architect?.verdict },
@@ -160,6 +156,9 @@ export async function runMultiPersonaDebate(
   const consensusScore = parseFloat((scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2));
 
   const reasons: string[] = [];
+  if (unavailable) {
+    reasons.push(`TypeSafe debate unavailable: ${response.error || "required persona scores were missing or invalid"}.`);
+  }
   if (consensusScore < 1.5) {
     reasons.push(`Low consensus score (${consensusScore}/3.0) across evaluate personas`);
   }

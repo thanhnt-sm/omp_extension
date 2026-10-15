@@ -224,3 +224,11 @@ $env:TYPESAFE_ALLOW_MODIFICATION="1"
 export TYPESAFE_ALLOW_MODIFICATION=1
 ```
 *Lưu ý: Luôn khởi động lại phiên OMP sau khi gán biến môi trường.*
+
+---
+
+## 9. Runtime Origin Proof & Promotion Boundary
+
+At host startup, the extension emits exactly one non-display `typesafe-health` record whose JSON contains the loaded entrypoint `import.meta.url`, the selected bundled module origins, and one-time SHA-256 digests. The record contains no source content, credentials, request data, or telemetry; it is runtime provenance for comparison with a successful deployment manifest, not an API-health signal.
+
+Promotion remains blocked while the immutable loader proxy does not match its required one-line trampoline. The proxy is an external operator-owned boundary: neither the extension nor `sync-baseline` may repair, replace, or mutate it automatically. In the audited P6 attempt, the read-only sync dry-run failed this immutable-pointer validation before any managed transaction began; it made no proxy or deployment modification and created no transaction state requiring rollback or recovery. Passing workspace tests and source-level origin-proof coverage therefore do not promote P6. No restart or live native proof was attempted in that blocked attempt. After an operator repairs the proxy and a supervised deployment succeeds, the OMP host must restart and an isolated live scratch native session must capture the loaded origin record plus native lifecycle evidence. Until that external restart/live-native evidence exists, P6 remains pending.

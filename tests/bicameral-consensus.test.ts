@@ -30,6 +30,26 @@ describe("Phase 2: Bicameral Consensus Engine & Advisor Intent Evaluator", () =>
       expect(result.reason.toLowerCase()).toContain("explicit");
     });
 
+    test("does not authorize dropping an unrelated task from a scoped cancellation", () => {
+      const result = evaluateAdvisorIntent({
+        operation: "drop",
+        task: "Implement OAuth2 login flow",
+        userRequest: "Please drop task A because it is superseded.",
+      });
+
+      expect(result.verdict).toBe("UNCERTAIN");
+    });
+
+    test("does not let cancellation of task A authorize dropping task B", () => {
+      const result = evaluateAdvisorIntent({
+        operation: "drop",
+        task: "Implement OAuth2 login flow",
+        userRequest: "Drop the crash investigation. Implement OAuth2 login flow.",
+      });
+
+      expect(result.verdict).toBe("DISALLOW");
+    });
+
     test("detects clean build / test success obsolescence", () => {
       const ctx: AdvisorContext = {
         operation: "drop",
@@ -42,6 +62,19 @@ describe("Phase 2: Bicameral Consensus Engine & Advisor Intent Evaluator", () =>
       expect(result.verdict).toBe("ALLOW");
       expect(result.confidence).toBeGreaterThanOrEqual(0.85);
       expect(result.reason.toLowerCase()).toContain("clean build");
+    });
+
+    test("does not let clean-build inference override an active user task request", () => {
+      const result = evaluateAdvisorIntent({
+        operation: "drop",
+        task: "Implement OAuth2 login flow",
+        userRequest: "Please implement OAuth2 login flow and add security unit tests.",
+        agentWorkLog: "Clean build succeeded.",
+        hasCleanBuildEvidence: true,
+      });
+
+      expect(result.verdict).toBe("DISALLOW");
+      expect(result.reason.toLowerCase()).toContain("requested");
     });
 
     test("disallows unauthorized drop when user asked for the task and no cancel exists", () => {

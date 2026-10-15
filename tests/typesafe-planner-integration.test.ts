@@ -1,12 +1,11 @@
+import { spawnSync } from "node:child_process";
 import { expect, test, describe, mock, beforeEach, afterEach } from "bun:test";
 import type { Mock } from "bun:test";
 import os from "node:os";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { createRequire } from "node:module";
-const testRequire = createRequire(import.meta.url);
-import registerExtension, { resetLastCheckpoint } from "../typesafe-planner";
-import { createEnvScope, withScopedEnv } from "./helpers/test-env-harness";
+import registerExtension from "../typesafe-planner";
+import { createEnvScope } from "./helpers/test-env-harness";
 describe("TypeSafe Planner Integration", () => {
   let piMock: {
     zod: unknown;
@@ -17,15 +16,32 @@ describe("TypeSafe Planner Integration", () => {
   let registeredTools: Record<string, (toolCallId: string, params: unknown, signal?: AbortSignal, onUpdate?: unknown, ctx?: unknown) => Promise<unknown>> = {};
   let toolExecute: (toolCallId: string, params: unknown, signal?: AbortSignal, onUpdate?: unknown, ctx?: unknown) => Promise<unknown>;
   let restoreScope: (() => void) | null = null;
+  let fixtureHome: string;
 
-  afterEach(() => {
+  function registerTestExtension() {
+    return registerExtension(piMock as unknown as Parameters<typeof registerExtension>[0], {
+      homeDir: fixtureHome,
+      env: { TYPESAFE_API_KEY: "test_key" },
+    });
+  }
+
+  afterEach(async () => {
     if (restoreScope) {
       restoreScope();
       restoreScope = null;
     }
+    await fs.rm(fixtureHome, { recursive: true, force: true });
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    fixtureHome = await fs.mkdtemp(path.join(os.tmpdir(), "typesafe-home-"));
+    await fs.mkdir(path.join(fixtureHome, ".claude"), { recursive: true });
+    await fs.writeFile(
+      path.join(fixtureHome, ".claude", ".ck.json"),
+      JSON.stringify({ typesafe: { projects: ["*", process.cwd(), "/fake/project"], excludeProjects: [] } }),
+      "utf8"
+    );
+    registeredTools = {};
     piMock = {
       zod: {
         object: (x: unknown) => x,
@@ -47,49 +63,63 @@ describe("TypeSafe Planner Integration", () => {
       })
     };
     
-    // Set required env vars with hermetic isolation
     restoreScope = createEnvScope({ TYPESAFE_API_KEY: "test_key" });
-    resetLastCheckpoint();
   });
 
-  test("Phase 1: Module Loading - catches missing typesafe-policy-client.cjs gracefully without fatal throw", async () => {
-    // We mock os.homedir to return a fake path so the module cannot be found
-    const realHomedir = os.homedir();
-    const policyFilePath = path.join(realHomedir, ".claude", "mcp", "typesafe", "typesafe-policy-client.cjs");
-    let moved = false;
+  test("missing runtime dependency fixture is isolated in a copied bundle subprocess", async () => {
+    const bundleDir = await fs.mkdtemp(path.join(os.tmpdir(), "typesafe-bundle-"));
     try {
-      await fs.access(policyFilePath);
-      for (const k of Object.keys(testRequire.cache)) {
-        if (k.includes("typesafe-policy-client")) {
-          delete testRequire.cache[k];
+      await fs.copyFile(path.resolve(import.meta.dir, "../typesafe-planner.ts"), path.join(bundleDir, "typesafe-planner.ts"));
+      await fs.cp(path.resolve(import.meta.dir, "../src"), path.join(bundleDir, "src"), { recursive: true });
+      await fs.rm(path.join(bundleDir, "src", "typesafe-policy-client.cjs"));
+
+      const result = spawnSync(
+        process.execPath,
+        ["--eval", 'import("./typesafe-planner.ts").then(() => import("./src/typesafe-policy-client.cjs"))'],
+        {
+          cwd: bundleDir,
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            HOME: fixtureHome,
+            USERPROFILE: fixtureHome,
+            TYPESAFE_API_KEY: "fixture-key",
+          },
         }
-      }
-      await fs.rename(policyFilePath, policyFilePath + ".bak");
-      moved = true;
+      );
 
-      registerExtension(piMock as unknown as Parameters<typeof registerExtension>[0]);
-      expect(toolExecute).toBeDefined();
-
-      // Call execute. It should gracefully catch the missing module and return a clean error result
-            const res = await toolExecute("call_1", {
-        state: "untrusted",
-        questions: { "q1": { type: "choice", instructions: "escalate", criteria: ["auto", "review"] } }
-      }, new AbortController().signal, undefined, { cwd: "/fake/project" });
-
-      expect(res.isError).toBe(true);
-      expect(res.content[0].text).toBe("TypeSafe error: policy_client_missing");
+      expect(result.status).not.toBe(0);
+      await fs.access(path.resolve(import.meta.dir, "../src/typesafe-policy-client.cjs"));
     } finally {
-      if (moved) {
-        try {
-          await fs.rename(policyFilePath + ".bak", policyFilePath);
-        } catch {}
-      }
+      await fs.rm(bundleDir, { recursive: true, force: true });
     }
+  });
 
+  test("registration returns independent state and resolves through injected home and environment", async () => {
+    const first = registerTestExtension();
+    const second = registerTestExtension();
+    expect(first).not.toBe(second);
+    expect(first.resolverOptions.homeDir).toBe(fixtureHome);
+    expect(first.resolverOptions.env.TYPESAFE_API_KEY).toBe("test_key");
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = mock(() => Promise.resolve(new Response(JSON.stringify({
+      answers: { q1: { choice: "review", confidence: 1.0 } }
+    }))));
+    try {
+      const result = await toolExecute("injected-options", {
+        state: "fixture",
+        questions: { q1: { type: "choice", instructions: "Evaluate", criteria: { auto: null, review: null, block: null } } },
+      }, undefined, undefined, { cwd: process.cwd() });
+      const isError = result !== null && typeof result === "object" && "isError" in result && result.isError === true;
+      expect(isError).toBe(false);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   test("Phase 2: Policy Enforcement - rejects lower escalation than baseline", async () => {
-    registerExtension(piMock as unknown as Parameters<typeof registerExtension>[0]);
+    registerTestExtension();
 
     const originalFetch = globalThis.fetch;
     globalThis.fetch = mock(() => Promise.resolve(new Response(JSON.stringify({
@@ -109,7 +139,7 @@ describe("TypeSafe Planner Integration", () => {
   });
 
   test("Phase 3: Integration (E2E) - structural defense against prompt injection", async () => {
-    registerExtension(piMock as unknown as Parameters<typeof registerExtension>[0]);
+    registerTestExtension();
 
     // Simulate the LLM succumbing to prompt injection and attempting to de-escalate.
     const originalFetch = globalThis.fetch;
@@ -137,9 +167,10 @@ describe("TypeSafe Planner Integration", () => {
       handlers[evt].push(handler);
     });
 
-    registerExtension(piMock as unknown as Parameters<typeof registerExtension>[0]);
+    const state = registerTestExtension();
     expect(handlers["tool_call"]).toBeDefined();
     const todoHandler = handlers["tool_call"][0];
+    state.phases = [{ name: "P", tasks: [{ content: "Failing task", status: "pending" }] }];
 
     // Simulate calling todo with op: "done" while tests fail
     let blocked = false;
@@ -147,6 +178,7 @@ describe("TypeSafe Planner Integration", () => {
       await todoHandler(
         {
           tool: "todo",
+          toolCallId: "failing-task",
           params: { op: "done", task: "Failing task", testCommand: "bun -e \"process.exit(1)\"" },
         },
         { cwd: process.cwd() }
@@ -162,7 +194,7 @@ describe("TypeSafe Planner Integration", () => {
   });
 
   test("Phase 1: Canonical Endpoint Routing - guarantees all expert evaluations route to /v1/systemone with model: 'jev-latest' and zero /v1/judge calls", async () => {
-    registerExtension(piMock as unknown as Parameters<typeof registerExtension>[0]);
+    registerTestExtension();
     expect(registeredTools["typesafe_expert_review"]).toBeDefined();
 
     const calls: { url: string; body: Record<string, unknown> }[] = [];
@@ -198,7 +230,7 @@ describe("TypeSafe Planner Integration", () => {
   });
 
   test("Phase 2: Eliminate Phantom Noul Confidence - handles noul response strictly via answer.noul without confidence", async () => {
-    registerExtension(piMock as unknown as Parameters<typeof registerExtension>[0]);
+    registerTestExtension();
     expect(registeredTools["typesafe_expert_review"]).toBeDefined();
 
     const originalFetch = globalThis.fetch;
@@ -228,7 +260,7 @@ describe("TypeSafe Planner Integration", () => {
   });
 
   test("Phase 3: Anti-Context-Rot - truncates oversized git diff in state to <= 32KB while preserving assertions and file headers", async () => {
-    registerExtension(piMock as unknown as Parameters<typeof registerExtension>[0]);
+    registerTestExtension();
     expect(registeredTools["typesafe_judge"]).toBeDefined();
 
     // Generate 50KB synthetic git diff
@@ -300,7 +332,7 @@ describe("TypeSafe Planner Integration", () => {
   });
 
   test("Phase 3: Stringified State Native Recovery - converts stringified JSON state to native JSON object", async () => {
-    registerExtension(piMock as unknown as Parameters<typeof registerExtension>[0]);
+    registerTestExtension();
     expect(registeredTools["typesafe_judge"]).toBeDefined();
 
     const calls: { url: string; body: Record<string, unknown> }[] = [];
@@ -343,7 +375,7 @@ describe("TypeSafe Planner Integration", () => {
   });
 
   test("Phase 4: Rerank Question ID Blindness Defense - instructions reference candidates[i] and criteria has 3 concrete levels", async () => {
-    registerExtension(piMock as unknown as Parameters<typeof registerExtension>[0]);
+    registerTestExtension();
     expect(registeredTools["typesafe_rerank"]).toBeDefined();
 
     const calls: { url: string; body: Record<string, unknown> }[] = [];
@@ -413,7 +445,7 @@ describe("TypeSafe Planner Integration", () => {
   });
 
   test("Phase 4: Multi-label Yes/No Question and Structured Noul Criteria", async () => {
-    registerExtension(piMock as unknown as Parameters<typeof registerExtension>[0]);
+    registerTestExtension();
     expect(registeredTools["typesafe_evaluate_multi"]).toBeDefined();
 
     const calls: { url: string; body: Record<string, unknown> }[] = [];
@@ -463,6 +495,111 @@ describe("TypeSafe Planner Integration", () => {
       expect(parsed.answers.authorized.noul).toBe(0.95);
     } finally {
       globalThis.fetch = originalFetch;
+    }
+  });
+  test("bundled modules ignore poisoned globals and missing or corrupt bundled dependencies fail before fetch", async () => {
+    const bundleDir = await fs.mkdtemp(path.join(os.tmpdir(), "typesafe-bundled-loader-"));
+    const homeDir = path.join(bundleDir, "home");
+    const runnerPath = path.join(bundleDir, "runner.mjs");
+    try {
+      await fs.copyFile(path.resolve(import.meta.dir, "../typesafe-planner.ts"), path.join(bundleDir, "typesafe-planner.ts"));
+      await fs.cp(path.resolve(import.meta.dir, "../src"), path.join(bundleDir, "src"), { recursive: true });
+      await fs.mkdir(path.join(bundleDir, ".git"), { recursive: true });
+      await fs.mkdir(path.join(homeDir, ".claude", "hooks", "lib"), { recursive: true });
+      await fs.mkdir(path.join(homeDir, ".claude", "mcp", "typesafe"), { recursive: true });
+      await fs.writeFile(
+        path.join(homeDir, ".claude", ".ck.json"),
+        JSON.stringify({ typesafe: { projects: ["*"], excludeProjects: [] } }),
+        "utf8"
+      );
+      for (const poisonPath of [
+        path.join(homeDir, ".claude", "hooks", "lib", "typesafe-enabled-resolver.cjs"),
+        path.join(homeDir, ".claude", "mcp", "typesafe", "typesafe-api-client.cjs"),
+        path.join(homeDir, ".claude", "mcp", "typesafe", "typesafe-redact.cjs"),
+        path.join(homeDir, ".claude", "mcp", "typesafe", "typesafe-policy-client.cjs"),
+      ]) {
+        await fs.writeFile(poisonPath, "module.exports = { poisoned: true };", "utf8");
+      }
+      await fs.writeFile(
+        runnerPath,
+        `import registerExtension from "./typesafe-planner.ts";
+let execute;
+let fetchCount = 0;
+globalThis.fetch = async () => {
+  fetchCount++;
+  return new Response(JSON.stringify({ answers: { q: { choice: "review", confidence: 1 } } }));
+};
+registerExtension({
+  zod: { object: (x) => x, union: (x) => x, string: () => ({ optional: () => ({}), min: () => ({}) }), number: () => ({ optional: () => ({}) }), record: (x) => x, enum: (x) => x, unknown: () => ({ optional: () => ({}) }), array: (x) => ({ min: () => x }) },
+  on: () => {},
+  sendMessage: async () => {},
+  registerTool: (definition) => { if (definition.name === "typesafe_judge") execute = definition.execute; },
+});
+const result = await execute("fixture", { state: "fixture", questions: { q: { type: "choice", instructions: "fixture", criteria: { auto: null, review: null, block: null } } } }, undefined, undefined, { cwd: process.cwd() });
+process.stdout.write(JSON.stringify({ fetchCount, result }));`,
+        "utf8"
+      );
+
+      const executeBundle = () => {
+        const result = spawnSync(process.execPath, [runnerPath], {
+          cwd: bundleDir,
+          encoding: "utf8",
+          env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir, TYPESAFE_API_KEY: "fixture-key" },
+        });
+        expect(result.status, result.stderr || result.error?.message).toBe(0);
+        return JSON.parse(result.stdout) as { fetchCount: number; result: { content: Array<{ text: string }> } };
+      };
+
+      const bundled = executeBundle();
+      expect(bundled.fetchCount).toBe(1);
+
+      for (const [fileName, expected] of [
+        ["typesafe-enabled-resolver.cjs", "disabled"],
+        ["typesafe-api-client.cjs", "disabled"],
+        ["typesafe-redact.cjs", "disabled"],
+        ["typesafe-policy-client.cjs", "policy_client_missing"],
+      ] as const) {
+        await fs.rename(path.join(bundleDir, "src", fileName), path.join(bundleDir, "src", `${fileName}.missing`));
+        const missing = executeBundle();
+        expect(missing.fetchCount).toBe(0);
+        expect(missing.result.content[0]?.text.toLowerCase()).toContain(expected);
+        await fs.rename(path.join(bundleDir, "src", `${fileName}.missing`), path.join(bundleDir, "src", fileName));
+
+        await fs.writeFile(path.join(bundleDir, "src", fileName), "module.exports = {};", "utf8");
+        const corrupt = executeBundle();
+        expect(corrupt.fetchCount).toBe(0);
+        expect(corrupt.result.content[0]?.text.toLowerCase()).toContain(expected);
+        await fs.cp(path.resolve(import.meta.dir, "../src", fileName), path.join(bundleDir, "src", fileName));
+      }
+
+      await fs.writeFile(
+        path.join(bundleDir, "payload-runner.mjs"),
+        `import { preparePayloadSafe } from "./src/payload-safety.ts";
+try {
+  preparePayloadSafe({ state: "fixture", questions: {} });
+  process.exitCode = 1;
+} catch (error) {
+  process.stdout.write(String(error.message));
+}`,
+        "utf8"
+      );
+      for (const fileName of ["typesafe-redact.cjs", "typesafe-redact-patterns.cjs"]) {
+        await fs.rename(path.join(bundleDir, "src", fileName), path.join(bundleDir, "src", `${fileName}.missing`));
+        const missingPayloadSafetyDependency = spawnSync(
+          process.execPath,
+          [path.join(bundleDir, "payload-runner.mjs")],
+          {
+            cwd: bundleDir,
+            encoding: "utf8",
+            env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir },
+          }
+        );
+        expect(missingPayloadSafetyDependency.status).toBe(0);
+        expect(missingPayloadSafetyDependency.stdout).toContain("payload_safety_unavailable");
+        await fs.rename(path.join(bundleDir, "src", `${fileName}.missing`), path.join(bundleDir, "src", fileName));
+      }
+    } finally {
+      await fs.rm(bundleDir, { recursive: true, force: true });
     }
   });
 });
