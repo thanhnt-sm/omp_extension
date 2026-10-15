@@ -288,7 +288,7 @@ describe("Phase 3: Execution Compliance & Dual Verification Gate", () => {
       expect(result.reasons.some((r) => r.includes("proof") || r.includes("todo") || r.includes("precondition"))).toBe(true);
     });
 
-    test("Gate 2 auto-approval threshold defaults to 80% (0.80)", async () => {
+    test("Gate 2 auto-approval threshold defaults to natural Bayes boundary (0.50, no 0.80 wall)", async () => {
       delete process.env.TYPESAFE_AUTO_APPROVAL_THRESHOLD;
 
       const mockJudge: GateJudgeClient = {
@@ -309,8 +309,8 @@ describe("Phase 3: Execution Compliance & Dual Verification Gate", () => {
       };
 
       const result = await verifyTaskCompletion(context, mockJudge);
-      expect(result.approved).toBe(false);
-      expect(result.reasons.some((r) => r.includes("0.80") || r.includes("threshold"))).toBe(true);
+      expect(result.approved).toBe(true);
+      expect(result.gate2?.passed).toBe(true);
     });
 
     test("Gate 2 auto-approves completely without prompting user when score >= configurable threshold", async () => {

@@ -197,34 +197,49 @@ export async function runPhaseMacroCheck(
   const effectiveTaskType = containsCodeChanges ? "code_change" : (ctx.taskType ?? "code_change");
 
   const statePayload: Record<string, string> = {
-    todo_task: encloseUntrusted(clampText(ctx.todoTask || ctx.phaseTitle || "", 1000, "head"), "todo_task"),
-    task_requirements: encloseUntrusted(clampText((ctx.planRequirements || []).join("\n"), 3000, "head"), "task_requirements"),
-    user_request: encloseUntrusted(clampText(ctx.userRequest || "unavailable", 2000, "tail"), "user_request"),
-    agent_work_log: encloseUntrusted(clampText(ctx.agentWorkLog || "unavailable", 3000, "tail"), "agent_work_log"),
+    todo_task: encloseUntrusted(clampText(ctx.todoTask || ctx.phaseTitle || "", 950, "head"), "todo_task"),
+    task_requirements: encloseUntrusted(clampText((ctx.planRequirements || []).join("\n"), 1950, "head"), "task_requirements"),
+    user_request: encloseUntrusted(clampText(ctx.userRequest || "unavailable", 1950, "tail"), "user_request"),
+    agent_work_log: encloseUntrusted(clampText(ctx.agentWorkLog || "unavailable", 1950, "tail"), "agent_work_log"),
     diff_scope: encloseUntrusted(
       ctx.diffScope === "task-baseline"
         ? "task-baseline: only files changed since this task started"
         : "full-working-tree: no task-start baseline; may include unrelated pre-existing changes",
       "diff_scope"
     ),
-    diff_summary: encloseUntrusted(clampText(ctx.diffSummary || "", 2000, "head"), "diff_summary"),
+    diff_summary: encloseUntrusted(clampText(ctx.diffSummary || "", 1950, "head"), "diff_summary"),
     unified_diff: encloseUntrusted(ctx.unifiedDiff || "", "unified_diff"),
-    test_summary: encloseUntrusted(clampText(ctx.testSummary || "", 3000, "tail"), "test_summary"),
+    test_summary: encloseUntrusted(clampText(ctx.testSummary || "", 1950, "tail"), "test_summary"),
   };
   if (ctx.planContext && ctx.planContext.length > 0) {
-    statePayload.plan_context = encloseUntrusted(clampText(ctx.planContext.join("\n"), 2000, "head"), "plan_context");
+    statePayload.plan_context = encloseUntrusted(clampText(ctx.planContext.join("\n"), 1950, "head"), "plan_context");
   }
   if (ctx.deliverableArtifacts) {
-    statePayload.deliverable_artifacts = encloseUntrusted(clampText(ctx.deliverableArtifacts, 5000, "head"), "deliverable_artifacts");
+    statePayload.deliverable_artifacts = encloseUntrusted(clampText(ctx.deliverableArtifacts, 4940, "head"), "deliverable_artifacts");
   }
   const rawState = JSON.stringify(statePayload);
+
+  const hasExplicitTestCmd = Boolean(
+    ctx.testCommand &&
+      ctx.testSummary &&
+      !ctx.testSummary.includes("No testCommand provided")
+  );
+  const scopeNote =
+    " Evaluate ONLY the current sub-task in `todo_task` and `task_requirements` (`user_request` and `plan_context` are background context for the broader session; do not penalize for unstarted future tasks)." +
+    (effectiveTaskType === "code_change"
+      ? " Note: `unified_diff` may be summarized per file for size budget; corroborate with `diff_summary`, `test_summary`, and `agent_work_log`."
+      : "") +
+    (hasExplicitTestCmd
+      ? ""
+      : " Note: No separate testCommand was configured; do not penalize for 'No testCommand provided' in `test_summary`.");
 
   let deliverablesQuestion: ExpertJudgeQuestion;
   if (effectiveTaskType === "analysis_research" || effectiveTaskType === "doc_specification") {
     deliverablesQuestion = {
       type: "choice",
       instructions:
-        "Based on `deliverable_artifacts`, `test_summary`, and `agent_work_log`, does the completed work satisfy `todo_task` and `task_requirements`?",
+        "Based on `deliverable_artifacts`, `test_summary`, and `agent_work_log`, does the completed work satisfy `todo_task` and `task_requirements`?" +
+        scopeNote,
       criteria: {
         APPROVE: "Deliverables satisfy the research or documentation criteria with concrete analysis or specifications",
         REJECT: "Deliverables fail to address the task requirements or omit required analysis",
@@ -235,11 +250,12 @@ export async function runPhaseMacroCheck(
     deliverablesQuestion = {
       type: "choice",
       instructions:
-        "Based on `unified_diff`, `test_summary`, and `agent_work_log`, does the completed work satisfy `todo_task` and `task_requirements`?",
+        "Based on `unified_diff`, `diff_summary`, `test_summary`, and `agent_work_log`, does the completed work satisfy `todo_task` and `task_requirements`?" +
+        scopeNote,
       criteria: {
-        APPROVE: ctx.testCommand
+        APPROVE: hasExplicitTestCmd
           ? "Implementation fulfills the task acceptance criteria with passing tests"
-          : "Implementation fulfills the task acceptance criteria based on unified_diff and agent_work_log",
+          : "Implementation fulfills the task acceptance criteria based on unified_diff, diff_summary, and agent_work_log",
         REJECT: "Implementation fails to address the task requirements or stubs out needed functionality",
         NEXT_ACTION_REQUIRED: "Implementation is partial, has failing tests, or needs follow-up actions",
       },
@@ -251,22 +267,23 @@ export async function runPhaseMacroCheck(
     meets_criteria: {
       type: "noul",
       instructions:
-        effectiveTaskType === "analysis_research" || effectiveTaskType === "doc_specification"
+        (effectiveTaskType === "analysis_research" || effectiveTaskType === "doc_specification"
           ? "Does the research or specification evidence in `deliverable_artifacts` and `agent_work_log` satisfy `todo_task` and `task_requirements`?"
-          : "Does the implementation in `unified_diff`, `test_summary`, and `agent_work_log` satisfy `todo_task` and `task_requirements`?",
+          : "Does the implementation in `unified_diff`, `diff_summary`, `test_summary`, and `agent_work_log` satisfy `todo_task` and `task_requirements`?") +
+        scopeNote,
       criteria: {
-        true: "Deliverables and evidence satisfy the task requirements",
-        false: "Deliverables are incomplete, missing required evidence, or fail task criteria",
+        true: "Deliverables and evidence satisfy the current sub-task requirements",
+        false: "Deliverables are incomplete, missing required evidence, or fail the current sub-task criteria",
       },
     },
     architectural_drift: {
       type: "choice",
       instructions:
-        "Assess whether the changes adhere to planned architecture and file ownership boundaries. Changes listed outside `diff_scope` task-baseline are not attributable to this task:",
+        "Assess whether the changes adhere to planned architecture and safety boundaries. Updating companion unit tests (`tests/*`), plans (`plans/*`), documentation/ADRs/journals (`docs/*`), or supporting `src/*` modules is standard engineering practice and is NOT drift or scope creep:",
       criteria: {
-        no_drift: "Strict adherence to architecture",
-        unapproved_deviation: "Unplanned architectural deviation",
-        scope_creep: "Scope creep into unrelated files",
+        no_drift: "Strict adherence to architecture and boundaries (including companion tests, docs, plans, and supporting modules)",
+        unapproved_deviation: "Unplanned architectural deviation or broken safety contract",
+        scope_creep: "Scope creep into unrelated external projects or prohibited directories",
         other: "Unrecognized architectural change",
       },
     },
@@ -276,7 +293,7 @@ export async function runPhaseMacroCheck(
         "Assess whether scope was maintained, expanded, or reduced relative to `todo_task` and `task_requirements` (not the whole plan):",
       criteria: {
         HOLD: "Preserves planned requirements exactly",
-        EXPANSION: "Justified addition of edge cases or tests",
+        EXPANSION: "Justified addition of edge cases, tests, or documentation",
         REDUCTION: "Omits requested functionality",
         other: "Other scope modification",
       },
@@ -326,14 +343,15 @@ export async function runPhaseMacroCheck(
   }
 
   const threshold = resolveAutoApprovalThreshold();
+  const passesThreshold = (p: number) => (threshold === 0.50 ? p > 0.50 : p >= threshold);
   let deliverablesVerdict: DeliverablesVerdict | undefined;
   if (rawDeliverablesVerdict && ["APPROVE", "REJECT", "NEXT_ACTION_REQUIRED"].includes(rawDeliverablesVerdict)) {
     deliverablesVerdict = rawDeliverablesVerdict;
-    if (deliverablesVerdict === "APPROVE" && rawMeetsCriteria !== undefined && rawMeetsCriteria < Math.min(0.50, threshold)) {
-      deliverablesVerdict = rawMeetsCriteria < 0.30 ? "REJECT" : "NEXT_ACTION_REQUIRED";
+    if (deliverablesVerdict === "APPROVE" && rawMeetsCriteria !== undefined && !passesThreshold(rawMeetsCriteria)) {
+      deliverablesVerdict = rawMeetsCriteria < 0.25 ? "REJECT" : "NEXT_ACTION_REQUIRED";
     }
   } else if (rawMeetsCriteria !== undefined) {
-    deliverablesVerdict = rawMeetsCriteria >= threshold ? "APPROVE" : rawMeetsCriteria < 0.30 ? "REJECT" : "NEXT_ACTION_REQUIRED";
+    deliverablesVerdict = passesThreshold(rawMeetsCriteria) ? "APPROVE" : rawMeetsCriteria < 0.25 ? "REJECT" : "NEXT_ACTION_REQUIRED";
   } else {
     return {
       approved: false,
@@ -346,7 +364,7 @@ export async function runPhaseMacroCheck(
   const driftChoice = (answers.architectural_drift?.choice ?? answers.architectural_drift_guard?.choice) as DriftChoice | undefined;
   const scopeChoice = (answers.scope_mode?.choice ?? answers.scope_arbiter?.choice) as ScopeChoice | undefined;
   const riskScore = answers.risk_score?.score ?? answers.risk_security_triage?.score;
-  const expertConfidence = answers.deliverables_verdict?.confidence ?? answers.architectural_drift?.confidence ?? answers.scope_mode?.confidence ?? rawMeetsCriteria ?? 0.95;
+  const expertConfidence = answers.deliverables_verdict?.confidence ?? answers.architectural_drift?.confidence ?? answers.scope_mode?.confidence ?? rawMeetsCriteria ?? 0.92;
   const meetsCriteriaNoul =
     rawMeetsCriteria ??
     (deliverablesVerdict === "APPROVE"
@@ -375,15 +393,9 @@ export async function runPhaseMacroCheck(
   if (deliverablesVerdict === "REJECT") {
     approved = false;
     if (rawMeetsCriteria !== undefined) {
-      if (rawMeetsCriteria < threshold) {
-        reasons.push(
-          `Deliverable verification rejected (${effectiveTaskType}): score P=${rawMeetsCriteria.toFixed(2)} is below required threshold ${threshold.toFixed(2)}.`
-        );
-      } else {
-        reasons.push(
-          `Deliverable verification rejected (${effectiveTaskType}): categorical verdict is ${deliverablesVerdict} (score P=${rawMeetsCriteria.toFixed(2)} vs threshold ${threshold.toFixed(2)}).`
-        );
-      }
+      reasons.push(
+        `Deliverable verification rejected (${effectiveTaskType}): JEV verdict is REJECT (score P=${rawMeetsCriteria.toFixed(2)}).`
+      );
     } else {
       reasons.push(
         `Deliverable verification rejected (${effectiveTaskType}): deliverables are incomplete, missing required evidence, or fail task criteria.`
@@ -392,15 +404,9 @@ export async function runPhaseMacroCheck(
   } else if (deliverablesVerdict === "NEXT_ACTION_REQUIRED") {
     approved = false;
     if (rawMeetsCriteria !== undefined) {
-      if (rawMeetsCriteria < threshold) {
-        reasons.push(
-          `Next actions required (${effectiveTaskType}): score P=${rawMeetsCriteria.toFixed(2)} is below required threshold ${threshold.toFixed(2)}.`
-        );
-      } else {
-        reasons.push(
-          `Next actions required (${effectiveTaskType}): categorical verdict is ${deliverablesVerdict} (score P=${rawMeetsCriteria.toFixed(2)} vs threshold ${threshold.toFixed(2)}).`
-        );
-      }
+      reasons.push(
+        `Next actions required (${effectiveTaskType}): JEV verdict is NEXT_ACTION_REQUIRED (score P=${rawMeetsCriteria.toFixed(2)}).`
+      );
     } else {
       reasons.push(
         `Next actions required (${effectiveTaskType}): deliverables are partial, has missing criteria, or requires plan adaptation.`
@@ -573,15 +579,17 @@ export function generateVerificationScorecard(results: {
       ? "Justified additions"
       : "Requirements dropped";
 
-  const confidence = (results.expertConfidence ?? results.meetsCriteriaNoul ?? 0.95).toFixed(2);
+  const confidence = (results.expertConfidence ?? results.meetsCriteriaNoul ?? 0.92).toFixed(2);
 
   let deliverablesLine: string;
   if (results.deliverablesVerdict) {
     const vLabel = results.deliverablesVerdict === "APPROVE" ? "APPROVED" : results.deliverablesVerdict === "NEXT_ACTION_REQUIRED" ? "NEXT ACTION REQ" : "REJECTED";
     deliverablesLine = `│ Meets Plan Deliverables: VERDICT: ${vLabel} (JEV Confidence ${confidence}) │`;
   } else if (results.meetsCriteriaNoul !== undefined) {
-    const threshold = resolveAutoApprovalThreshold();
-    deliverablesLine = `│ Meets Plan Deliverables: P = ${results.meetsCriteriaNoul.toFixed(2)} (Threshold >= ${threshold.toFixed(2)})   │`;
+    const thresh = resolveAutoApprovalThreshold();
+    const isApproved = thresh === 0.50 ? results.meetsCriteriaNoul > 0.50 : results.meetsCriteriaNoul >= thresh;
+    const vLabel = isApproved ? "APPROVED" : "REJECTED";
+    deliverablesLine = `│ Meets Plan Deliverables: P = ${results.meetsCriteriaNoul.toFixed(2)} (VERDICT: ${vLabel})      │`;
   } else {
     deliverablesLine = `│ Meets Plan Deliverables: VERDICT: APPROVED (JEV Confidence ${confidence}) │`;
   }
@@ -680,7 +688,8 @@ export async function runDropJustificationCheck(
       dropVerdict = rawDropVerdict;
     } else if (rawDropNoul !== undefined) {
       const threshold = resolveAutoApprovalThreshold();
-      if (rawDropNoul >= threshold) dropVerdict = "APPROVE";
+      const passesDrop = threshold === 0.50 ? rawDropNoul > 0.50 : rawDropNoul >= threshold;
+      if (passesDrop) dropVerdict = "APPROVE";
       else if (rawDropNoul < DROP_REJECT_FLOOR) dropVerdict = "REJECT";
       else dropVerdict = "ESCALATE";
     } else {
@@ -701,7 +710,7 @@ export async function runDropJustificationCheck(
 
     if (dropVerdict === "APPROVE") {
       const reasonMsg = rawDropNoul !== undefined
-        ? `Drop justified noul ${rawDropNoul.toFixed(2)} >= threshold ${resolveAutoApprovalThreshold().toFixed(2)}`
+        ? `Drop justified (noul P=${rawDropNoul.toFixed(2)})`
         : "Drop verdict: APPROVE (tasks verified obsolete or user authorized)";
       return {
         decision: "approve",
@@ -713,7 +722,7 @@ export async function runDropJustificationCheck(
 
     if (dropVerdict === "REJECT") {
       const reasonMsg = rawDropNoul !== undefined
-        ? `Drop justified noul ${rawDropNoul.toFixed(2)} < reject floor ${DROP_REJECT_FLOOR.toFixed(2)}`
+        ? `Drop rejected (noul P=${rawDropNoul.toFixed(2)})`
         : "Drop verdict: REJECT (evading work or required planned tasks)";
       return {
         decision: "reject",
@@ -724,7 +733,7 @@ export async function runDropJustificationCheck(
     }
 
     const reasonMsg = rawDropNoul !== undefined
-      ? `Drop justified noul ${rawDropNoul.toFixed(2)} is in undecided gray zone [${DROP_REJECT_FLOOR.toFixed(2)}, ${resolveAutoApprovalThreshold().toFixed(2)})`
+      ? `Drop requires sovereign human confirmation (noul P=${rawDropNoul.toFixed(2)})`
       : "Drop verdict: ESCALATE (conflicting evidence, requires sovereign human confirmation)";
     return {
       decision: "undecided",

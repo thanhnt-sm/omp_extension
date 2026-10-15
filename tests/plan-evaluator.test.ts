@@ -186,14 +186,14 @@ describe("Phase 2: Plan-Time Quality Elevation Engine", () => {
     expect(result.feedback).toContain("Task actionability");
   });
 
-  test("aligns claude_isolation_adherence threshold with resolveAutoApprovalThreshold (0.80)", async () => {
+  test("aligns claude_isolation_adherence threshold with natural Bayes boundary (0.50)", async () => {
     const passClient: PlanJudgeClient = {
       evaluatePlan: async () => ({
         answers: {
           scope_mode: { choice: "HOLD" },
           algorithm_depth: { score: 2.5 },
-          task_actionability: { noul: 0.85 },
-          claude_isolation_adherence: { noul: 0.85 },
+          task_actionability: { noul: 0.75 },
+          claude_isolation_adherence: { noul: 0.75 },
         },
       }),
     };
@@ -212,7 +212,7 @@ describe("Phase 2: Plan-Time Quality Elevation Engine", () => {
           scope_mode: { choice: "HOLD" },
           algorithm_depth: { score: 2.5 },
           task_actionability: { noul: 0.85 },
-          claude_isolation_adherence: { noul: 0.75 },
+          claude_isolation_adherence: { noul: 0.45 },
         },
       }),
     };

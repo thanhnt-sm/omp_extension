@@ -45,7 +45,7 @@ describe("Phase 4: Adversarial Stress Test Matrix & Critical Verification", () =
 
     const g2 = await runPhaseMacroCheck(ctx, mockJudge);
     expect(g2.approved).toBe(false);
-    expect(g2.reasons.some((r) => r.includes("0.80"))).toBe(true);
+    expect(g2.reasons.some((r) => r.includes("P=0.42"))).toBe(true);
   });
 
   test("Attack 2 (Unauthorized Scope Reduction): Scope reduction is rejected by Scope Arbiter", async () => {

@@ -216,7 +216,7 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
       expect(JSON.stringify(evaluatedQuestions)).toContain("unified_diff");
     });
 
-    test("rejects phase when meets_criteria < 0.80", async () => {
+    test("rejects phase when meets_criteria <= 0.50", async () => {
       const mockClient: ExpertJudgeClient = {
         evaluate: async () => ({
           answers: {
@@ -237,7 +237,8 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
 
       const res = await runPhaseMacroCheck(ctx, mockClient);
       expect(res.approved).toBe(false);
-      expect(res.reasons.some((r) => r.includes("0.80") || r.includes("threshold"))).toBe(true);
+      expect(res.reasons.some((r) => r.includes("P=0.42"))).toBe(true);
+      expect(res.reasons.join(" ")).not.toContain("0.80");
     });
 
     test("rejects phase when architectural drift is detected", async () => {
@@ -349,7 +350,7 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
   });
 
   describe("Scorecard Generator & Escalation", () => {
-    test("generates formatted scorecard matching review-cycle.md template", () => {
+    test("generates formatted scorecard matching review-cycle.md template without 0.80 wall", () => {
       const scorecard = generateVerificationScorecard({
         meetsCriteriaNoul: 0.95,
         driftChoice: "no_drift",
@@ -358,7 +359,8 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
       });
 
       expect(scorecard).toContain("TypeSafe System One Verification Scorecard");
-      expect(scorecard).toContain("Meets Plan Deliverables: P = 0.95 (Threshold >= 0.80)");
+      expect(scorecard).toContain("Meets Plan Deliverables: P = 0.95 (VERDICT: APPROVED)");
+      expect(scorecard).not.toContain("0.80");
       expect(scorecard).toContain("Architectural Drift:     None (Strict adherence)");
       expect(scorecard).toContain("Scope Mode:              HOLD (All requirements covered)");
       expect(scorecard).toContain("Expert Evaluator:        Approved (Confidence 0.92)");
@@ -435,38 +437,38 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
       const res = await runDropJustificationCheck(dummyContext, makeMockClient(0.29));
       expect(res.decision).toBe("reject");
       expect(res.dropJustifiedNoul).toBe(0.29);
-      expect(res.reasons.some((r) => r.includes("< reject floor"))).toBe(true);
+      expect(res.reasons.some((r) => r.includes("P=0.29"))).toBe(true);
     });
 
-    test("score 0.30 (== DROP_REJECT_FLOOR) returns undecided gray zone", async () => {
+    test("score 0.30 (== DROP_REJECT_FLOOR) returns undecided", async () => {
       const res = await runDropJustificationCheck(dummyContext, makeMockClient(0.30));
       expect(res.decision).toBe("undecided");
       expect(res.dropJustifiedNoul).toBe(0.30);
-      expect(res.reasons.some((r) => r.includes("undecided gray zone"))).toBe(true);
+      expect(res.reasons.some((r) => r.includes("P=0.30"))).toBe(true);
     });
 
-    test("score 0.35 in [0.30, 0.80) returns undecided gray zone", async () => {
+    test("score 0.35 in [0.30, 0.50] returns undecided", async () => {
       const res = await runDropJustificationCheck(dummyContext, makeMockClient(0.35));
       expect(res.decision).toBe("undecided");
       expect(res.dropJustifiedNoul).toBe(0.35);
-      expect(res.reasons.some((r) => r.includes("undecided gray zone"))).toBe(true);
+      expect(res.reasons.some((r) => r.includes("P=0.35"))).toBe(true);
     });
 
-    test("score 0.79 in [0.30, 0.80) returns undecided gray zone", async () => {
-      const res = await runDropJustificationCheck(dummyContext, makeMockClient(0.79));
+    test("score 0.50 (at Bayes uncertainty boundary) returns undecided", async () => {
+      const res = await runDropJustificationCheck(dummyContext, makeMockClient(0.50));
       expect(res.decision).toBe("undecided");
-      expect(res.dropJustifiedNoul).toBe(0.79);
-      expect(res.reasons.some((r) => r.includes("undecided gray zone"))).toBe(true);
+      expect(res.dropJustifiedNoul).toBe(0.50);
+      expect(res.reasons.some((r) => r.includes("P=0.50"))).toBe(true);
     });
 
-    test("score 0.80 (>= threshold 0.80) returns approve", async () => {
-      const res = await runDropJustificationCheck(dummyContext, makeMockClient(0.80));
+    test("score 0.79 (> 0.50 Bayes boundary) returns approve without 0.80 wall", async () => {
+      const res = await runDropJustificationCheck(dummyContext, makeMockClient(0.79));
       expect(res.decision).toBe("approve");
-      expect(res.dropJustifiedNoul).toBe(0.80);
-      expect(res.reasons.some((r) => r.includes(">= threshold"))).toBe(true);
+      expect(res.dropJustifiedNoul).toBe(0.79);
+      expect(res.reasons.some((r) => r.includes("P=0.79"))).toBe(true);
     });
 
-    test("score 0.95 (>= threshold 0.80) returns approve", async () => {
+    test("score 0.95 (> 0.50 Bayes boundary) returns approve", async () => {
       const res = await runDropJustificationCheck(dummyContext, makeMockClient(0.95));
       expect(res.decision).toBe("approve");
       expect(res.dropJustifiedNoul).toBe(0.95);
@@ -517,10 +519,10 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
       try {
         process.env.TYPESAFE_AUTO_APPROVAL_THRESHOLD = "0.90";
         expect(resolveAutoApprovalThreshold()).toBe(0.90);
-        // 0.85 would normally approve, but under 0.90 it falls into undecided
+        // 0.85 would normally approve, but under 0.90 override it falls into undecided
         const res = await runDropJustificationCheck(dummyContext, makeMockClient(0.85));
         expect(res.decision).toBe("undecided");
-        expect(res.reasons.some((r) => r.includes("0.90"))).toBe(true);
+        expect(res.reasons.some((r) => r.includes("P=0.85"))).toBe(true);
       } finally {
         if (orig !== undefined) process.env.TYPESAFE_AUTO_APPROVAL_THRESHOLD = orig;
         else delete process.env.TYPESAFE_AUTO_APPROVAL_THRESHOLD;
@@ -723,7 +725,7 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
       expect(res.error).toBe("unavailable");
     });
 
-    test("downgrades deliverables_verdict APPROVE when meets_criteria < 0.80 (e.g. 0.45 -> NEXT_ACTION_REQUIRED, 0.15 -> REJECT)", async () => {
+    test("downgrades deliverables_verdict APPROVE when meets_criteria <= 0.50 (e.g. 0.45 -> NEXT_ACTION_REQUIRED, 0.15 -> REJECT) without 0.80 wall", async () => {
       const partialClient: ExpertJudgeClient = {
         evaluate: async () => ({
           answers: {
@@ -748,7 +750,8 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
       expect(partialRes.verdict).toBe("NEXT_ACTION_REQUIRED");
       expect(partialRes.deliverablesVerdict).toBe("NEXT_ACTION_REQUIRED");
       expect(partialRes.meetsCriteriaNoul).toBe(0.45);
-      expect(partialRes.reasons[0]).toContain("P=0.45 is below required threshold 0.80");
+      expect(partialRes.reasons[0]).toContain("P=0.45");
+      expect(partialRes.reasons[0]).not.toContain("0.80");
 
       const rejectClient: ExpertJudgeClient = {
         evaluate: async () => ({
@@ -774,7 +777,8 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
       expect(rejectRes.verdict).toBe("REJECT");
       expect(rejectRes.deliverablesVerdict).toBe("REJECT");
       expect(rejectRes.meetsCriteriaNoul).toBe(0.15);
-      expect(rejectRes.reasons[0]).toContain("P=0.15 is below required threshold 0.80");
+      expect(rejectRes.reasons[0]).toContain("P=0.15");
+      expect(rejectRes.reasons[0]).not.toContain("0.80");
     });
 
     test("runDropJustificationCheck inverts drop_verdict.confidence (1 - confidence) when drop_verdict is REJECT and drop_justified is omitted", async () => {

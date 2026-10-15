@@ -426,12 +426,12 @@ describe("Phase 2: Bicameral Consensus Engine & Advisor Intent Evaluator", () =>
 
     test("formatConsensusEscalation preserves full reason strings beyond 35 characters", () => {
       const longAdvisorReason = "User explicitly indicated MSBuild succeeded across all 12 projects without any linker errors";
-      const longJevReason = "Deliverable verification rejected (code_change): score P=0.13 is below required threshold 0.80.";
+      const longJevReason = "Deliverable verification rejected (code_change): JEV verdict is REJECT (score P=0.13).";
       const decision: BicameralConsensusDecision = {
         verdict: "HUMAN_ESCALATION",
         advisor: {
           verdict: "ALLOW",
-          confidence: 0.90,
+          confidence: 0.91,
           reason: longAdvisorReason,
         },
         jev: {
@@ -516,6 +516,65 @@ describe("Phase 2: Bicameral Consensus Engine & Advisor Intent Evaluator", () =>
       expect(decision.recommendedIndex).toBe(1);
       expect(decision.rankedOptions[0]?.option).toBe("Option B: Event-driven queue");
       expect(decision.rankedOptions[0]?.score).toBeGreaterThanOrEqual(0.96);
+    });
+
+    test("evaluateAdvisorIntent(operation: 'done') returns first-class DISALLOW on explicit test failures and varies confidence continuously (not fixed 0.90)", () => {
+      const failDone = evaluateAdvisorIntent({
+        operation: "done",
+        task: "Implement rate limiter",
+        userRequest: "Add rate limiter with unit tests",
+        agentWorkLog: "Updated src/rate-limiter.ts and ran test suite.",
+        testSummary: "$ bun test\nexit 1\n2 pass, 3 fail\nAssertionError: expected 429",
+      });
+      expect(failDone.verdict).toBe("DISALLOW");
+      expect(failDone.ckVerdict).toBe("block");
+
+      const minimalDone = evaluateAdvisorIntent({
+        operation: "done",
+        task: "Update README badge",
+        diffSummary: "M README.md",
+      });
+      const richDone = evaluateAdvisorIntent({
+        operation: "done",
+        task: "Implement OAuth2 token refresh and PKCE validation",
+        userRequest: "Implement OAuth2 token refresh and PKCE validation with full unit tests",
+        agentWorkLog: "Implemented OAuth2 token refresh and PKCE validation in src/oauth.ts. Ran 24 tests, 24 pass, 0 fail.",
+        diffSummary: "M src/oauth.ts\nM tests/oauth.test.ts",
+        testSummary: "exit 0\n24 pass, 0 fail",
+      });
+      expect(minimalDone.verdict).toBe("ALLOW");
+      expect(richDone.verdict).toBe("ALLOW");
+      expect(richDone.confidence).toBeGreaterThan(minimalDone.confidence);
+      expect(minimalDone.confidence).not.toBe(0.90);
+    });
+
+    test("runBicameralMacroCheck routes drift or scope reduction with APPROVE deliverables to RECONCILE_PLAN instead of HUMAN_ESCALATION on attempt 1", async () => {
+      const mockClient = {
+        evaluate: async () => ({
+          answers: {
+            deliverables_verdict: { choice: "APPROVE" as const, confidence: 0.91 },
+            meets_criteria: { noul: 0.88 },
+            architectural_drift: { choice: "scope_creep" as const, confidence: 0.84 },
+            scope_mode: { choice: "HOLD" as const, confidence: 0.90 },
+          },
+        }),
+      };
+
+      const res = await runBicameralMacroCheck(
+        {
+          todoTask: "Update parser",
+          planRequirements: ["Update parser"],
+          diffSummary: "M src/parser.ts\nM src/unrelated.ts",
+          unifiedDiff: "+ parser change",
+          testSummary: "PASS",
+          attemptCount: 0,
+        },
+        mockClient
+      );
+
+      expect(res.macroResult.approved).toBe(false);
+      expect(res.verdict).toBe("RECONCILE_PLAN");
+      expect(res.jev.verdict).toBe("NEXT_ACTION_REQUIRED");
     });
   });
 });

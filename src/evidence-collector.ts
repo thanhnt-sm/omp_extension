@@ -214,6 +214,26 @@ export function extractCriteriaFromPlan(
     }
   }
 
+  if (taskId && criteria.length > 1) {
+    const isBarePhase = /^\s*(?:phase\s*\d+|\d+)\s*$/i.test(taskId);
+    if (!isBarePhase) {
+      const taskTokens = taskId
+        .toLowerCase()
+        .replace(/[^a-z0-9\u00C0-\u1EF9\s]/gi, " ")
+        .split(/\s+/)
+        .filter((w) => w.length > 3 && !/^(?:phase|step|task|item|with|from|that|this)$/.test(w));
+      if (taskTokens.length > 0) {
+        const matched = criteria.filter((c) => {
+          const cLower = c.toLowerCase();
+          return taskTokens.some((t) => cLower.includes(t));
+        });
+        if (matched.length > 0 && matched.length < criteria.length) {
+          return matched;
+        }
+      }
+    }
+  }
+
   return criteria;
 }
 /**
@@ -440,17 +460,20 @@ export async function collectTaskEvidence(
 
       // If plan delegates to phase files, inspect whether a specific phase matches taskId
       if (options.taskId) {
-        const phaseRegex = /\|\s*(\d+|[a-zA-Z0-9_-]+)\s*\|\s*\[.*?\]\(((\.?\/)?phase-[^)]+\.md)\)/gi;
+        const phaseRegex = /\|\s*(\d+|[a-zA-Z0-9_-]+)\s*\|\s*\[(.*?)\]\(((\.?\/)?phase-[^)]+\.md)\)/gi;
         let match: RegExpExecArray | null;
         const planDir = path.dirname(options.planPath);
         while ((match = phaseRegex.exec(planContent)) !== null) {
           const phaseIdentifier = match[1].trim();
-          const phaseFileRelative = match[2].trim();
+          const phaseLinkTitle = (match[2] || "").trim().toLowerCase();
+          const phaseFileRelative = match[3].trim();
           const escapedId = phaseIdentifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
           const phaseWordMatch = new RegExp(`\\bphase[-_\\s]*0*${escapedId}\\b`, "i");
+          const taskLower = options.taskId.toString().trim().toLowerCase();
           if (
             options.taskId.toString().trim() === phaseIdentifier ||
-            phaseWordMatch.test(options.taskId)
+            phaseWordMatch.test(options.taskId) ||
+            (phaseLinkTitle.length > 3 && taskLower.includes(phaseLinkTitle))
           ) {
             const resolvedPhasePath = path.resolve(planDir, phaseFileRelative);
             assertPathIsClaudeSafe(resolvedPhasePath);

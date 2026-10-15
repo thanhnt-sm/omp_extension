@@ -5,11 +5,14 @@ import * as os from "node:os";
 import { execSync } from "node:child_process";
 import registerExtension, {
   sanitizeStateForTypeSafe,
+  summarizeUnifiedDiff,
   collectConversationContext,
   resetLastCheckpoint,
   formatTaskReport,
 } from "../typesafe-planner";
 import { runPhaseMacroCheck, runTaskMicroCheck } from "../src/cook-expert-judge";
+import { extractCriteriaFromPlan } from "../src/evidence-collector";
+import { constructGateQuestions } from "../src/verification-gate";
 
 interface MockPiMessage {
   customType?: string;
@@ -536,5 +539,43 @@ describe("Judge Input Fidelity", () => {
     expect(convo.userRequest).not.toContain("TypeSafe task report");
     expect(convo.userRequest).not.toContain("Background job bg_1");
     expect(convo.lastTestSummary).toContain("312 pass");
+  });
+
+  test("extractCriteriaFromPlan scopes criteria to matching sub-task tokens instead of returning unrelated whole-plan checkboxes", () => {
+    const planMd = [
+      "# Multi-Phase Plan",
+      "- [ ] Implement OAuth2 token refresh in src/oauth.ts",
+      "- [ ] Configure Redis rate-limiting middleware in src/redis.ts",
+      "- [ ] Build Billing invoice PDF exporter in src/billing.ts",
+    ].join("\n");
+
+    const scoped = extractCriteriaFromPlan(planMd, "Implement OAuth2 token refresh");
+    expect(scoped).toEqual(["Implement OAuth2 token refresh in src/oauth.ts"]);
+
+    const allWhenPhase = extractCriteriaFromPlan(planMd, "Phase 1");
+    expect(allWhenPhase.length).toBe(3);
+  });
+
+  test("constructGateQuestions uses Record<string, string> dict criteria for choice and noul questions", () => {
+    const q = constructGateQuestions(["Verify OAuth2 token refresh"]);
+    expect(typeof q.deliverables_verdict.criteria).toBe("object");
+    expect(Array.isArray(q.deliverables_verdict.criteria)).toBe(false);
+    expect((q.deliverables_verdict.criteria as Record<string, string>).APPROVE).toContain("Verify OAuth2 token refresh");
+    expect(typeof q.meets_criteria.criteria).toBe("object");
+    expect(Array.isArray(q.meets_criteria.criteria)).toBe(false);
+    expect((q.meets_criteria.criteria as Record<string, string>).true).toContain("Verify OAuth2 token refresh");
+  });
+
+  test("summarizeUnifiedDiff preserves <unified_diff> XML wrapper and contiguous implementation body lines", () => {
+    const implLines = Array.from({ length: 200 }, (_, i) => `+  const computedValue_${i} = input * ${i};`).join("\n");
+    const tailLines = Array.from({ length: 400 }, (_, i) => `+  const extraLine_${i} = "${"x".repeat(40)}";`).join("\n");
+    const wrappedDiff = `<unified_diff>\ndiff --git a/src/calc.ts b/src/calc.ts\n@@ -1,3 +1,600 @@\n+export function calculate(input: number) {\n${implLines}\n${tailLines}\n+  return input;\n+}\n</unified_diff>`;
+
+    const summarized = summarizeUnifiedDiff(wrappedDiff, 6000);
+    expect(summarized.startsWith("<unified_diff>\n")).toBe(true);
+    expect(summarized.endsWith("\n</unified_diff>")).toBe(true);
+    expect(summarized).toContain("const computedValue_0 = input * 0;");
+    expect(summarized).toContain("return input;");
+    expect(summarized.length).toBeLessThanOrEqual(6000);
   });
 });

@@ -130,6 +130,52 @@ const UNSAFE_DECISION_PATTERNS = [
   /\b(?:rm\s+-rf\s+\/|drop\s+database|skip\s+all\s+tests|disable\s+verification\s+gate)\b/i,
 ];
 
+const STOPWORDS: Record<string, true> = {
+  with: true, from: true, that: true, this: true, have: true, been: true,
+  will: true, should: true, would: true, could: true, into: true, your: true,
+  their: true, please: true, task: true, step: true, phase: true, item: true,
+  toolcall: true, toolresult: true, reading: true, searching: true, listing: true, running: true,
+};
+
+function extractContentTokens(text: string): string[] {
+  if (!text) return [];
+  const stripped = text
+    .replace(/\[toolCall:[^\]]*\]/gi, " ")
+    .replace(/\[toolResult:[^\]]*\]:?/gi, " ")
+    .toLowerCase()
+    .replace(/[^a-z0-9\u00C0-\u1EF9\s]/gi, " ");
+  const seen = new Set<string>();
+  for (const w of stripped.split(/\s+/)) {
+    if (w.length > 3 && !STOPWORDS[w]) seen.add(w);
+  }
+  return Array.from(seen);
+}
+
+function computeTokenOverlap(source: string, target: string): number {
+  const srcTokens = extractContentTokens(source);
+  if (srcTokens.length === 0) return 0;
+  const targetLower = (target || "").toLowerCase();
+  let matched = 0;
+  for (const tok of srcTokens) {
+    if (targetLower.includes(tok)) matched++;
+  }
+  return matched / srcTokens.length;
+}
+
+function hasExplicitTestFailure(text?: string): boolean {
+  if (!text || !text.trim()) return false;
+  const hasFailSignal =
+    /\bexit\s+[1-9]\d*\b/i.test(text) ||
+    /\b[1-9]\d*\s+fail(?:ed|ures?)?\b/i.test(text) ||
+    /(?:^|\n)\s*FAIL\s+\S+/m.test(text) ||
+    /\bAssertionError\b/i.test(text);
+  if (!hasFailSignal) return false;
+  const tail = text.slice(-400);
+  const recoveredInTail =
+    /\bexit\s+0\b/i.test(tail) && /\b0\s+fail(?:ed|ures?)?\b/i.test(tail);
+  return !recoveredInTail;
+}
+
 function normalizeOptions(
   options?: Array<string | AdvisorOptionCandidate>,
   recommendedIndex?: number
@@ -178,11 +224,6 @@ function evaluateAdvisorDecision(ctx: AdvisorContext): AdvisorIntentResult {
       let score = 0.50;
       const rationales: string[] = [];
       const optFullText = `${opt.label} ${opt.description || ""} ${opt.preview || ""}`;
-      const optWords = optFullText
-        .toLowerCase()
-        .replace(/[^a-z0-9\u00C0-\u1EF9\s]/gi, " ")
-        .split(/\s+/)
-        .filter((w) => w.length > 3);
 
       if (UNSAFE_DECISION_PATTERNS.some((p) => p.test(optFullText))) {
         score -= 0.40;
@@ -194,30 +235,31 @@ function evaluateAdvisorDecision(ctx: AdvisorContext): AdvisorIntentResult {
       }
 
       if (opt.recommended) {
-        score += 0.25;
+        score += 0.21;
         rationales.push("Marked as recommended default");
       }
 
-      if (userReqLower.length > 0 && optWords.some((w) => userReqLower.includes(w))) {
-        score += 0.25;
+      const userOverlap = userReqLower.length > 0 ? computeTokenOverlap(optFullText, userReqLower) : 0;
+      if (userOverlap > 0) {
+        score += 0.12 + 0.16 * userOverlap;
         rationales.push("Directly aligns with user request");
       }
 
-      if (workLogLower.length > 0 && optWords.some((w) => workLogLower.includes(w))) {
-        score += 0.15;
+      const workOverlap = workLogLower.length > 0 ? computeTokenOverlap(optFullText, workLogLower) : 0;
+      if (workOverlap > 0) {
+        score += 0.08 + 0.11 * workOverlap;
         rationales.push("Supported by codebase and work-log evidence");
       }
 
-      if (
-        /\b(?:autonomous|auto|standard|safe|test|verify|root\s*cause|bicameral|consensus|keep|preserve|non-blocking|incremental|recommended)\b/i.test(
-          optFullText
-        )
-      ) {
-        score += 0.12;
+      const safeMatches = optFullText.match(
+        /\b(?:autonomous|auto|standard|safe|test|verify|root\s*cause|bicameral|consensus|preserve|non-blocking|incremental|recommended)\b/gi
+      );
+      if (safeMatches && safeMatches.length > 0) {
+        score += Math.min(0.14, 0.05 + safeMatches.length * 0.03);
         rationales.push("Follows safe, maintainable engineering practice");
       }
 
-      if (/\b(?:skip\s*test|bypass|force\s*delete|ignore\s*error|hardcode)\b/i.test(optFullText)) {
+      if (/\b(?:skip\s*test\w*|bypass\w*|force\s*delete|ignore\s*error\w*|hardcod\w*|threshold\s+wall\w*|do\s+nothing)\b/i.test(optFullText)) {
         score -= 0.25;
         rationales.push("Introduces avoidable verification or maintenance risk");
       }
@@ -250,10 +292,11 @@ function evaluateAdvisorDecision(ctx: AdvisorContext): AdvisorIntentResult {
     }));
 
     if (top.score < 0.30) {
+      const blockConf = Number(Math.min(0.96, Math.max(0.78, 1 - top.score)).toFixed(2));
       return {
         verdict: "DISALLOW",
         ckVerdict: "block",
-        confidence: 0.90,
+        confidence: blockConf,
         reason: `All candidate options violate constraints (${top.rationale})`,
         recommendation: `Reject unsafe options and revise approach to respect workspace constraints.`,
         rankedOptions,
@@ -268,10 +311,14 @@ function evaluateAdvisorDecision(ctx: AdvisorContext): AdvisorIntentResult {
       (second !== undefined && top.score > second.score);
 
     if (hasDifferentiation) {
+      const margin = second !== undefined ? Math.max(0, top.score - second.score) : 0.20;
+      const calibratedConf = Number(
+        Math.min(0.98, Math.max(0.75, top.score * 0.88 + margin * 0.25)).toFixed(2)
+      );
       return {
         verdict: "ALLOW",
         ckVerdict: "proceed",
-        confidence: Math.max(0.75, top.score),
+        confidence: calibratedConf,
         reason: `Advisor recommends "${top.option}" (${top.rationale})`,
         recommendation: `Select "${top.option}" — ${top.rationale}.`,
         recommendedOption: top.option,
@@ -286,7 +333,7 @@ function evaluateAdvisorDecision(ctx: AdvisorContext): AdvisorIntentResult {
     return {
       verdict: "ALLOW",
       ckVerdict: "proceed",
-      confidence: 0.72,
+      confidence: 0.68,
       reason: `Advisor defaults to conservative first option "${top.option}" (${top.rationale})`,
       recommendation: `Select "${top.option}" (${top.rationale}).`,
       recommendedOption: top.option,
@@ -307,7 +354,7 @@ function evaluateAdvisorDecision(ctx: AdvisorContext): AdvisorIntentResult {
     return {
       verdict: "DISALLOW",
       ckVerdict: "block",
-      confidence: 0.92,
+      confidence: 0.93,
       reason: "Proposed action violates workspace safety or isolation invariants",
       recommendation: "Block the unsafe mutation and restrict changes to the local development workspace.",
       findings,
@@ -333,10 +380,16 @@ function evaluateAdvisorDecision(ctx: AdvisorContext): AdvisorIntentResult {
         "Proceed with the conservative, evidence-backed implementation aligned with user intent and project conventions.";
     }
 
+    const overlap = computeTokenOverlap(questionText || userReq, `${userReq}\n${workLog}`);
+    const signalDensity = Math.min(1, (questionText.length + userReq.length + workLog.length) / 600);
+    const calibratedConf = Number(
+      Math.min(0.94, Math.max(0.76, 0.76 + overlap * 0.11 + signalDensity * 0.06)).toFixed(2)
+    );
+
     return {
       verdict: "ALLOW",
       ckVerdict: "proceed",
-      confidence: 0.85,
+      confidence: calibratedConf,
       reason: recommendation,
       recommendation,
       recommendedOption: "proceed",
@@ -376,14 +429,28 @@ export function evaluateAdvisorIntent(ctx: AdvisorContext): AdvisorIntentResult 
   }
 
   if (ctx.operation === "drop") {
+    const taskOverlapWithReq = computeTokenOverlap(taskText, userReq);
     // 1. Explicit user cancellation detected in user request
-    const userWantsCancel = CANCELLATION_PATTERNS.some((p) => p.test(userReq));
+    const explicitCancelVerb =
+      /\b(?:cancel|cancelled|cancelling|drop|dropped|dropping|skip|skipped|skipping|omit|omitted|deprecate|deprecated|supersede|superseded|don't need|no longer need|not needed|not required|bỏ qua|hủy|không cần)\b/i.test(
+        userReq
+      );
+    const contextualRemoveVerb =
+      /\b(?:remove|removed|removing|delete|deleted|ignore|ignored|xóa)\b/i.test(userReq) &&
+      (taskOverlapWithReq > 0 || /\b(?:task|tasks|step|steps|todo|phase|item)\b/i.test(userReq));
+    const userWantsCancel =
+      explicitCancelVerb ||
+      contextualRemoveVerb ||
+      (CANCELLATION_PATTERNS.some((p) => p.test(userReq)) && taskOverlapWithReq > 0);
     if (userWantsCancel) {
       const reason = "User explicitly authorized or requested dropping the task in context";
+      const cancelConf = Number(
+        Math.min(0.97, Math.max(0.87, 0.88 + taskOverlapWithReq * 0.08)).toFixed(2)
+      );
       return {
         verdict: "ALLOW",
         ckVerdict: "proceed",
-        confidence: 0.95,
+        confidence: cancelConf,
         reason,
         recommendation: reason,
         userIntentDetected: true,
@@ -397,10 +464,14 @@ export function evaluateAdvisorIntent(ctx: AdvisorContext): AdvisorIntentResult 
 
     if (hasBuildEvidence) {
       const reason = "Clean build or verified test success confirms task is obsolete or already satisfied";
+      const buildOverlap = computeTokenOverlap(taskText, combinedContext);
+      const buildConf = Number(
+        Math.min(0.95, Math.max(0.86, 0.86 + buildOverlap * 0.08)).toFixed(2)
+      );
       return {
         verdict: "ALLOW",
         ckVerdict: "proceed",
-        confidence: 0.90,
+        confidence: buildConf,
         reason,
         recommendation: reason,
         userIntentDetected: false,
@@ -409,18 +480,17 @@ export function evaluateAdvisorIntent(ctx: AdvisorContext): AdvisorIntentResult 
 
     // 3. User explicitly requested this task and no cancellation was expressed
     if (userReq.length > 0) {
-      const taskWords = taskText
-        .toLowerCase()
-        .replace(/[^a-z0-9\u00C0-\u1EF9\s]/gi, " ")
-        .split(/\s+/)
-        .filter((w) => w.length > 3);
+      const taskWords = extractContentTokens(taskText);
       const matchesUserRequest = taskWords.some((w) => userReq.toLowerCase().includes(w));
       if (matchesUserRequest) {
         const reason = "User requested task implementation and no valid cancellation or obsolescence evidence exists";
+        const disallowConf = Number(
+          Math.min(0.94, Math.max(0.82, 0.82 + taskOverlapWithReq * 0.11)).toFixed(2)
+        );
         return {
           verdict: "DISALLOW",
           ckVerdict: "block",
-          confidence: 0.85,
+          confidence: disallowConf,
           reason,
           recommendation: reason,
           userIntentDetected: true,
@@ -443,33 +513,58 @@ export function evaluateAdvisorIntent(ctx: AdvisorContext): AdvisorIntentResult 
   if (ctx.operation === "done") {
     const combinedDoneEvidence = `${workLog}\n${ctx.reason || ""}\n${ctx.testSummary || ""}\n${ctx.diffSummary || ""}\n${ctx.deliverableArtifacts || ""}`;
 
-    if (
-      workLog.length > 0 &&
-      /pass|implement|added|completed|fixed|moved|organized|refactor|verified|updated|tested|scout|diagnos|analy[sz]|investigat|identif|found|trace|review|plan|document|sync|deploy|check|resolv|root\s*cause|deliver|wrote|creat|built|\[Advisor\]:|hoàn thành|đã sửa|đã kiểm tra|thành công|đã xong|xác minh|báo cáo/i.test(
-        workLog
-      )
-    ) {
-      const reason = "Agent work log documents concrete implementation and passing verification";
+    // 1. Negative evidence check -> First-class DISALLOW
+    if (UNSAFE_DECISION_PATTERNS.some((p) => p.test(combinedDoneEvidence))) {
+      const reason = "Task evidence touches protected boundaries or unsafe operations";
       return {
-        verdict: "ALLOW",
-        ckVerdict: "proceed",
-        confidence: 0.90,
+        verdict: "DISALLOW",
+        ckVerdict: "block",
+        confidence: 0.94,
         reason,
         recommendation: reason,
         userIntentDetected: userReq.length > 0,
       };
     }
 
-    if (
+    if (hasExplicitTestFailure(ctx.testSummary) || (!ctx.testSummary && hasExplicitTestFailure(workLog))) {
+      const reason = "Test or build failure detected in verification evidence; resolve failing assertions before completing task";
+      return {
+        verdict: "DISALLOW",
+        ckVerdict: "block",
+        confidence: 0.89,
+        reason,
+        recommendation: reason,
+        userIntentDetected: userReq.length > 0,
+      };
+    }
+
+    const strippedWorkLog = workLog
+      .replace(/\[toolCall:[^\]]*\]/gi, " ")
+      .replace(/\[toolResult:[^\]]*\]:?/gi, " ")
+      .trim();
+    const taskOverlap = computeTokenOverlap(taskText, combinedDoneEvidence);
+    const userOverlap = computeTokenOverlap(userReq, `${taskText}\n${combinedDoneEvidence}`);
+    const hasPassingTest =
       ctx.hasCleanBuildEvidence === true ||
       CLEAN_BUILD_PATTERNS.some((p) => p.test(combinedDoneEvidence)) ||
-      /\bexit\s+0\b|\b0\s+fail\b/i.test(ctx.testSummary || "")
-    ) {
+      /\bexit\s+0\b|\b0\s+fail\b|\b\d+\s+pass(?:ing|ed)?\b/i.test(`${ctx.testSummary || ""}\n${workLog}`);
+    const hasConcreteDiff =
+      Boolean(
+        ctx.diffSummary &&
+          ctx.diffSummary !== "No unstaged changes observed" &&
+          ctx.diffSummary.trim().length > 0
+      );
+    const hasArtifacts = Boolean(ctx.deliverableArtifacts && ctx.deliverableArtifacts.trim().length > 0);
+
+    if (hasPassingTest) {
       const reason = "Verified test or build evidence confirms task completion";
+      const conf = Number(
+        Math.min(0.97, Math.max(0.86, 0.86 + taskOverlap * 0.06 + (hasConcreteDiff || hasArtifacts ? 0.03 : 0) + userOverlap * 0.02)).toFixed(2)
+      );
       return {
         verdict: "ALLOW",
         ckVerdict: "proceed",
-        confidence: 0.90,
+        confidence: conf,
         reason,
         recommendation: reason,
         userIntentDetected: userReq.length > 0,
@@ -477,16 +572,34 @@ export function evaluateAdvisorIntent(ctx: AdvisorContext): AdvisorIntentResult 
     }
 
     if (
-      (ctx.diffSummary &&
-        ctx.diffSummary !== "No unstaged changes observed" &&
-        ctx.diffSummary.trim().length > 0) ||
-      (ctx.deliverableArtifacts && ctx.deliverableArtifacts.trim().length > 0)
+      strippedWorkLog.length > 0 &&
+      /\b(?:pass|passing|passed|implement\w*|added|completed|fixed|moved|organized|refactor\w*|verified|updated|tested|scout\w*|diagnos\w*|analy[sz]\w*|investigat\w*|identif\w*|found|trac\w*|review\w*|plan|planned|document\w*|sync\w*|deploy\w*|resolv\w*|root\s*cause|deliver\w*|wrote|creat\w*|built|\[Advisor\]:|hoàn thành|đã sửa|đã kiểm tra|thành công|đã xong|xác minh|báo cáo)\b/i.test(
+        strippedWorkLog
+      )
     ) {
-      const reason = "Concrete deliverable artifacts or workspace changes observed for task completion";
+      const reason = "Agent work log documents concrete implementation and verification evidence";
+      const conf = Number(
+        Math.min(0.96, Math.max(0.85, 0.85 + taskOverlap * 0.06 + (hasConcreteDiff || hasArtifacts ? 0.03 : 0) + userOverlap * 0.02)).toFixed(2)
+      );
       return {
         verdict: "ALLOW",
         ckVerdict: "proceed",
-        confidence: 0.85,
+        confidence: conf,
+        reason,
+        recommendation: reason,
+        userIntentDetected: userReq.length > 0,
+      };
+    }
+
+    if (hasConcreteDiff || hasArtifacts) {
+      const reason = "Concrete deliverable artifacts or workspace changes observed for task completion";
+      const conf = Number(
+        Math.min(0.93, Math.max(0.83, 0.83 + taskOverlap * 0.07 + userOverlap * 0.03)).toFixed(2)
+      );
+      return {
+        verdict: "ALLOW",
+        ckVerdict: "proceed",
+        confidence: conf,
         reason,
         recommendation: reason,
         userIntentDetected: userReq.length > 0,
@@ -503,10 +616,13 @@ export function evaluateAdvisorIntent(ctx: AdvisorContext): AdvisorIntentResult 
       );
     if (ctx.taskType === "analysis_research" || (!isImplLead && isCognitiveTask)) {
       const reason = "Investigation or analysis task completed within active session context";
+      const conf = Number(
+        Math.min(0.93, Math.max(0.85, 0.85 + taskOverlap * 0.05 + userOverlap * 0.03)).toFixed(2)
+      );
       return {
         verdict: "ALLOW",
         ckVerdict: "proceed",
-        confidence: 0.85,
+        confidence: conf,
         reason,
         recommendation: reason,
         userIntentDetected: userReq.length > 0,
@@ -517,7 +633,7 @@ export function evaluateAdvisorIntent(ctx: AdvisorContext): AdvisorIntentResult 
     return {
       verdict: "UNCERTAIN",
       ckVerdict: "revise",
-      confidence: 0.60,
+      confidence: 0.58,
       reason,
       recommendation: reason,
       userIntentDetected: userReq.length > 0,
@@ -530,10 +646,12 @@ export function evaluateAdvisorIntent(ctx: AdvisorContext): AdvisorIntentResult 
     }
     if (workLog.length > 0 || userReq.length > 0 || (ctx.reason && ctx.reason.trim().length > 0)) {
       const reason = "Task state mutation aligns with active workflow context";
+      const mutOverlap = computeTokenOverlap(taskText, combinedContext);
+      const mutConf = Number(Math.min(0.91, Math.max(0.78, 0.78 + mutOverlap * 0.10)).toFixed(2));
       return {
         verdict: "ALLOW",
         ckVerdict: "proceed",
-        confidence: 0.80,
+        confidence: mutConf,
         reason,
         recommendation: reason,
         userIntentDetected: userReq.length > 0,
@@ -699,11 +817,24 @@ export async function runBicameralMacroCheck(
   });
 
   const jevMacro = await runPhaseMacroCheck(ctx, client);
-  if (!jevMacro.approved && jevMacro.verdict === "REJECT" && !jevMacro.escalateToUser) {
+  if (jevMacro.approved && jevMacro.meetsCriteriaNoul !== undefined) {
+    advisor = {
+      ...advisor,
+      confidence: Number(
+        ((advisor.confidence * 0.45) + (jevMacro.meetsCriteriaNoul * 0.55)).toFixed(2)
+      ),
+    };
+  } else if (!jevMacro.approved && jevMacro.verdict === "REJECT" && !jevMacro.escalateToUser) {
+    const rejectConf =
+      jevMacro.expertConfidence ??
+      (jevMacro.meetsCriteriaNoul !== undefined
+        ? Math.max(0.75, 1 - jevMacro.meetsCriteriaNoul)
+        : advisor.confidence);
     advisor = {
       ...advisor,
       verdict: "DISALLOW",
       ckVerdict: "block",
+      confidence: Number(rejectConf.toFixed(2)),
       reason: "Deliverable verification rejected by JEV; agent remediation required before human escalation",
     };
   }
@@ -714,13 +845,15 @@ export async function runBicameralMacroCheck(
     jevVerdict = "NEXT_ACTION_REQUIRED";
   } else if (jevMacro.verdict === "REJECT") {
     jevVerdict = "REJECT";
+  } else if (!jevMacro.escalateToUser && (jevMacro.driftChoice !== "no_drift" || jevMacro.scopeChoice === "REDUCTION")) {
+    jevVerdict = "NEXT_ACTION_REQUIRED";
   } else {
     jevVerdict = "ESCALATE";
   }
 
   const jev: JevResult = {
     verdict: jevVerdict,
-    confidence: jevMacro.expertConfidence,
+    confidence: jevMacro.expertConfidence ?? jevMacro.meetsCriteriaNoul,
     reasons: jevMacro.reasons,
   };
 
@@ -755,11 +888,24 @@ export async function evaluateBicameralDoneConsensus(ctx: {
 
   let jevVerdict: JevConsensusVerdict;
   const jevMacro = ctx.macroResult;
-  if (!jevMacro.approved && jevMacro.verdict === "REJECT" && !jevMacro.escalateToUser) {
+  if (jevMacro.approved && jevMacro.meetsCriteriaNoul !== undefined) {
+    advisor = {
+      ...advisor,
+      confidence: Number(
+        ((advisor.confidence * 0.45) + (jevMacro.meetsCriteriaNoul * 0.55)).toFixed(2)
+      ),
+    };
+  } else if (!jevMacro.approved && jevMacro.verdict === "REJECT" && !jevMacro.escalateToUser) {
+    const rejectConf =
+      jevMacro.expertConfidence ??
+      (jevMacro.meetsCriteriaNoul !== undefined
+        ? Math.max(0.75, 1 - jevMacro.meetsCriteriaNoul)
+        : advisor.confidence);
     advisor = {
       ...advisor,
       verdict: "DISALLOW",
       ckVerdict: "block",
+      confidence: Number(rejectConf.toFixed(2)),
       reason: "Deliverable verification rejected by JEV; agent remediation required before human escalation",
     };
   }
@@ -769,13 +915,15 @@ export async function evaluateBicameralDoneConsensus(ctx: {
     jevVerdict = "NEXT_ACTION_REQUIRED";
   } else if (jevMacro.verdict === "REJECT") {
     jevVerdict = "REJECT";
+  } else if (!jevMacro.escalateToUser && (jevMacro.driftChoice !== "no_drift" || jevMacro.scopeChoice === "REDUCTION")) {
+    jevVerdict = "NEXT_ACTION_REQUIRED";
   } else {
     jevVerdict = "ESCALATE";
   }
 
   const jev: JevResult = {
     verdict: jevVerdict,
-    confidence: jevMacro.expertConfidence,
+    confidence: jevMacro.expertConfidence ?? jevMacro.meetsCriteriaNoul,
     reasons: jevMacro.reasons,
   };
 
@@ -983,8 +1131,12 @@ export async function runBicameralDecisionCheck(
             const matchedRationale =
               advisor.rankedOptions?.find((r) => r.option === recChoice)?.rationale ||
               "Recommended by TypeSafe JEV & Advisor";
+            const calibratedOptionConf = Number(
+              (recConf ?? clarity ?? advisor.confidence).toFixed(2)
+            );
             if (advisor.rankedOptions && advisor.rankedOptions.length > 0) {
-              const promotedScore = Math.max(advisor.rankedOptions[0]?.score ?? 0.90, recConf ?? 0.90);
+              const topExisting = advisor.rankedOptions[0]?.score ?? calibratedOptionConf;
+              const promotedScore = Math.max(topExisting, calibratedOptionConf);
               advisor.rankedOptions = advisor.rankedOptions
                 .map((r) => (r.option === recChoice ? { ...r, score: promotedScore } : r))
                 .sort((a, b) => {
@@ -997,15 +1149,23 @@ export async function runBicameralDecisionCheck(
             advisor.recommendedIndex = matchedIdx;
             advisor.recommendation = `Select "${recChoice}" — ${matchedRationale}.`;
             advisor.reason = advisor.recommendation;
+            advisor.confidence = calibratedOptionConf;
             advisor.verdict = "ALLOW";
             advisor.ckVerdict = "proceed";
           }
+        } else if (clarity !== undefined) {
+          advisor.confidence = Number(
+            ((advisor.confidence * 0.4) + (clarity * 0.6)).toFixed(2)
+          );
         }
 
+        const calibratedJevConf = Number(
+          (recConf ?? clarity ?? advisor.confidence).toFixed(2)
+        );
         if (riskScore !== undefined && riskScore > 2.0) {
           jev = {
             verdict: "REJECT",
-            confidence: recConf ?? clarity ?? 0.85,
+            confidence: calibratedJevConf,
             reasons:
               jevReasons.length > 0
                 ? jevReasons
@@ -1014,7 +1174,7 @@ export async function runBicameralDecisionCheck(
         } else {
           jev = {
             verdict: "APPROVE",
-            confidence: recConf ?? clarity ?? 0.90,
+            confidence: calibratedJevConf,
             reasons:
               jevReasons.length > 0
                 ? jevReasons

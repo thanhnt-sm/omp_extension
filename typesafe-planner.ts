@@ -466,30 +466,74 @@ function shortError(code: string): ExtensionToolResult {
 export function summarizeUnifiedDiff(diff: string, maxChars = 28000): string {
   if (diff.length <= maxChars) return diff;
 
-  const lines = diff.split("\n");
-  const preservedLines: string[] = [];
-  let skippedCount = 0;
-  for (const line of lines) {
-    const isFileHeader = line.startsWith("diff --git") || line.startsWith("--- ") || line.startsWith("+++ ");
-    const isHunkHeader = line.startsWith("@@ ");
-    const isAssertion = /(?:expect\(|assert\(|assert\.[a-zA-Z]+\(|describe\(|test\()/.test(line);
-    const isSignature = /(?:function\s+|class\s+|export\s+|interface\s+|type\s+|const\s+[a-zA-Z0-9_]+\s*=\s*(?:async\s*)?\()/.test(line);
-    const isKeyHunk = line.includes("return ") || line.includes("throw ") || line.includes("TODO") || line.includes("unimplemented");
+  const xmlMatch = diff.match(/^<([a-z_]+)>\n([\s\S]*)\n<\/\1>$/);
+  if (xmlMatch) {
+    const tagName = xmlMatch[1];
+    const inner = xmlMatch[2];
+    const tagOverhead = tagName.length * 2 + 7;
+    const summarizedInner = summarizeUnifiedDiff(inner, Math.max(200, maxChars - tagOverhead));
+    return `<${tagName}>\n${summarizedInner}\n</${tagName}>`;
+  }
 
-    if (isFileHeader || isHunkHeader || isAssertion || isSignature || isKeyHunk) {
-      if (skippedCount > 0) {
-        preservedLines.push(`[... ${skippedCount} lines truncated ...]`);
-        skippedCount = 0;
+  const fileBlocks = diff.includes("diff --git ")
+    ? diff.split(/(?=^diff --git )/m).filter((b) => b.trim().length > 0)
+    : [diff];
+  const numFiles = fileBlocks.length;
+  const perFileBudget = Math.max(350, Math.floor((maxChars - 60) / numFiles));
+
+  const summarizedBlocks = fileBlocks.map((block) => {
+    if (block.length <= perFileBudget) return block.trimEnd();
+    const lines = block.split("\n");
+    const headerLines: string[] = [];
+    const bodyLines: string[] = [];
+    for (const line of lines) {
+      if (
+        line.startsWith("diff --git") ||
+        line.startsWith("--- ") ||
+        line.startsWith("+++ ") ||
+        line.startsWith("new file")
+      ) {
+        headerLines.push(line);
+      } else {
+        bodyLines.push(line);
       }
-      preservedLines.push(line);
-    } else {
-      skippedCount++;
     }
-  }
-  if (skippedCount > 0) {
-    preservedLines.push(`[... ${skippedCount} lines truncated ...]`);
-  }
-  let result = preservedLines.join("\n");
+    const headerStr = headerLines.join("\n");
+    const remainingBudget = Math.max(120, perFileBudget - headerStr.length - 45);
+    const keptBody: string[] = [];
+    let len = 0;
+    let skipped = 0;
+    for (const line of bodyLines) {
+      const isPriority =
+        line.startsWith("@@ ") ||
+        /(?:expect\(|assert\(|assert\.[a-zA-Z]+\(|describe\(|test\(|function\s+|class\s+|export\s+|interface\s+|type\s+|const\s+[a-zA-Z0-9_]+\s*=\s*(?:async\s*)?\(|return\s+|throw\s+|TODO|unimplemented)/.test(
+          line
+        );
+      if (
+        len + line.length + 1 <= remainingBudget * 0.65 ||
+        (isPriority && len + line.length + 1 <= remainingBudget)
+      ) {
+        if (skipped > 0) {
+          const marker = `[... ${skipped} lines truncated ...]`;
+          if (len + marker.length + 1 <= remainingBudget) {
+            keptBody.push(marker);
+            len += marker.length + 1;
+          }
+          skipped = 0;
+        }
+        keptBody.push(line);
+        len += line.length + 1;
+      } else {
+        skipped++;
+      }
+    }
+    if (skipped > 0) {
+      keptBody.push(`[... ${skipped} lines truncated ...]`);
+    }
+    return headerStr ? `${headerStr}\n${keptBody.join("\n")}` : keptBody.join("\n");
+  });
+
+  let result = summarizedBlocks.join("\n\n");
   if (result.length > maxChars) {
     result = result.slice(0, maxChars - 40) + "\n[... diff truncated ...]";
   }
@@ -559,7 +603,15 @@ export function sanitizeStateForTypeSafe(state: string | Record<string, unknown>
       }
     }
 
-    const serialized = JSON.stringify(obj);
+    let serialized = JSON.stringify(obj);
+    if (serialized.length > 28000) {
+      for (const diffK of ["unified_diff", "gitDiff", "diff"]) {
+        if (typeof obj[diffK] === "string" && (obj[diffK] as string).length > 10000) {
+          obj[diffK] = summarizeUnifiedDiff(obj[diffK] as string, 10000);
+        }
+      }
+      serialized = JSON.stringify(obj);
+    }
     if (serialized.length > 28000) {
       for (const key of Object.keys(obj)) {
         const val = obj[key];
@@ -568,9 +620,9 @@ export function sanitizeStateForTypeSafe(state: string | Record<string, unknown>
           key !== "unified_diff" &&
           key !== "gitDiff" &&
           key !== "diff" &&
-          val.length > 950
+          val.length > 1500
         ) {
-          obj[key] = clampEnclosedOrRaw(val, 950, TAIL_KEYS[key] ? "tail" : "head");
+          obj[key] = clampEnclosedOrRaw(val, 1500, TAIL_KEYS[key] ? "tail" : "head");
         }
       }
     }
@@ -686,7 +738,7 @@ export function collectConversationContext(ctx: unknown): {
           /^📋 TypeSafe task report/u.test(trimmed) ||
           /\n📋 TypeSafe task report/u.test(trimmed)
         ) {
-          if (/(?:bun test|\bRan \d+ tests\b|\b\d+ pass\b|SUCCESS: Baseline deployed)/i.test(trimmed)) {
+          if (/(?:bun test|npm test|vitest|jest|pytest|cargo test|go test|dotnet test|msbuild|node --test|\bRan \d+ tests\b|\b\d+ pass(?:ing|ed)?\b|SUCCESS: Baseline deployed)/i.test(trimmed)) {
             lastTestSummary = clampText(trimmed, 2000, "tail");
           }
           const bgMatch = trimmed.match(/<system-notice>([\s\S]*?)<\/system-notice>/);
@@ -712,7 +764,7 @@ export function collectConversationContext(ctx: unknown): {
         assistantMessages.push(`[toolResult:${tName}]: ${clampedResult}`);
         if (
           (tName === "bash" || tName === "eval") &&
-          /(?:bun test|\bRan \d+ tests\b|\b\d+ pass\b|SUCCESS: Baseline deployed)/i.test(trimmed)
+          /(?:bun test|npm test|vitest|jest|pytest|cargo test|go test|dotnet test|msbuild|node --test|\bRan \d+ tests\b|\b\d+ pass(?:ing|ed)?\b|SUCCESS: Baseline deployed)/i.test(trimmed)
         ) {
           lastTestSummary = clampText(trimmed, 2000, "tail");
         }
@@ -770,8 +822,9 @@ export function formatTaskReport(r: TaskReport): string {
       );
     }
     if (r.scores.dropJustified !== undefined) {
+      const dropVerdictSuffix = r.scores.verdict ? ` | verdict=${r.scores.verdict}` : "";
       lines.push(
-        `Judge: drop_justified=${r.scores.dropJustified.toFixed(2)} (reject < ${DROP_REJECT_FLOOR.toFixed(2)})`
+        `Judge: drop_justified=${r.scores.dropJustified.toFixed(2)}${dropVerdictSuffix}`
       );
     }
   }
@@ -840,15 +893,18 @@ export function normalizeQuestionForTypeSafe(
       }
       newQ.criteria = criteriaObj;
     } else if (newQ.type === "noul" && Array.isArray(newQ.criteria)) {
+      const stripBoolPrefix = (s: string, prefix: "true" | "false") =>
+        s.replace(new RegExp(`^\\s*${prefix}\\s*[:\\-]\\s*`, "i"), "").trim();
       if (newQ.criteria.length >= 2) {
         newQ.criteria = {
-          true: String(newQ.criteria[0]),
-          false: String(newQ.criteria[1]),
+          true: stripBoolPrefix(String(newQ.criteria[0]), "true"),
+          false: stripBoolPrefix(String(newQ.criteria[1]), "false"),
         };
       } else if (newQ.criteria.length === 1) {
+        const cleaned = stripBoolPrefix(String(newQ.criteria[0]), "true");
         newQ.criteria = {
-          true: String(newQ.criteria[0]),
-          false: `Not ${String(newQ.criteria[0])}`,
+          true: cleaned,
+          false: `Not ${cleaned}`,
         };
       }
     } else if (newQ.type === "score" && Array.isArray(newQ.criteria)) {
@@ -2132,7 +2188,12 @@ ${prevRemediation.reasons.map((r) => `   - ${r}`).join("\n")}
     const bicameralResult = await runBicameralMacroCheck(
       {
         todoTask: taskId,
-        phaseTitle: (params.phaseTitle as string) || (primaryOp.phaseTitle as string) || taskId,
+        phaseTitle:
+          (params.phaseTitle as string) ||
+          (primaryOp.phaseTitle as string) ||
+          (params.phase as string) ||
+          (primaryOp.phase as string) ||
+          taskId,
         planRequirements,
         planContext,
         diffSummary: evidence.gitStatus || "No unstaged changes observed",

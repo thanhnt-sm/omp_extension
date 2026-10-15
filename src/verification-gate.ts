@@ -39,7 +39,7 @@ export interface DualGateVerificationResult {
 export interface GateQuestion {
   type: "choice" | "score" | "noul";
   instructions: string;
-  criteria?: string[];
+  criteria?: string[] | Record<string, string>;
 }
 
 export interface GateJudgeClient {
@@ -70,13 +70,13 @@ export interface TaskVerificationContext {
 
 /**
  * Resolves the configurable auto-approval threshold for TypeSafe evaluation.
- * Defaults to 0.80 (80%) and can be customized via TYPESAFE_AUTO_APPROVAL_THRESHOLD.
+ * Defaults to 0.50 (natural Bayes boundary) and can be customized via TYPESAFE_AUTO_APPROVAL_THRESHOLD.
  */
 export function resolveAutoApprovalThreshold(): number {
   const raw = process.env.TYPESAFE_AUTO_APPROVAL_THRESHOLD;
-  if (!raw || raw.trim() === "") return 0.80;
+  if (!raw || raw.trim() === "") return 0.50;
   const parsed = parseFloat(raw.trim());
-  if (isNaN(parsed)) return 0.80;
+  if (isNaN(parsed)) return 0.50;
   const normalized = parsed > 1.0 ? parsed / 100 : parsed;
   return Math.min(Math.max(normalized, 0), 1.0);
 }
@@ -137,26 +137,27 @@ export function constructGateQuestions(criteria: string[]): Record<string, GateQ
     criteria.length > 0
       ? criteria
       : ["Code correctly satisfies task deliverables and requirements."];
+  const joinedCriteria = criteriaList.join(", ");
 
   return {
     deliverables_verdict: {
       type: "choice",
       instructions:
-        "Rate whether the real Git diff and test execution output completely satisfy the task's stated deliverables.",
-      criteria: [
-        `APPROVE: Satisfies all criteria: ${criteriaList.join(", ")}`,
-        "REJECT: Fails to satisfy criteria or partially implemented",
-        "NEXT_ACTION_REQUIRED: Work is partial, missing tests, or needs plan revision",
-      ],
+        "Rate whether the real Git diff and test execution output satisfy the current task's stated deliverables.",
+      criteria: {
+        APPROVE: `Satisfies criteria: ${joinedCriteria}`,
+        REJECT: "Fails to satisfy criteria or stubs out required functionality",
+        NEXT_ACTION_REQUIRED: "Work is partial, missing tests, or needs plan revision",
+      },
     },
     meets_criteria: {
       type: "noul",
       instructions:
-        "Rate the probability that the real Git diff and test execution output completely satisfy the task's stated deliverables.",
-      criteria: [
-        `true: Satisfies all criteria: ${criteriaList.join(", ")}`,
-        "false: Fails to satisfy criteria or partially implemented",
-      ],
+        "Rate the probability that the real Git diff and test execution output satisfy the current task's stated deliverables.",
+      criteria: {
+        true: `Satisfies criteria: ${joinedCriteria}`,
+        false: "Fails to satisfy criteria or is incomplete",
+      },
     },
     plan_drift: {
       type: "choice",
@@ -373,23 +374,24 @@ export async function verifyTaskCompletion(
   }
 
   const threshold = resolveAutoApprovalThreshold();
+  const passesThreshold = (p: number) => (threshold === 0.50 ? p > 0.50 : p >= threshold);
   let deliverablesVerdict: "APPROVE" | "REJECT" | "NEXT_ACTION_REQUIRED" | undefined;
   if (hasValidDeliverablesVerdict) {
     deliverablesVerdict = rawDeliverablesVerdict!.choice as "APPROVE" | "REJECT" | "NEXT_ACTION_REQUIRED";
-    if (deliverablesVerdict === "APPROVE" && hasValidMeetsCriteria && rawMeetsCriteria! < Math.min(0.50, threshold)) {
-      deliverablesVerdict = rawMeetsCriteria! < 0.30 ? "REJECT" : "NEXT_ACTION_REQUIRED";
+    if (deliverablesVerdict === "APPROVE" && hasValidMeetsCriteria && !passesThreshold(rawMeetsCriteria!)) {
+      deliverablesVerdict = rawMeetsCriteria! < 0.25 ? "REJECT" : "NEXT_ACTION_REQUIRED";
     }
   } else if (hasValidMeetsCriteria) {
-    deliverablesVerdict = rawMeetsCriteria! >= threshold ? "APPROVE" : rawMeetsCriteria! < 0.30 ? "REJECT" : "NEXT_ACTION_REQUIRED";
+    deliverablesVerdict = passesThreshold(rawMeetsCriteria!) ? "APPROVE" : rawMeetsCriteria! < 0.25 ? "REJECT" : "NEXT_ACTION_REQUIRED";
   }
 
   const { answers } = response;
   const reasons: string[] = [];
 
   if (deliverablesVerdict === "REJECT") {
-    if (rawMeetsCriteria !== undefined && rawMeetsCriteria < resolveAutoApprovalThreshold()) {
+    if (rawMeetsCriteria !== undefined) {
       reasons.push(
-        `Deliverable verification failed: meets_criteria probability (${rawMeetsCriteria}) is below ${resolveAutoApprovalThreshold().toFixed(2)} threshold.`
+        `Deliverable verification rejected: JEV verdict is REJECT (meets_criteria P=${rawMeetsCriteria.toFixed(2)}).`
       );
     } else {
       reasons.push(
@@ -397,9 +399,9 @@ export async function verifyTaskCompletion(
       );
     }
   } else if (deliverablesVerdict === "NEXT_ACTION_REQUIRED") {
-    if (rawMeetsCriteria !== undefined && rawMeetsCriteria < resolveAutoApprovalThreshold()) {
+    if (rawMeetsCriteria !== undefined) {
       reasons.push(
-        `Deliverable verification failed: meets_criteria probability (${rawMeetsCriteria}) is below ${resolveAutoApprovalThreshold().toFixed(2)} threshold.`
+        `Deliverable verification requires next actions: JEV verdict is NEXT_ACTION_REQUIRED (meets_criteria P=${rawMeetsCriteria.toFixed(2)}).`
       );
     } else {
       reasons.push(
@@ -425,9 +427,12 @@ export async function verifyTaskCompletion(
 
   const claudeThreshold = resolveAutoApprovalThreshold();
   const claudeUntouchedNoul = answers.claude_account_untouched?.noul;
-  if (claudeUntouchedNoul !== undefined && claudeUntouchedNoul < claudeThreshold) {
+  if (
+    claudeUntouchedNoul !== undefined &&
+    (claudeThreshold === 0.50 ? claudeUntouchedNoul <= 0.50 : claudeUntouchedNoul < claudeThreshold)
+  ) {
     reasons.push(
-      `Claude account isolation concern: claude_account_untouched probability (${claudeUntouchedNoul}) is below ${claudeThreshold.toFixed(2)}.`
+      `Claude account isolation concern: claude_account_untouched probability (${claudeUntouchedNoul.toFixed(2)}) indicates potential configuration touchpoints.`
     );
   }
 

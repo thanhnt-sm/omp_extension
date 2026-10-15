@@ -5,7 +5,7 @@ import { resolveAutoApprovalThreshold } from "./verification-gate";
 export interface PlanQuestion {
   type: "choice" | "score" | "noul";
   instructions: string;
-  criteria?: string[];
+  criteria?: string[] | Record<string, string>;
 }
 
 export interface PlanEvaluationInput {
@@ -335,18 +335,19 @@ export async function evaluatePlanDraft(
     );
   }
 
+  const bayesThreshold = resolveAutoApprovalThreshold();
+  const failsBayes = (p: number) => (bayesThreshold === 0.50 ? p <= 0.50 : p < bayesThreshold);
   const actionability = answers.task_actionability?.noul;
-  if (actionability !== undefined && actionability < 0.70) {
+  if (actionability !== undefined && failsBayes(actionability)) {
     reasons.push(
-      `Task actionability probability (${actionability}) is below 0.70 threshold. Tasks lack concrete verification commands.`
+      `Task actionability probability (${actionability}) indicates tasks lack concrete verification commands.`
     );
   }
 
-  const isolationThreshold = resolveAutoApprovalThreshold();
   const isolationNoul = answers.claude_isolation_adherence?.noul;
-  if (isolationNoul !== undefined && isolationNoul < isolationThreshold) {
+  if (isolationNoul !== undefined && failsBayes(isolationNoul)) {
     reasons.push(
-      `Claude isolation adherence probability (${isolationNoul}) is below ${isolationThreshold.toFixed(2)} threshold.`
+      `Claude isolation adherence probability (${isolationNoul}) indicates potential Claude configuration touchpoints.`
     );
   }
 

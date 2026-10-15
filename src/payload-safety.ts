@@ -119,8 +119,8 @@ const ERROR_KEYWORDS = [
   "TypeError:",
   "ReferenceError:",
   "stack:",
-  "at ",
 ];
+const STACK_FRAME_RE = /^\s*at\s+\S+/;
 /**
  * Structural smart truncation that prioritizes test errors and symbols
  * over repetitive diff lines while strictly satisfying the byte budget.
@@ -137,22 +137,20 @@ export function truncatePayloadState(state: string, maxBytes: number): string {
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    if (ERROR_KEYWORDS.some((kw) => line.includes(kw))) {
+    if (ERROR_KEYWORDS.some((kw) => line.includes(kw)) || STACK_FRAME_RE.test(line)) {
       errorLines.push(line);
     } else if (
       line.startsWith("diff --git") ||
       line.startsWith("---") ||
       line.startsWith("+++") ||
       line.startsWith("Summary:") ||
-      line.startsWith("Header:") ||
-      line.startsWith("# ")
+      line.startsWith("Header:")
     ) {
       headerLines.push(line);
     } else {
       diffLines.push(line);
     }
   }
-
   const marker = "\n... [diff truncated for size budget] ...\n";
   const reservedBytes =
     Buffer.byteLength(headerLines.join("\n") + "\n" + errorLines.join("\n") + marker, "utf8");
@@ -255,11 +253,18 @@ export function preparePayloadSafe<T extends TypeSafePayload>(
   if (stateParsed) {
     const diffKey = ["unified_diff", "gitDiff", "diff"].find((k) => typeof stateParsed?.[k] === "string");
     if (diffKey && typeof stateParsed[diffKey] === "string") {
-      let stateStr = JSON.stringify(stateParsed);
       const targetMax = Math.min(32200, maxBytes - 256);
-      while (Buffer.byteLength(stateStr, "utf8") > targetMax && (stateParsed[diffKey] as string).length > 500) {
-        stateParsed[diffKey] = (stateParsed[diffKey] as string).slice(0, -256) + "\n[... diff truncated ...]";
-        stateStr = JSON.stringify(stateParsed);
+      const otherBytes = Buffer.byteLength(
+        JSON.stringify({ ...stateParsed, [diffKey]: "" }),
+        "utf8"
+      );
+      const allowedDiffBytes = Math.max(500, targetMax - otherBytes - 64);
+      const rawDiff = stateParsed[diffKey] as string;
+      if (Buffer.byteLength(rawDiff, "utf8") > allowedDiffBytes) {
+        const closeTagMatch = rawDiff.match(/\n<\/[a-z_]+>$/);
+        const suffix = "\n[... diff truncated ...]" + (closeTagMatch ? closeTagMatch[0] : "");
+        const sliceLen = Math.max(200, allowedDiffBytes - suffix.length - 32);
+        stateParsed[diffKey] = rawDiff.slice(0, sliceLen) + suffix;
       }
     }
     scrubbed = {
