@@ -46,8 +46,8 @@ export interface WorkspaceSnapshot {
 
 export async function captureWorkspaceSnapshot(cwd: string): Promise<WorkspaceSnapshot> {
   const [statusRes, headRes] = await Promise.all([
-    executeTestCommand("git status --porcelain -uall", cwd, 5000),
-    executeTestCommand("git rev-parse HEAD", cwd, 5000),
+    executeTestCommand("git status --porcelain -uall", cwd, 15000),
+    executeTestCommand("git rev-parse HEAD", cwd, 15000),
   ]);
   const headSha = headRes.exitCode === 0 ? headRes.output.trim() : undefined;
   const files = new Map<string, string>();
@@ -103,6 +103,22 @@ export function diffSnapshots(before: WorkspaceSnapshot, after: WorkspaceSnapsho
   return Array.from(changed).sort();
 }
 
+function prioritizeCodeDiffBlocks(diff: string): string {
+  if (!diff.includes("diff --git ")) return diff;
+  const parts = diff.split(/(?=^diff --git )/m);
+  const codeBlocks: string[] = [];
+  const docBlocks: string[] = [];
+  for (const part of parts) {
+    const firstLine = part.split(/\r?\n/, 1)[0] || "";
+    if (/\.(md|markdown|txt|rst|adoc)(?:["\s]|$)/i.test(firstLine)) {
+      docBlocks.push(part.trimEnd());
+    } else {
+      codeBlocks.push(part.trimEnd());
+    }
+  }
+  return [...codeBlocks, ...docBlocks].filter(Boolean).join("\n\n");
+}
+
 /**
  * Validates that a path does NOT target ~/.claude, .claude subdirectories,
  * or Claude configuration credentials.
@@ -153,6 +169,17 @@ export function sanitizeEnvironment(
   return sanitized;
 }
 
+export function isPlanCliStub(content: string): boolean {
+  if (!content || !content.trim()) return false;
+  if (content.length > 1500) return false;
+  const hasPhaseStubOverview = /Brief description of scope and deliverables\./i.test(content);
+  const hasStubCheckboxes =
+    /-\s*\[\s*\]\s*Verifiable acceptance criteria/i.test(content) &&
+    /-\s*\[\s*\]\s*Test validation commands/i.test(content);
+  const hasOverviewTbd = /##\s+Overview\s*\r?\n+\s*TBD\.?\s*(?:\r?\n|$)/i.test(content);
+  return hasPhaseStubOverview || hasStubCheckboxes || hasOverviewTbd;
+}
+
 /**
  * Extracts acceptance criteria checklists and tasks from markdown plan content.
  */
@@ -160,6 +187,9 @@ export function extractCriteriaFromPlan(
   planContent: string,
   taskId?: string
 ): string[] {
+  if (isPlanCliStub(planContent)) {
+    return [];
+  }
   const lines = planContent.split("\n");
   const criteria: string[] = [];
 
@@ -168,10 +198,12 @@ export function extractCriteriaFromPlan(
     // Matches markdown checkboxes: - [ ] text or - [x] text
     const checkboxMatch = trimmed.match(/^-\s*\[([ xX])\]\s*(.+)$/);
     if (checkboxMatch && checkboxMatch[2]) {
-      criteria.push(checkboxMatch[2].trim());
+      const item = checkboxMatch[2].trim();
+      if (!/^(?:Verifiable acceptance criteria|Test validation commands)\.?$/i.test(item)) {
+        criteria.push(item);
+      }
     }
   }
-
   if (criteria.length === 0) {
     for (let i = 0; i < lines.length; i++) {
       const trimmed = lines[i].trim();
@@ -260,7 +292,7 @@ export async function collectTaskEvidence(
     changedFiles = diffSnapshots(options.baseline, after);
     diffScope = "task-baseline";
 
-    const statusRes = await executeTestCommand("git status --porcelain -uall", cwd, 5000);
+    const statusRes = await executeTestCommand("git status --porcelain -uall", cwd, 15000);
     const porcelainLines = statusRes.output.split(/\r?\n/).filter((l) => l.trim().length > 0);
     const statusEntries: string[] = [];
     const trackedChanged: string[] = [];
@@ -312,6 +344,18 @@ export async function collectTaskEvidence(
           changedFiles = statRes.output.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
         }
       } catch {}
+    } else if (!trackedDiff && untrackedChanged.length === 0 && statusEntries.length > 0) {
+      trackedDiff = statusEntries.join("\n");
+    } else if (!trackedDiff && untrackedChanged.length === 0 && porcelainLines.length > 0) {
+      gitStatus = porcelainLines.join("\n");
+      const fullDiffRes = await executeTestCommand("git diff HEAD", cwd, 5000);
+      trackedDiff = fullDiffRes.output.trim();
+      changedFiles = porcelainLines.map((l) => {
+        let p = l.slice(3).trim();
+        if (p.includes(" -> ")) p = p.split(" -> ").pop()?.trim() || p;
+        if (p.startsWith('"') && p.endsWith('"')) p = p.slice(1, -1);
+        return p;
+      });
     }
     for (const uf of untrackedChanged) {
       try {
@@ -324,10 +368,10 @@ export async function collectTaskEvidence(
       } catch {}
     }
 
-    gitDiff = [trackedDiff, untrackedDiff.trim()].filter(Boolean).join("\n\n");
+    gitDiff = prioritizeCodeDiffBlocks([trackedDiff, untrackedDiff.trim()].filter(Boolean).join("\n\n"));
   } else {
     const [gitStatusRes, gitDiffRes] = await Promise.all([
-      executeTestCommand("git status --porcelain", cwd, 5000),
+      executeTestCommand("git status --porcelain -uall", cwd, 5000),
       executeTestCommand("git diff HEAD", cwd, 5000).then(async (res) => {
         if (res.exitCode !== 0) {
           return executeTestCommand("git diff", cwd, 5000);
@@ -336,7 +380,7 @@ export async function collectTaskEvidence(
       }),
     ]);
     gitStatus = gitStatusRes.output.trim();
-    gitDiff = gitDiffRes.output.trim();
+    gitDiff = prioritizeCodeDiffBlocks(gitDiffRes.output.trim());
     diffScope = "full-working-tree";
     if (!gitStatus && !gitDiff) {
       try {
@@ -360,6 +404,22 @@ export async function collectTaskEvidence(
         if (p.startsWith('"') && p.endsWith('"')) p = p.slice(1, -1);
         return p;
       });
+      let untrackedDiff = "";
+      for (const l of lines.filter((line) => line.startsWith("??"))) {
+        let uf = l.slice(3).trim();
+        if (uf.startsWith('"') && uf.endsWith('"')) uf = uf.slice(1, -1);
+        try {
+          const fullPath = path.resolve(cwd, uf);
+          if (fsSync.existsSync(fullPath)) {
+            const content = fsSync.readFileSync(fullPath, "utf8").slice(0, 4096);
+            const diffLines = content.split(/\r?\n/).map((line) => `+${line}`).join("\n");
+            untrackedDiff += `diff --git a/${uf} b/${uf}\nnew file\n+++ b/${uf}\n${diffLines}\n`;
+          }
+        } catch {}
+      }
+      if (untrackedDiff.trim()) {
+        gitDiff = prioritizeCodeDiffBlocks([gitDiff, untrackedDiff.trim()].filter(Boolean).join("\n\n"));
+      }
     }
   }
   let testExitCode: number | null = null;
@@ -386,11 +446,11 @@ export async function collectTaskEvidence(
         while ((match = phaseRegex.exec(planContent)) !== null) {
           const phaseIdentifier = match[1].trim();
           const phaseFileRelative = match[2].trim();
+          const escapedId = phaseIdentifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          const phaseWordMatch = new RegExp(`\\bphase[-_\\s]*0*${escapedId}\\b`, "i");
           if (
-            options.taskId.toString() === phaseIdentifier ||
-            options.taskId.includes(`phase-${phaseIdentifier}`) ||
-            options.taskId.includes(`Phase ${phaseIdentifier}`) ||
-            options.taskId.includes(phaseIdentifier)
+            options.taskId.toString().trim() === phaseIdentifier ||
+            phaseWordMatch.test(options.taskId)
           ) {
             const resolvedPhasePath = path.resolve(planDir, phaseFileRelative);
             assertPathIsClaudeSafe(resolvedPhasePath);

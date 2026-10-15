@@ -185,6 +185,41 @@ describe("Phase 2: Plan-Time Quality Elevation Engine", () => {
     expect(result.feedback).toContain("Algorithm depth");
     expect(result.feedback).toContain("Task actionability");
   });
+
+  test("aligns claude_isolation_adherence threshold with resolveAutoApprovalThreshold (0.80)", async () => {
+    const passClient: PlanJudgeClient = {
+      evaluatePlan: async () => ({
+        answers: {
+          scope_mode: { choice: "HOLD" },
+          algorithm_depth: { score: 2.5 },
+          task_actionability: { noul: 0.85 },
+          claude_isolation_adherence: { noul: 0.85 },
+        },
+      }),
+    };
+    const input: PlanEvaluationInput = {
+      planTitle: "Calibrated Isolation Plan",
+      planContent:
+        "1. Step 1: Implement src/calibrator.ts with deterministic checks.\nVerification: bun test tests/calibrator.test.ts",
+      attempt: 1,
+    };
+    const passRes = await evaluatePlanDraft(input, passClient);
+    expect(passRes.approved).toBe(true);
+
+    const failClient: PlanJudgeClient = {
+      evaluatePlan: async () => ({
+        answers: {
+          scope_mode: { choice: "HOLD" },
+          algorithm_depth: { score: 2.5 },
+          task_actionability: { noul: 0.85 },
+          claude_isolation_adherence: { noul: 0.75 },
+        },
+      }),
+    };
+    const failRes = await evaluatePlanDraft(input, failClient);
+    expect(failRes.approved).toBe(false);
+    expect(failRes.reasons.some((r) => r.includes("Claude isolation adherence"))).toBe(true);
+  });
 });
 
   describe("PreEvaluationTriage: Structural Integrity Guard", () => {
@@ -222,6 +257,24 @@ Verification: Run bun test tests/auth.test.ts.`;
       const result = preEvaluationTriage(goodPlan);
       expect(result.valid).toBe(true);
       expect(result.reasons.length).toBe(0);
+    });
+
+    test("does not reject ordinary prose containing 'requires 2 parameters' or 'after 3 retries', while still rejecting explicit forward step dependencies", () => {
+      const prosePlan = `# Implementation Plan
+1. Step 1: Update src/retry.ts with handler that requires 2 parameters and aborts after 3 retries.
+2. Step 2: Update src/client.ts to invoke retry handler (depends on Step 1).
+Verification: Run bun test tests/retry.test.ts.`;
+      const proseResult = preEvaluationTriage(prosePlan);
+      expect(proseResult.valid).toBe(true);
+      expect(proseResult.reasons).toEqual([]);
+
+      const forwardDepPlan = `# Implementation Plan
+1. Step 1: Update src/retry.ts (depends on Step 4).
+2. Step 2: Update src/client.ts.
+Verification: Run bun test tests/retry.test.ts.`;
+      const forwardResult = preEvaluationTriage(forwardDepPlan);
+      expect(forwardResult.valid).toBe(false);
+      expect(forwardResult.reasons.some((r) => r.includes("Floating/forward dependency detected"))).toBe(true);
     });
 
     test("evaluatePlanDraft short-circuits on triage failure without calling judgeClient", async () => {

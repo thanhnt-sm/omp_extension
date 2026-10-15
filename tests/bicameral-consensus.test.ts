@@ -5,6 +5,7 @@ import {
   formatConsensusEscalation,
   formatCkAdvisorReport,
   evaluateBicameralDoneConsensus,
+  runBicameralMacroCheck,
   runBicameralDecisionCheck,
   type AdvisorContext,
   type AdvisorIntentResult,
@@ -18,7 +19,7 @@ describe("Phase 2: Bicameral Consensus Engine & Advisor Intent Evaluator", () =>
     test("detects explicit user cancellation for drop operation", () => {
       const ctx: AdvisorContext = {
         operation: "drop",
-        task: "Fix MSBuild error in DataGuard",
+        task: "Fix MSBuild error in target project",
         userRequest: "The build succeeded. Please drop the error fix and rerun tasks.",
       };
 
@@ -29,11 +30,11 @@ describe("Phase 2: Bicameral Consensus Engine & Advisor Intent Evaluator", () =>
       expect(result.reason.toLowerCase()).toContain("explicit");
     });
 
-    test("detects clean build / test success obsolescence (DataGuard scenario)", () => {
+    test("detects clean build / test success obsolescence", () => {
       const ctx: AdvisorContext = {
         operation: "drop",
         task: "Investigate crash dump",
-        agentWorkLog: "The DataGuard extensions built successfully without any MSBuild errors. Clean build confirmed.",
+        agentWorkLog: "The project extensions built successfully without any MSBuild errors. Clean build confirmed.",
         hasCleanBuildEvidence: true,
       };
 
@@ -76,6 +77,18 @@ describe("Phase 2: Bicameral Consensus Engine & Advisor Intent Evaluator", () =>
         task: "Add unit tests for payment webhook",
         userRequest: "Write tests for webhook payload verification.",
         agentWorkLog: "Added 12 unit tests in tests/webhook.test.ts. All 12 passing.",
+      };
+
+      const result = evaluateAdvisorIntent(ctx);
+      expect(result.verdict).toBe("ALLOW");
+      expect(result.confidence).toBeGreaterThanOrEqual(0.85);
+    });
+
+    test("allows cognitive and brainstorming tasks on done operation without code diff", () => {
+      const ctx: AdvisorContext = {
+        operation: "done",
+        task: "Clarify requirements and brainstorm 3 architectural approaches",
+        userRequest: "Help me design the new auth flow.",
       };
 
       const result = evaluateAdvisorIntent(ctx);
@@ -409,6 +422,100 @@ describe("Phase 2: Bicameral Consensus Engine & Advisor Intent Evaluator", () =>
       expect(convo.agentWorkLog).toContain("[toolCall: grep (Search for advisor in src)]");
       expect(convo.agentWorkLog).toContain("[toolResult:bash]: 280 pass, 0 fail");
       expect(convo.agentWorkLog).toContain("[Advisor]: <advisory");
+    });
+
+    test("formatConsensusEscalation preserves full reason strings beyond 35 characters", () => {
+      const longAdvisorReason = "User explicitly indicated MSBuild succeeded across all 12 projects without any linker errors";
+      const longJevReason = "Deliverable verification rejected (code_change): score P=0.13 is below required threshold 0.80.";
+      const decision: BicameralConsensusDecision = {
+        verdict: "HUMAN_ESCALATION",
+        advisor: {
+          verdict: "ALLOW",
+          confidence: 0.90,
+          reason: longAdvisorReason,
+        },
+        jev: {
+          verdict: "REJECT",
+          confidence: 0.85,
+          reasons: [longJevReason],
+        },
+        reasons: ["Lobe conflict"],
+      };
+
+      const formatted = formatConsensusEscalation(decision);
+      expect(formatted).toContain(longAdvisorReason);
+      expect(formatted).toContain(longJevReason);
+    });
+
+    test("runBicameralMacroCheck returns AUTO_REJECT (not HUMAN_ESCALATION) when JEV returns REJECT without passing test proof", async () => {
+      const mockClient = {
+        evaluate: async () => ({
+          answers: {
+            deliverables_verdict: { choice: "REJECT" as const, confidence: 0.92 },
+            meets_criteria: { noul: 0.13 },
+            architectural_drift: { choice: "no_drift" as const },
+            scope_mode: { choice: "HOLD" as const },
+          },
+        }),
+      };
+
+      const res = await runBicameralMacroCheck(
+        {
+          todoTask: "Implement feature X",
+          phaseTitle: "Phase 1",
+          planRequirements: ["Implement feature X"],
+          userRequest: "Implement feature X",
+          agentWorkLog: "Implemented feature X and updated handler.",
+          diffSummary: "1 file changed",
+          unifiedDiff: "+ // stub",
+          testSummary: "No testCommand provided for this task; test evidence not collected.",
+        },
+        mockClient
+      );
+
+      expect(res.verdict).toBe("AUTO_REJECT");
+      expect(res.advisor.verdict).toBe("DISALLOW");
+      expect(res.jev.verdict).toBe("REJECT");
+    });
+
+    test("runBicameralDecisionCheck adopts JEV recommended_option even when Lobe 1 heuristic scored another option > 0.75", async () => {
+      const mockClient = {
+        evaluate: async () => ({
+          answers: {
+            risk_posture: { score: 0.5, confidence: 0.95 },
+            decision_clarity: { noul: 0.94, confidence: 0.92 },
+            recommended_option: { choice: "Option B: Event-driven queue", confidence: 0.96 },
+          },
+        }),
+      };
+
+      // Option A is marked recommended: true and matches userRequest words so Lobe 1 scores it > 0.75
+      const decision = await runBicameralDecisionCheck(
+        {
+          decision: "approach",
+          question: "Which architecture should we select?",
+          options: [
+            {
+              label: "Option A: Synchronous polling",
+              description: "Standard safe incremental polling aligned with request",
+              recommended: true,
+            },
+            {
+              label: "Option B: Event-driven queue",
+              description: "Decoupled async worker queue",
+            },
+          ],
+          userRequest: "Select a standard safe incremental polling architecture",
+        },
+        mockClient
+      );
+
+      expect(decision.verdict).toBe("AUTO_APPROVE");
+      expect(decision.ckVerdict).toBe("proceed");
+      expect(decision.recommendedOption).toBe("Option B: Event-driven queue");
+      expect(decision.recommendedIndex).toBe(1);
+      expect(decision.rankedOptions[0]?.option).toBe("Option B: Event-driven queue");
+      expect(decision.rankedOptions[0]?.score).toBeGreaterThanOrEqual(0.96);
     });
   });
 });

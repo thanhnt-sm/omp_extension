@@ -85,4 +85,18 @@ describe("AST Analyzer - Test Evasion Prevention", () => {
     const result = analyzeDiffForTestEvasion(diff);
     expect(result.isSafe).toBe(true);
   });
+  test("Modified assertion and renamed test block with equal additions pass", () => {
+    const diff = `
+@@ -15,4 +15,4 @@
+-  test("old scenario name", () => {
+-    expect(activeTasks.has("OldTask")).toBe(false);
++  test("new scenario name", () => {
++    expect(activeTasks.has("NewTask")).toBe(false);
+   });
+    `;
+    const result = analyzeDiffForTestEvasion(diff);
+    expect(result.isSafe).toBe(true);
+    expect(result.deletedAssertions.length).toBe(0);
+    expect(result.modifiedSuites.length).toBe(0);
+  });
 });

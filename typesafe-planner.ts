@@ -13,6 +13,7 @@ import {
   collectTaskEvidence,
   captureWorkspaceSnapshot,
   diffSnapshots,
+  isPlanCliStub,
   type WorkspaceSnapshot,
 } from "./src/evidence-collector";
 import { clampText } from "./src/payload-safety";
@@ -62,6 +63,8 @@ export function resetLastCheckpoint(): void {
   lastAlertedKeyHash = null;
   lastFailureReasonByTask.clear();
   pendingRemediations.clear();
+  consecutiveFailuresByTask.clear();
+  taskBaselines.clear();
 }
 export const hostAuthorizedTasks = new Set<string>();
 export const lastFailureReasonByTask = new Map<string, string>();
@@ -333,6 +336,12 @@ function sleep(ms: number): Promise<void> {
   return promise;
 }
 
+export const COGNITIVE_TASK_PATTERN =
+  /\b(?:scout\w*|diagnos\w*|investigat\w*|research\w*|analy[sz]\w*|explor\w*|find|audit\w*|review\w*|check\w*|trac\w*|inspect\w*|read\w*|clarif\w*|brainstorm\w*|plan|planning|design\w*|synthesi[sz]\w*|consult\w*|evaluat\w*|assess\w*|document\w*|journal\w*|organi[sz]\w*|verif\w*|ask\w*|propos\w*|validat\w*|compar\w*|summariz\w*|kiểm tra|phân tích|tìm|nghiên cứu|lập kế hoạch)\b/i;
+
+const IMPLEMENTATION_LEAD_PATTERN =
+  /^\s*(?:(?:step|task|phase)\s*\d+\s*[:.-]\s*)?(?:implement\w*|fix\w*|build\w*|add\w*|create\s+src|refactor\w*|patch\w*|deploy\w*)\b/i;
+
 export function inferTaskType(
   gitStatus: string,
   deliverableArtifacts?: string,
@@ -351,11 +360,15 @@ export function inferTaskType(
   }
 
   // Check for documentation specifications (.md, .txt, .rst)
-  const hasDocFiles = statusLines.some((line) => {
-    const filepath = line.replace(/^[MADRCU?! ]+\s+/, "");
-    return /\.(md|markdown|txt|rst|adoc)$/i.test(filepath) && !filepath.includes("reports/");
-  });
-  if (hasDocFiles) {
+  const docFilepaths = statusLines
+    .map((line) => line.replace(/^[MADRCU?! ]+\s+/, ""))
+    .filter((fp) => /\.(md|markdown|txt|rst|adoc)$/i.test(fp) && !fp.includes("reports/"));
+  const onlyFilteredPlanStubs =
+    deliverableArtifacts === "" &&
+    Boolean(taskDescription) &&
+    docFilepaths.length > 0 &&
+    docFilepaths.every((fp) => /(?:^|[\/\\])plans[\/\\]/i.test(fp));
+  if (docFilepaths.length > 0 && !onlyFilteredPlanStubs) {
     return "doc_specification";
   }
 
@@ -373,9 +386,8 @@ export function inferTaskType(
 
   if (
     taskDescription &&
-    /^\s*(?:step\s*\d+\s*[:.-]\s*)?(?:scout|diagnos|investigat|research|analy[sz]|explore|find|audit|review|check|trace|inspect|kiểm tra|phân tích|tìm)\b/i.test(
-      taskDescription
-    )
+    !IMPLEMENTATION_LEAD_PATTERN.test(taskDescription) &&
+    COGNITIVE_TASK_PATTERN.test(taskDescription)
   ) {
     return "analysis_research";
   }
@@ -428,6 +440,9 @@ export async function collectDeliverableArtifacts(projectDir: string, changedFil
       if (existsSync(fullPath)) {
         try {
           const rawContent = readFileSync(fullPath, "utf-8");
+          if (isPlanCliStub(rawContent)) {
+            continue;
+          }
           const summarized = summarizeMarkdownArtifact(rawContent, 4096);
           combinedText += `\n--- Deliverable: ${file} ---\n${summarized}\n`;
           if (combinedText.length >= maxBytes) {
@@ -498,7 +513,7 @@ export function sanitizeStateForTypeSafe(state: string | Record<string, unknown>
     }
   }
 
-  const clampEnclosedOrRaw = (val: string, maxLen: number): string => {
+  const clampEnclosedOrRaw = (val: string, maxLen: number, mode: "head" | "tail" = "head"): string => {
     const match = val.match(/^<([a-z_]+)>\n([\s\S]*)\n<\/\1>$/);
     if (match) {
       const tagName = match[1];
@@ -506,12 +521,25 @@ export function sanitizeStateForTypeSafe(state: string | Record<string, unknown>
       const tagOverhead = tagName.length * 2 + 7; // <tag>\n\n</tag>
       const budget = Math.max(0, maxLen - tagOverhead);
       if (inner.length > budget) {
-        const clampedInner = clampText(inner, budget, "head");
+        const clampedInner = clampText(inner, budget, mode);
         return `<${tagName}>\n${clampedInner}\n</${tagName}>`;
       }
       return val;
     }
-    return clampText(val, maxLen, "head");
+    return clampText(val, maxLen, mode);
+  };
+
+  const TAIL_KEYS: Record<string, true> = {
+    agent_work_log: true,
+    test_summary: true,
+    testOutput: true,
+    user_request: true,
+  };
+  const LARGE_FIELD_KEYS: Record<string, true> = {
+    deliverable_artifacts: true,
+    plan: true,
+    plan_content: true,
+    planContent: true,
   };
 
   if (typeof resolved === "object" && resolved !== null) {
@@ -521,8 +549,12 @@ export function sanitizeStateForTypeSafe(state: string | Record<string, unknown>
       if (typeof val === "string") {
         if (key === "unified_diff" || key === "gitDiff" || key === "diff") {
           obj[key] = summarizeUnifiedDiff(val, 14000);
-        } else if (val.length > 2000) {
-          obj[key] = clampEnclosedOrRaw(val, 2000);
+        } else {
+          const fieldLimit = LARGE_FIELD_KEYS[key] ? 5000 : 2000;
+          const clampMode = TAIL_KEYS[key] ? "tail" : "head";
+          if (val.length > fieldLimit) {
+            obj[key] = clampEnclosedOrRaw(val, fieldLimit, clampMode);
+          }
         }
       }
     }
@@ -538,7 +570,7 @@ export function sanitizeStateForTypeSafe(state: string | Record<string, unknown>
           key !== "diff" &&
           val.length > 950
         ) {
-          obj[key] = clampEnclosedOrRaw(val, 950);
+          obj[key] = clampEnclosedOrRaw(val, 950, TAIL_KEYS[key] ? "tail" : "head");
         }
       }
     }
@@ -549,6 +581,17 @@ export function sanitizeStateForTypeSafe(state: string | Record<string, unknown>
     if (resolved.startsWith("diff --git") || resolved.includes("\n--- a/") || resolved.includes("\n+++ b/")) {
       return summarizeUnifiedDiff(resolved, 14000);
     }
+    if (resolved.startsWith("<plan_evaluation_state>") && resolved.endsWith("</plan_evaluation_state>")) {
+      if (resolved.length > 14000) {
+        const clamped = clampEnclosedOrRaw(resolved, 14000, "head");
+        if (!clamped.endsWith("</plan_evaluation_state>")) {
+          const closeTag = "\n</plan_evaluation_state>";
+          return clampText(resolved, 14000 - closeTag.length, "head") + closeTag;
+        }
+        return clamped;
+      }
+      return resolved;
+    }
     if (resolved.length > 6000) {
       return clampEnclosedOrRaw(resolved, 6000);
     }
@@ -557,7 +600,11 @@ export function sanitizeStateForTypeSafe(state: string | Record<string, unknown>
   return resolved;
 }
 
-export function collectConversationContext(ctx: unknown): { userRequest: string; agentWorkLog: string } {
+export function collectConversationContext(ctx: unknown): {
+  userRequest: string;
+  agentWorkLog: string;
+  lastTestSummary?: string;
+} {
   if (!ctx || typeof ctx !== "object") {
     return { userRequest: "", agentWorkLog: "" };
   }
@@ -583,6 +630,7 @@ export function collectConversationContext(ctx: unknown): { userRequest: string;
 
     const userMessages: string[] = [];
     const assistantMessages: string[] = [];
+    let lastTestSummary: string | undefined;
 
     for (const entry of branch) {
       if (!entry || typeof entry !== "object") continue;
@@ -632,21 +680,52 @@ export function collectConversationContext(ctx: unknown): { userRequest: string;
       if (!trimmed) continue;
 
       if (msg.role === "user") {
-        userMessages.push(trimmed);
+        if (
+          /^<system-notice>\s*Background job bg_/i.test(trimmed) ||
+          /^Task completion rejected by TypeSafe/i.test(trimmed) ||
+          /^📋 TypeSafe task report/u.test(trimmed) ||
+          /\n📋 TypeSafe task report/u.test(trimmed)
+        ) {
+          if (/(?:bun test|\bRan \d+ tests\b|\b\d+ pass\b|SUCCESS: Baseline deployed)/i.test(trimmed)) {
+            lastTestSummary = clampText(trimmed, 2000, "tail");
+          }
+          const bgMatch = trimmed.match(/<system-notice>([\s\S]*?)<\/system-notice>/);
+          if (bgMatch && bgMatch[1]) {
+            assistantMessages.push(`[backgroundJob]: ${clampText(bgMatch[1].trim(), 400, "tail")}`);
+          }
+        } else {
+          const userMatch = trimmed.match(/\nUser:\s*([\s\S]+)$/);
+          const extracted = (userMatch ? userMatch[1] : trimmed)
+            .replace(/<system-notice>[\s\S]*?<\/system-notice>/g, "")
+            .trim();
+          if (extracted.length > 0 && extracted.toLowerCase() !== "retry") {
+            userMessages.push(extracted);
+          }
+        }
       } else if (msg.role === "assistant") {
         assistantMessages.push(trimmed);
       } else if (msg.role === "toolResult" && !msg.isError) {
         const tName = typeof msg.toolName === "string" ? msg.toolName : "tool";
-        assistantMessages.push(`[toolResult:${tName}]: ${clampText(trimmed, 400, "tail")}`);
+        const clampedResult = trimmed.includes("<task-result")
+          ? clampText(trimmed, 1200, "head")
+          : clampText(trimmed, 400, "tail");
+        assistantMessages.push(`[toolResult:${tName}]: ${clampedResult}`);
+        if (
+          (tName === "bash" || tName === "eval") &&
+          /(?:bun test|\bRan \d+ tests\b|\b\d+ pass\b|SUCCESS: Baseline deployed)/i.test(trimmed)
+        ) {
+          lastTestSummary = clampText(trimmed, 2000, "tail");
+        }
       }
     }
 
     const lastUser = userMessages.length > 0 ? userMessages.slice(-2).join("\n---\n") : directUserReq;
-    const lastAssistant = assistantMessages.length > 0 ? assistantMessages.slice(-4).join("\n---\n") : directWorkLog;
+    const lastAssistant = assistantMessages.length > 0 ? assistantMessages.slice(-8).join("\n---\n") : directWorkLog;
 
     return {
       userRequest: clampText(lastUser, 2000, "tail"),
       agentWorkLog: clampText(lastAssistant, 3000, "tail"),
+      lastTestSummary,
     };
   } catch {
     return { userRequest: directUserReq, agentWorkLog: directWorkLog };
@@ -662,6 +741,9 @@ export interface TaskReport {
     meetsCriteria?: number;
     drift?: string;
     scope?: string;
+    verdict?: string;
+    confidence?: number;
+    taskType?: string;
     dropJustified?: number;
   };
   diffScope?: string;
@@ -679,8 +761,12 @@ export function formatTaskReport(r: TaskReport): string {
 
   if (r.scores) {
     if (r.scores.meetsCriteria !== undefined) {
+      const extras: string[] = [];
+      if (r.scores.verdict) extras.push(`verdict=${r.scores.verdict}`);
+      if (r.scores.taskType) extras.push(`task_type=${r.scores.taskType}`);
+      const suffix = extras.length > 0 ? ` | ${extras.join(" | ")}` : "";
       lines.push(
-        `Judge: meets_criteria=${r.scores.meetsCriteria.toFixed(2)} | drift=${r.scores.drift || "none"} | scope=${r.scores.scope || "none"}`
+        `Judge: meets_criteria=${r.scores.meetsCriteria.toFixed(2)} | drift=${r.scores.drift || "none"} | scope=${r.scores.scope || "none"}${suffix}`
       );
     }
     if (r.scores.dropJustified !== undefined) {
@@ -790,8 +876,38 @@ export function normalizeTodoOps(params: Record<string, unknown>): Array<Record<
   return [];
 }
 
-const consecutiveFailuresByTask = new Map<string, number>();
+export const consecutiveFailuresByTask = new Map<string, number>();
 export const activeContractedTasks = new Set<string>();
+
+export function extractTodoItemsFromOp(op: Record<string, unknown>): string[] {
+  const result: string[] = [];
+  if (Array.isArray(op.list) && op.list.length > 0) {
+    for (const phaseObj of op.list) {
+      if (phaseObj && typeof phaseObj === "object" && "items" in phaseObj && Array.isArray(phaseObj.items)) {
+        for (const it of phaseObj.items) {
+          if (typeof it === "string" && it.trim()) {
+            result.push(it);
+          } else if (it && typeof it === "object") {
+            const itemTitle =
+              ("task" in it && typeof it.task === "string" ? it.task : undefined) ??
+              ("title" in it && typeof it.title === "string" ? it.title : undefined) ??
+              ("name" in it && typeof it.name === "string" ? it.name : undefined);
+            if (itemTitle && itemTitle.trim()) result.push(itemTitle);
+          }
+        }
+      } else if (typeof phaseObj === "string" && phaseObj.trim()) {
+        result.push(phaseObj);
+      }
+    }
+    return result;
+  }
+  if (Array.isArray(op.items)) {
+    for (const it of op.items) {
+      if (typeof it === "string" && it.trim()) result.push(it);
+    }
+  }
+  return result;
+}
 
 export interface GateRejectionOptions {
   gate: "Gate 1 Micro-Check" | "Gate 2 Macro-Check";
@@ -1113,6 +1229,13 @@ export default function (pi: ExtensionAPI): void {
     "TypeSafe System One is integrated into the host for all human handoffs and task completions. Mutations (todo done, drop, plan updates) are governed by the Bicameral Consensus Engine: Lobe 1 (Advisor Intent) evaluates user intent and work logs, and Lobe 2 (JEV Judge) evaluates code diffs and test proofs. When a tool call or verification returns red notices with NEXT ACTIONS FOR AGENT or <plan_reconciliation>, you MUST execute the required actions autonomously: run relevant skills (ck:problem-solving, ck:plan, ck:research) to analyze, adapt plan.md and todo, and implement required deliverables. NEVER call 'ask' or ask human confirmation when actionable NEXT ACTIONS are provided. Human escalation is strictly reserved for irreconcilable conflicts where sovereign human confirmation is required.";
   // Session Pre-Flight Health Probe (Phase 3): event-driven diagnostic probe on session_start.
   pi.on("session_start", async (_event: unknown, ctx: unknown) => {
+    activeContractedTasks.clear();
+    taskBaselines.clear();
+    hostAuthorizedTasks.clear();
+    consecutiveFailuresByTask.clear();
+    lastFailureReasonByTask.clear();
+    pendingRemediations.clear();
+    lastCheckpoint = undefined;
     try {
       const apiKey = process.env.TYPESAFE_API_KEY?.trim() || (process.env.BUN_ENV === "test" ? "dummy" : "");
       if (!apiKey) return;
@@ -1225,8 +1348,11 @@ export default function (pi: ExtensionAPI): void {
 
       // Plan Completion & Closure Guard (Phase 3)
       const inputContent = ((params.content as string) || (params.input as string) || "").trim();
-      const isPlanFile = /plans[\/\\].*\.(md|markdown)$/i.test(normalizedPath) || baseName === "plan.md" || /^phase-.*\.md$/i.test(baseName);
-      const isClosingPlan = /status:\s*complete(d)?\b/i.test(inputContent);
+      const isPlanFile =
+        (!normalizedPath.includes("plans/reports/") && /plans[\/\\].*\.(md|markdown)$/i.test(normalizedPath)) ||
+        baseName === "plan.md" ||
+        /^phase-.*\.md$/i.test(baseName);
+      const isClosingPlan = /(?:^|\n)\+?status:\s*complete(?:d)?\b/im.test(inputContent);
 
       if (isPlanFile && isClosingPlan) {
         await assertNoActiveContractedTasks("Uncompleted contracted tasks exist", evt as Record<string, unknown>, pi);
@@ -1500,14 +1626,15 @@ export default function (pi: ExtensionAPI): void {
         const t = (o.task as string) || (o.taskId as string);
         if (t && activeContractedTasks.has(t) && !tasksToDrop.includes(t)) {
           tasksToDrop.push(t);
-        }
-      } else if (o.op === "init") {
-        const newItems = new Set<string>();
-        if (Array.isArray(o.items)) {
-          for (const it of o.items) {
-            if (typeof it === "string") newItems.add(it);
+        } else if (!t && activeContractedTasks.size > 0) {
+          for (const contracted of activeContractedTasks) {
+            if (!tasksToDrop.includes(contracted)) {
+              tasksToDrop.push(contracted);
+            }
           }
         }
+      } else if (o.op === "init") {
+        const newItems = new Set<string>(extractTodoItemsFromOp(o));
         for (const contracted of activeContractedTasks) {
           if (!newItems.has(contracted) && !tasksToDrop.includes(contracted)) {
             tasksToDrop.push(contracted);
@@ -1693,19 +1820,13 @@ export default function (pi: ExtensionAPI): void {
         taskBaselines.clear();
         hostAuthorizedTasks.clear();
         lastCheckpoint = await captureWorkspaceSnapshot(projectDir);
-        if (Array.isArray(op.items)) {
-          for (const item of op.items) {
-            if (typeof item === "string") activeContractedTasks.add(item);
-          }
+        for (const item of extractTodoItemsFromOp(op)) {
+          activeContractedTasks.add(item);
         }
       } else if (op.op === "append") {
-        if (Array.isArray(op.items)) {
-          for (const item of op.items) {
-            if (typeof item === "string") {
-              activeContractedTasks.add(item);
-              hostAuthorizedTasks.delete(item);
-            }
-          }
+        for (const item of extractTodoItemsFromOp(op)) {
+          activeContractedTasks.add(item);
+          hostAuthorizedTasks.delete(item);
         }
       } else if (op.op === "start") {
         const t = (op.task as string) || (op.taskId as string);
@@ -1768,22 +1889,34 @@ export default function (pi: ExtensionAPI): void {
     }
     const currentFailures = consecutiveFailuresByTask.get(taskId) || 0;
 
-    async function handleFailureEscalation(gateName: string, reasons: string[]): Promise<boolean> {
+    async function handleFailureEscalation(
+      gateName: string,
+      reasons: string[],
+      skipConfirm = false
+    ): Promise<boolean> {
       lastFailureReasonByTask.set(taskId, reasons.join("; "));
       const failures = (consecutiveFailuresByTask.get(taskId) || 0) + 1;
       consecutiveFailuresByTask.set(taskId, failures);
 
       if (failures >= 3) {
         consecutiveFailuresByTask.delete(taskId);
+        pendingRemediations.delete(taskId);
         let ratchetApproved = false;
-        if (ctxObj.hasUI !== false && typeof (ctxObj.ui as Record<string, unknown> | undefined)?.confirm === "function") {
-          const uiConfirm = (ctxObj.ui as { confirm: (t: string, m: string) => Promise<boolean> }).confirm;
+        const uiCandidate = ctxObj.ui;
+        if (
+          !skipConfirm &&
+          ctxObj.hasUI !== false &&
+          uiCandidate &&
+          typeof uiCandidate === "object" &&
+          "confirm" in uiCandidate &&
+          typeof uiCandidate.confirm === "function"
+        ) {
           const promptMsg = clampText(
             `Task "${taskId}" failed verification ${failures} times. Last failure (${gateName}): ${reasons.join("; ")}. Accept as done?`,
             1500,
             "tail"
           );
-          ratchetApproved = await uiConfirm("TypeSafe: accept task completion?", promptMsg);
+          ratchetApproved = Boolean(await uiCandidate.confirm("TypeSafe: accept task completion?", promptMsg));
         }
 
         if (ratchetApproved) {
@@ -1840,15 +1973,15 @@ export default function (pi: ExtensionAPI): void {
           .map((d) => d.name)
           .sort()
           .reverse();
-        for (const entry of planEntries) {
-          const pPath = path.join(plansDir, entry, "plan.md");
+        const latestEntry = planEntries[0];
+        if (latestEntry) {
+          const pPath = path.join(plansDir, latestEntry, "plan.md");
           try {
             const head = readFileSync(pPath, "utf-8").slice(0, 2000);
             const m = head.match(/^status:\s*(\S+)/m);
             const status = m ? m[1].toLowerCase() : "";
             if (status !== "complete" && status !== "completed" && status !== "cancelled") {
               defaultPlanPath = pPath;
-              break;
             }
           } catch {}
         }
@@ -1981,10 +2114,12 @@ ${prevRemediation.reasons.map((r) => `   - ${r}`).join("\n")}
     const rawDeliverableArtifacts = await collectDeliverableArtifacts(projectDir, evidence.changedFiles);
     const taskType = inferTaskType(evidence.gitStatus, rawDeliverableArtifacts, taskId);
     const deliverableArtifacts =
-      rawDeliverableArtifacts || (taskType === "analysis_research" ? convo.agentWorkLog : "");
+      rawDeliverableArtifacts || (taskType !== "code_change" ? convo.agentWorkLog : "");
     const testSummary = testCommand
       ? `$ ${testCommand}\nexit ${evidence.testExitCode}\n${evidence.testOutput}`
-      : "No testCommand provided for this task; test evidence not collected.";
+      : convo.lastTestSummary
+        ? convo.lastTestSummary
+        : "No testCommand provided for this task; test evidence not collected.";
 
     const planRequirements = Array.isArray(params.requirements)
       ? (params.requirements as string[])
@@ -2003,7 +2138,7 @@ ${prevRemediation.reasons.map((r) => `   - ${r}`).join("\n")}
         diffSummary: evidence.gitStatus || "No unstaged changes observed",
         unifiedDiff: evidence.gitDiff || "No diff (unobserved)",
         testSummary,
-        attemptCount: currentFailures + 1,
+        attemptCount: currentFailures,
         taskType,
         deliverableArtifacts,
         userRequest: convo.userRequest,
@@ -2015,6 +2150,7 @@ ${prevRemediation.reasons.map((r) => `   - ${r}`).join("\n")}
     );
     const macroResult = bicameralResult.macroResult;
     let doneDecidedBy: "judge" | "human" | "host-authorization" = "judge";
+    let escalationPromptedAndDeclined = false;
 
     if (bicameralResult.verdict === "AUTO_APPROVE") {
       macroResult.approved = true;
@@ -2027,12 +2163,14 @@ ${prevRemediation.reasons.map((r) => `   - ${r}`).join("\n")}
           macroResult.approved = true;
           doneDecidedBy = "human";
           hostAuthorizedTasks.add(taskId);
+        } else {
+          escalationPromptedAndDeclined = true;
         }
       }
     }
 
     if (!macroResult.approved) {
-      if (await handleFailureEscalation("Gate 2 Macro-Check", macroResult.reasons)) {
+      if (await handleFailureEscalation("Gate 2 Macro-Check", macroResult.reasons, escalationPromptedAndDeclined)) {
         return;
       }
       lastFailureReasonByTask.set(taskId, macroResult.reasons.join("; "));
@@ -2054,10 +2192,16 @@ ${prevRemediation.reasons.map((r) => `   - ${r}`).join("\n")}
           meetsCriteria: macroResult.meetsCriteriaNoul,
           drift: macroResult.driftChoice,
           scope: macroResult.scopeChoice,
+          verdict: macroResult.deliverablesVerdict,
+          taskType,
         },
         diffScope: evidence.diffScope,
         changedFiles: evidence.changedFiles,
-        test: testCommand ? `${testCommand} exit ${evidence.testExitCode}` : "not provided",
+        test: testCommand
+          ? `${testCommand} exit ${evidence.testExitCode}`
+          : convo.lastTestSummary
+            ? "verified in session"
+            : "not provided",
         reasons: macroResult.reasons,
       });
       const isUnavailable =
@@ -2115,10 +2259,16 @@ ${prevRemediation.reasons.map((r) => `   - ${r}`).join("\n")}
         meetsCriteria: macroResult.meetsCriteriaNoul,
         drift: macroResult.driftChoice,
         scope: macroResult.scopeChoice,
+        verdict: macroResult.deliverablesVerdict,
+        taskType,
       },
       diffScope: evidence.diffScope,
       changedFiles: evidence.changedFiles,
-      test: testCommand ? `${testCommand} exit ${evidence.testExitCode}` : "not provided",
+      test: testCommand
+        ? `${testCommand} exit ${evidence.testExitCode}`
+        : convo.lastTestSummary
+          ? "verified in session"
+          : "not provided",
       reasons: macroResult.reasons,
     });
     await pi.sendMessage({
@@ -2234,7 +2384,7 @@ ${prevRemediation.reasons.map((r) => `   - ${r}`).join("\n")}
         body: bodyStr,
         signal: fetchSignal,
       });
-      if (res.status === 502 || res.status === 503 || res.status === 504) {
+      if (res.status === 429 || res.status === 499 || res.status === 502 || res.status === 503 || res.status === 504) {
         const delay = 50 + Math.floor(Math.random() * 100);
         await sleep(delay);
         res = await fetch("https://api.typesafe.ai/v1/systemone", {
@@ -2291,7 +2441,7 @@ ${prevRemediation.reasons.map((r) => `   - ${r}`).join("\n")}
           const ans = answers[key];
           if (ans && typeof ans === "object" && "choice" in ans && typeof ans.choice === "string") {
             const criteriaKeys = q.criteria && typeof q.criteria === "object" ? Object.keys(q.criteria) : [];
-            const isLatticeQuestion = criteriaKeys.some((opt) => HOST_POLICY.lattice.includes(opt));
+            const isLatticeQuestion = criteriaKeys.length > 0 && criteriaKeys.every((opt) => HOST_POLICY.lattice.includes(opt));
             if (isLatticeQuestion || HOST_POLICY.lattice.includes(ans.choice)) {
               const result = policyClientModule.checkPolicy(HOST_POLICY.baseline, ans.choice, HOST_POLICY.lattice);
               if (!result.ok) {
@@ -2637,11 +2787,12 @@ ${prevRemediation.reasons.map((r) => `   - ${r}`).join("\n")}
     parameters: z.object({
       planTitle: z.string(),
       planContent: z.string(),
+      userPrompt: z.string().optional(),
       attempt: z.number().optional(),
     }),
     async execute(
       _toolCallId: string,
-      params: { planTitle: string; planContent: string; attempt?: number },
+      params: { planTitle: string; planContent: string; userPrompt?: string; attempt?: number },
       signal?: AbortSignal,
       _onUpdate?: (result: ExtensionToolResult) => void,
       ctx?: unknown
@@ -2667,7 +2818,8 @@ ${prevRemediation.reasons.map((r) => `   - ${r}`).join("\n")}
         };
       }
 
-      const result = await evaluatePlanDraft(params, client);
+      const resolvedUserPrompt = params.userPrompt || collectConversationContext(ctx).userRequest || undefined;
+      const result = await evaluatePlanDraft({ ...params, userPrompt: resolvedUserPrompt }, client);
       const combined = { ...result, debate };
       return {
         content: [{ type: "text", text: JSON.stringify(combined, null, 2) }],

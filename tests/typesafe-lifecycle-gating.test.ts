@@ -3,7 +3,11 @@ import os from "node:os";
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import { createRequire } from "node:module";
-import registerExtension, { activeContractedTasks } from "../typesafe-planner";
+import registerExtension, {
+  activeContractedTasks,
+  consecutiveFailuresByTask,
+  resetLastCheckpoint,
+} from "../typesafe-planner";
 const nodeRequire = createRequire(import.meta.url);
 interface MockToolDefinition {
   name: string;
@@ -281,6 +285,35 @@ describe("TypeSafe Lifecycle Gating & Human Authorization Fix (TDD Tests)", () =
     expect(cancelledReason || "").toContain("Unfinished Task");
   });
 
+  test("allows writing reports under plans/reports/*.md even when activeContractedTasks is non-empty and report mentions status: completed", async () => {
+    const { handlers } = createMockPi();
+    const interceptor = handlers.tool_call?.[0];
+    expect(interceptor).toBeDefined();
+    activeContractedTasks.add("Ongoing Research Task");
+
+    let cancelledReason: string | undefined;
+    const evt: MockEvent = {
+      tool: "write",
+      params: {
+        path: "plans/reports/261014-scout-report.md",
+        content: "# Scout Report\n\nObserved historical plan with `status: completed` in frontmatter.\n",
+      },
+      cancel: (r: string) => {
+        cancelledReason = r;
+      },
+    };
+
+    let threw = false;
+    try {
+      await interceptor?.(evt, {});
+    } catch {
+      threw = true;
+    }
+
+    expect(threw).toBe(false);
+    expect(cancelledReason).toBeUndefined();
+  });
+
   test("intercepts bash command running plan-cli.cjs check", async () => {
     const { handlers } = createMockPi();
     const interceptor = handlers.tool_call?.[0];
@@ -360,5 +393,184 @@ describe("TypeSafe Lifecycle Gating & Human Authorization Fix (TDD Tests)", () =
     } finally {
       await fs.rm(tempDir, { recursive: true, force: true });
     }
+  });
+
+  test("todo(op='init', list=[...]) populates activeContractedTasks and blocks subsequent rm or bare rm", async () => {
+    const { handlers } = createMockPi();
+    const interceptor = handlers.tool_call?.[0];
+    expect(interceptor).toBeDefined();
+
+    await interceptor?.(
+      {
+        tool: "todo",
+        params: {
+          op: "init",
+          list: [{ phase: "P1", items: ["Task A", "Task B"] }],
+        },
+      },
+      {}
+    );
+
+    expect(activeContractedTasks.has("Task A")).toBe(true);
+    expect(activeContractedTasks.has("Task B")).toBe(true);
+
+    // Attempt todo(op="rm", task="Task A") -> rejected by Drop Gate
+    let rmCancelledReason: string | undefined;
+    let rmThrew = false;
+    try {
+      await interceptor?.(
+        {
+          tool: "todo",
+          params: { op: "rm", task: "Task A" },
+          cancel: (r: string) => {
+            rmCancelledReason = r;
+          },
+        },
+        {}
+      );
+    } catch {
+      rmThrew = true;
+    }
+    expect(rmThrew || rmCancelledReason !== undefined).toBe(true);
+    expect(rmCancelledReason || "").toContain("Task A");
+
+    // Attempt bare todo(op="rm") without task -> rejected by Drop Gate for all contracted tasks
+    let bareRmCancelledReason: string | undefined;
+    let bareRmThrew = false;
+    try {
+      await interceptor?.(
+        {
+          tool: "todo",
+          params: { op: "rm" },
+          cancel: (r: string) => {
+            bareRmCancelledReason = r;
+          },
+        },
+        {}
+      );
+    } catch {
+      bareRmThrew = true;
+    }
+    expect(bareRmThrew || bareRmCancelledReason !== undefined).toBe(true);
+    expect(bareRmCancelledReason || "").toContain("Task A");
+    expect(bareRmCancelledReason || "").toContain("Task B");
+  });
+
+  test("Dual-parameter smuggling (todo init with both items and list) is caught by Drop Gate because list takes precedence", async () => {
+    const { handlers } = createMockPi();
+    const interceptor = handlers.tool_call?.[0];
+    expect(interceptor).toBeDefined();
+
+    await interceptor?.(
+      {
+        tool: "todo",
+        params: {
+          op: "init",
+          list: [{ phase: "P1", items: ["Task A"] }],
+        },
+      },
+      {}
+    );
+    expect(activeContractedTasks.has("Task A")).toBe(true);
+
+    // Smuggle Task A in `items` while `list` replaces it with "New Task"
+    let smuggleCancelled: string | undefined;
+    let smuggleThrew = false;
+    try {
+      await interceptor?.(
+        {
+          tool: "todo",
+          params: {
+            op: "init",
+            items: ["Task A"],
+            list: [{ phase: "P1", items: ["New Task"] }],
+          },
+          cancel: (r: string) => {
+            smuggleCancelled = r;
+          },
+        },
+        {}
+      );
+    } catch {
+      smuggleThrew = true;
+    }
+    expect(smuggleThrew || smuggleCancelled !== undefined).toBe(true);
+    expect(smuggleCancelled || "").toContain("Task A");
+  });
+
+  test("attemptCount off-by-one fix: Attempt #3 (currentFailures === 2) still calls JEV instead of short-circuiting", async () => {
+    resetLastCheckpoint();
+    const { handlers } = createMockPi();
+    const interceptor = handlers.tool_call?.[0];
+    expect(interceptor).toBeDefined();
+
+    let jevCalls = 0;
+    globalThis.fetch = (async (url: string | URL | Request) => {
+      const urlStr = url.toString();
+      if (urlStr.includes("systemone")) {
+        jevCalls++;
+        return new Response(
+          JSON.stringify({
+            answers: {
+              meets_criteria: { noul: 0.95 },
+              deliverables_verdict: { choice: "APPROVE", confidence: 0.95 },
+              architectural_drift: { choice: "no_drift", confidence: 0.95 },
+              scope_mode: { choice: "HOLD", confidence: 0.95 },
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof fetch;
+
+    // Simulate 2 prior failures (so this is Attempt #3)
+    const taskName = "Research architecture options on attempt 3";
+    consecutiveFailuresByTask.set(taskName, 2);
+
+    const mockCtx = {
+      cwd: os.tmpdir(),
+      sessionManager: {
+        getBranch: () => [
+          { type: "message", message: { role: "user", content: "Research architecture options" } },
+          {
+            type: "message",
+            message: {
+              role: "assistant",
+              content: [{ type: "text", text: "Completed full architectural option analysis." }],
+            },
+          },
+        ],
+      },
+    };
+
+    let cancelledReason: string | undefined;
+    await interceptor?.(
+      {
+        tool: "todo",
+        params: { op: "done", task: taskName },
+        cancel: (r: string) => {
+          cancelledReason = r;
+        },
+      },
+      mockCtx
+    );
+
+    expect(jevCalls).toBeGreaterThanOrEqual(1);
+    expect(cancelledReason).toBeUndefined();
+  });
+
+  test("session_start clears activeContractedTasks and consecutiveFailuresByTask", async () => {
+    const { handlers } = createMockPi();
+    const sessionStartHandler = handlers.session_start?.[0];
+    expect(sessionStartHandler).toBeDefined();
+
+    activeContractedTasks.add("Stale Task");
+    consecutiveFailuresByTask.set("Stale Task", 2);
+
+    await sessionStartHandler?.({}, {});
+
+    expect(activeContractedTasks.size).toBe(0);
+    expect(consecutiveFailuresByTask.size).toBe(0);
   });
 });

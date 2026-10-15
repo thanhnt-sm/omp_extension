@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process";
 import fs from "node:fs/promises";
 import { describe, expect, test } from "bun:test";
 import os from "node:os";
@@ -10,7 +11,9 @@ import {
   SecurityViolationError,
   captureWorkspaceSnapshot,
   diffSnapshots,
+  isPlanCliStub,
 } from "../src/evidence-collector";
+import { collectDeliverableArtifacts } from "../typesafe-planner";
 
 describe("Phase 1: Deterministic Evidence Collector & Claude Isolation", () => {
   test("assertPathIsClaudeSafe throws SecurityViolationError for ~/.claude paths", () => {
@@ -169,6 +172,125 @@ describe("Phase 1: Deterministic Evidence Collector & Claude Isolation", () => {
       expect(changed).toContain("untracked.txt");
       expect(changed).toContain("to-revert.txt");
       expect(changed).not.toContain("unchanged.txt");
+    } finally {
+      await fs.rm(tempRepo, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+
+  test("isPlanCliStub identifies plan-cli.cjs boilerplate templates and filters them in extractCriteriaFromPlan and collectDeliverableArtifacts", async () => {
+    const stubPlan = `# Sample Plan\n\n## Overview\n\nTBD.\n\n## Phases\n`;
+    const stubPhase = `# Phase 1: Setup\n\n## Overview\n\nBrief description of scope and deliverables.\n\n## Success Criteria\n\n- [ ] Verifiable acceptance criteria\n- [ ] Test validation commands\n`;
+    const populatedPhase = `# Phase 1: Dual-Primitive JEV Calibration\n\n## Overview\n\nUpdate runPhaseMacroCheck in src/cook-expert-judge.ts.\n\n## Success Criteria\n\n- [ ] runPhaseMacroCheck includes meets_criteria noul\n`;
+
+    expect(isPlanCliStub(stubPlan)).toBe(true);
+    expect(isPlanCliStub(stubPhase)).toBe(true);
+    expect(isPlanCliStub(populatedPhase)).toBe(false);
+
+    expect(extractCriteriaFromPlan(stubPhase)).toEqual([]);
+    expect(extractCriteriaFromPlan(populatedPhase)).toContain("runPhaseMacroCheck includes meets_criteria noul");
+
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "typesafe-stub-filter-"));
+    try {
+      await fs.writeFile(path.join(tmpDir, "plan.md"), stubPlan, "utf8");
+      await fs.writeFile(path.join(tmpDir, "phase-01-setup.md"), stubPhase, "utf8");
+      await fs.writeFile(path.join(tmpDir, "report.md"), populatedPhase, "utf8");
+
+      const artifacts = await collectDeliverableArtifacts(tmpDir, [
+        "plan.md",
+        "phase-01-setup.md",
+        "report.md",
+      ]);
+      expect(artifacts).not.toContain("Brief description of scope and deliverables.");
+      expect(artifacts).not.toContain("--- Deliverable: plan.md ---");
+      expect(artifacts).toContain("--- Deliverable: report.md ---");
+    } finally {
+      await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+
+  test("collectTaskEvidence enforces word-boundary phase matching and avoids digit substring collisions", async () => {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "typesafe-phase-boundary-"));
+    try {
+      const planPath = path.join(tmpDir, "plan.md");
+      const phasePath = path.join(tmpDir, "phase-01-core.md");
+      await fs.writeFile(
+        planPath,
+        [
+          "# Main Plan",
+          "## Phases",
+          "| Phase | Name | Status |",
+          "|-------|------|--------|",
+          "| 1 | [Core Setup](./phase-01-core.md) | Pending |",
+          "## Tasks",
+          "- [ ] PlanLevelCriterion",
+        ].join("\n"),
+        "utf8"
+      );
+      await fs.writeFile(
+        phasePath,
+        ["# Phase 1", "## Success Criteria", "- [ ] PhaseOneSpecificCriterion"].join("\n"),
+        "utf8"
+      );
+
+      // Digit "1" in "Step 1: Research API" must NOT collide with phase-01-core.md
+      const nonPhaseEvidence = await collectTaskEvidence({
+        cwd: tmpDir,
+        planPath,
+        taskId: "Step 1: Research API and clarify 3 options",
+      });
+      expect(nonPhaseEvidence.criteriaSource).toBe("plan");
+      expect(nonPhaseEvidence.criteria).toContain("PlanLevelCriterion");
+      expect(nonPhaseEvidence.criteria).not.toContain("PhaseOneSpecificCriterion");
+
+      // Explicit "Phase 1" reference MUST match phase-01-core.md
+      const phaseEvidence = await collectTaskEvidence({
+        cwd: tmpDir,
+        planPath,
+        taskId: "Phase 1: Core Setup",
+      });
+      expect(phaseEvidence.criteriaSource).toBe("phase");
+      expect(phaseEvidence.criteria).toContain("PhaseOneSpecificCriterion");
+    } finally {
+      await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+
+  test("isPlanCliStub returns false for long reports (> 1500 chars) that quote stub strings", () => {
+    const longReport = [
+      "# Comprehensive Architecture Report",
+      "## Overview",
+      "TBD.",
+      "When `plan-cli.cjs` creates a scaffold, it inserts `Brief description of scope and deliverables.`",
+      "and `- [ ] Verifiable acceptance criteria` alongside `- [ ] Test validation commands`.",
+      "A".repeat(1600),
+    ].join("\n\n");
+
+    expect(longReport.length).toBeGreaterThan(1500);
+    expect(isPlanCliStub(longReport)).toBe(false);
+  });
+
+  test("collectTaskEvidence without baseline synthesizes diff --git content for untracked (??) files", async () => {
+    const tempRepo = await fs.mkdtemp(path.join(os.tmpdir(), "typesafe-untracked-nobaseline-"));
+    try {
+      execSync("git init", { cwd: tempRepo, stdio: "ignore" });
+      execSync('git config user.name "Test"', { cwd: tempRepo, stdio: "ignore" });
+      execSync('git config user.email "test@example.com"', { cwd: tempRepo, stdio: "ignore" });
+
+      await fs.writeFile(path.join(tempRepo, "tracked.ts"), "export const a = 1;\n", "utf8");
+      execSync("git add . && git commit -m 'init'", { cwd: tempRepo, stdio: "ignore" });
+
+      // Create an untracked file inside a subdirectory without providing a baseline snapshot
+      const subDir = path.join(tempRepo, "src");
+      await fs.mkdir(subDir, { recursive: true });
+      await fs.writeFile(path.join(subDir, "new-feature.ts"), "export const feature = true;\n", "utf8");
+
+      const evidence = await collectTaskEvidence({
+        cwd: tempRepo,
+      });
+
+      expect(evidence.changedFiles).toContain("src/new-feature.ts");
+      expect(evidence.gitDiff).toContain("diff --git a/src/new-feature.ts b/src/new-feature.ts");
+      expect(evidence.gitDiff).toContain("+export const feature = true;");
     } finally {
       await fs.rm(tempRepo, { recursive: true, force: true }).catch(() => {});
     }

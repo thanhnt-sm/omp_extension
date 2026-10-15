@@ -1,5 +1,6 @@
 import { preparePayloadSafe, type TypeSafePayload } from "./payload-safety";
 import { encloseUntrusted } from "./xml-enclosure";
+import { resolveAutoApprovalThreshold } from "./verification-gate";
 
 export interface PlanQuestion {
   type: "choice" | "score" | "noul";
@@ -116,7 +117,7 @@ export function preEvaluationTriage(planContent: string): TriageResult {
     }
     if (currentStep !== null) {
       const depMatches = line.matchAll(
-        /(?:depends\s+on|after|following|requires)\s+(?:step|phase)?\s*(\d+)/gi
+        /(?:depends\s+on|after|following|requires)\s+(?:step|phase)\s+(\d+)/gi
       );
       for (const m of depMatches) {
         const depNum = parseInt(m[1], 10);
@@ -341,10 +342,11 @@ export async function evaluatePlanDraft(
     );
   }
 
+  const isolationThreshold = resolveAutoApprovalThreshold();
   const isolationNoul = answers.claude_isolation_adherence?.noul;
-  if (isolationNoul !== undefined && isolationNoul < 0.95) {
+  if (isolationNoul !== undefined && isolationNoul < isolationThreshold) {
     reasons.push(
-      `Claude isolation adherence probability (${isolationNoul}) is below 0.95 threshold.`
+      `Claude isolation adherence probability (${isolationNoul}) is below ${isolationThreshold.toFixed(2)} threshold.`
     );
   }
 

@@ -152,7 +152,7 @@ describe("Phase 3: Sovereign Human Authority & Adaptive Plan Reconciliation", ()
     });
 
     test("Sovereign Human UI Confirmation permanently records authorization", async () => {
-      activeContractedTasks.add("ObsoleteDataGuardTask");
+      activeContractedTasks.add("ObsoleteBuildTask");
 
       let confirmCalled = false;
       const ctx = {
@@ -179,7 +179,7 @@ describe("Phase 3: Sovereign Human Authority & Adaptive Plan Reconciliation", ()
       let threw = false;
       const dropEvt: MockEvent = {
         tool: "todo",
-        params: { op: "drop", task: "ObsoleteDataGuardTask" },
+        params: { op: "drop", task: "ObsoleteBuildTask" },
         cancel: () => {},
       };
 
@@ -192,14 +192,14 @@ describe("Phase 3: Sovereign Human Authority & Adaptive Plan Reconciliation", ()
       }
 
       expect(threw).toBe(false);
-      expect(activeContractedTasks.has("ObsoleteDataGuardTask")).toBe(false);
+      expect(activeContractedTasks.has("ObsoleteBuildTask")).toBe(false);
     });
 
-    test("DataGuard scenario: Clean build evidence auto-allows drop via Bicameral Consensus", async () => {
+    test("Clean build scenario: Clean build evidence auto-allows drop via Bicameral Consensus", async () => {
       activeContractedTasks.add("FixCompileError");
 
       const ctx = {
-        userRequest: "The DataGuard extensions built successfully without any MSBuild errors. Please drop FixCompileError.",
+        userRequest: "The project extensions built successfully without any MSBuild errors. Please drop FixCompileError.",
       };
 
       let threw = false;

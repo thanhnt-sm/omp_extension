@@ -3,7 +3,12 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import { execSync } from "node:child_process";
-import registerExtension, { sanitizeStateForTypeSafe, resetLastCheckpoint } from "../typesafe-planner";
+import registerExtension, {
+  sanitizeStateForTypeSafe,
+  collectConversationContext,
+  resetLastCheckpoint,
+  formatTaskReport,
+} from "../typesafe-planner";
 import { runPhaseMacroCheck, runTaskMicroCheck } from "../src/cook-expert-judge";
 
 interface MockPiMessage {
@@ -272,6 +277,87 @@ describe("Judge Input Fidelity", () => {
     expect(sanitizedVal).toContain("[...");
   });
 
+  test("sanitizeStateForTypeSafe preserves tail of test_summary and agent_work_log while keeping XML tags", () => {
+    const hugeTestInner = "HEAD_NOISE_".repeat(300) + "\nRan 42 tests across 5 files. [42 pass, 0 fail]";
+    const hugeWorkLogInner = "EARLY_STEP_".repeat(300) + "\nFinal step: completed implementation and verified.";
+    const mediumArtifact = "# Spec\n" + "Detail line\n".repeat(250); // ~3000 chars (> 2000, < 5000)
+    const inputState = {
+      test_summary: `<test_summary>\n${hugeTestInner}\n</test_summary>`,
+      agent_work_log: `<agent_work_log>\n${hugeWorkLogInner}\n</agent_work_log>`,
+      deliverable_artifacts: mediumArtifact,
+    };
+
+    const sanitized = sanitizeStateForTypeSafe(inputState);
+    expect(typeof sanitized).toBe("object");
+    if (typeof sanitized === "object" && sanitized !== null) {
+      const testVal = typeof sanitized.test_summary === "string" ? sanitized.test_summary : "";
+      expect(testVal.startsWith("<test_summary>\n")).toBe(true);
+      expect(testVal.endsWith("\n</test_summary>")).toBe(true);
+      expect(testVal).toContain("Ran 42 tests across 5 files. [42 pass, 0 fail]");
+      expect(testVal.length).toBeLessThanOrEqual(2000);
+
+      const workVal = typeof sanitized.agent_work_log === "string" ? sanitized.agent_work_log : "";
+      expect(workVal.startsWith("<agent_work_log>\n")).toBe(true);
+      expect(workVal.endsWith("\n</agent_work_log>")).toBe(true);
+      expect(workVal).toContain("Final step: completed implementation and verified.");
+      expect(workVal.length).toBeLessThanOrEqual(2000);
+
+      const artifactVal = typeof sanitized.deliverable_artifacts === "string" ? sanitized.deliverable_artifacts : "";
+      expect(artifactVal).toBe(mediumArtifact);
+    }
+
+    const planEvalState = `<plan_evaluation_state>\n${"P".repeat(10000)}\n</plan_evaluation_state>`;
+    const sanitizedPlan = sanitizeStateForTypeSafe(planEvalState);
+    expect(sanitizedPlan).toBe(planEvalState);
+
+    const hugePlanEvalState = `<plan_evaluation_state>\n${"P".repeat(18000)}\n</plan_evaluation_state>`;
+    const clampedPlan = String(sanitizeStateForTypeSafe(hugePlanEvalState));
+    expect(clampedPlan.length).toBeLessThanOrEqual(14000);
+    expect(clampedPlan.startsWith("<plan_evaluation_state>\n")).toBe(true);
+    expect(clampedPlan.endsWith("\n</plan_evaluation_state>")).toBe(true);
+  });
+
+  test("collectConversationContext head-clamps <task-result> and scopes lastTestSummary to bash/eval", () => {
+    const taskResultText = `<task-result>\nSubagent key summary at top\n${"detail ".repeat(300)}\nAgent is now idle.</task-result>`;
+    const mockCtx = {
+      sessionManager: {
+        getBranch: () => [
+          {
+            type: "message",
+            message: {
+              role: "toolResult",
+              toolName: "task",
+              isError: false,
+              content: taskResultText,
+            },
+          },
+          {
+            type: "message",
+            message: {
+              role: "toolResult",
+              toolName: "bash",
+              isError: false,
+              content: "bun test\nRan 18 tests across 2 files. [18 pass, 0 fail]",
+            },
+          },
+          {
+            type: "message",
+            message: {
+              role: "toolResult",
+              toolName: "read",
+              isError: false,
+              content: "// File mentioning bun test in a comment should NOT overwrite lastTestSummary",
+            },
+          },
+        ],
+      },
+    };
+
+    const convo = collectConversationContext(mockCtx);
+    expect(convo.agentWorkLog).toContain("Subagent key summary at top");
+    expect(convo.lastTestSummary).toContain("Ran 18 tests across 2 files");
+    expect(convo.lastTestSummary).not.toContain("File mentioning bun test");
+  });
   test("runPhaseMacroCheck with taskType analysis_research and unifiedDiff with config.json does not force code_change", async () => {
     let capturedQuestion = "";
     const mockClient = {
@@ -352,5 +438,103 @@ describe("Judge Input Fidelity", () => {
         }
       }
     }
+  });
+
+  test("formatTaskReport outputs verdict and task_type alongside meets_criteria, drift, and scope", () => {
+    const report = formatTaskReport({
+      kind: "DONE",
+      tasks: ["Clarify requirements and brainstorm approaches"],
+      approved: true,
+      decidedBy: "judge",
+      scores: {
+        meetsCriteria: 0.94,
+        drift: "no_drift",
+        scope: "HOLD",
+        verdict: "APPROVE",
+        taskType: "analysis_research",
+      },
+      diffScope: "task-baseline",
+      changedFiles: [],
+      test: "not provided",
+      reasons: [],
+    });
+
+    expect(report).toContain("Judge: meets_criteria=0.94 | drift=no_drift | scope=HOLD | verdict=APPROVE | task_type=analysis_research");
+  });
+
+  test("E2E handleTodoInterception: cognitive task with zero code changes uses analysis_research, supplies agentWorkLog fallback, filters plan-cli stubs, and reports verdict and task_type", async () => {
+    const { handlers, messages, mockPi } = createMockPi();
+    registerExtension(mockPi as unknown as Parameters<typeof registerExtension>[0]);
+    const interceptor = handlers.tool_call?.[0];
+
+    // Scaffold a plan-cli stub in tempRepo to verify it is filtered out from deliverable_artifacts
+    const stubDir = path.join(tempRepo, "plans", "261014-stub");
+    fs.mkdirSync(stubDir, { recursive: true });
+    fs.writeFileSync(path.join(stubDir, "plan.md"), "# Stub Plan\n\n## Overview\n\nTBD.\n", "utf8");
+
+    const mockCtx = {
+      cwd: tempRepo,
+      sessionManager: {
+        getBranch: () => [
+          { type: "message", message: { role: "user", content: "Clarify requirements and brainstorm 3 approaches" } },
+          {
+            type: "message",
+            message: {
+              role: "assistant",
+              content: [{ type: "text", text: "Evaluated 3 architectural options (Option A, B, C) with trade-offs." }],
+            },
+          },
+        ],
+      },
+    };
+
+    await interceptor?.(
+      { tool: "todo", params: { op: "done", task: "Clarify requirements and brainstorm 3 approaches" } },
+      mockCtx
+    );
+
+    expect(capturedState).not.toBeNull();
+    const deliverableArtifacts = String(capturedState?.deliverable_artifacts || "");
+    expect(deliverableArtifacts).toContain("Evaluated 3 architectural options");
+    expect(deliverableArtifacts).not.toContain("TBD.");
+
+    const taskReportMsg = messages.find((m) => m.customType === "typesafe-task-report");
+    expect(taskReportMsg?.content).toContain("verdict=APPROVE");
+    expect(taskReportMsg?.content).toContain("task_type=analysis_research");
+  });
+
+  test("collectConversationContext filters TypeSafe task reports and background job notices from userRequest while extracting background test results", () => {
+    const convo = collectConversationContext({
+      sessionManager: {
+        getBranch: () => [
+          {
+            type: "message",
+            message: {
+              role: "user",
+              content: "[IMPORTANT: User invoked the \"ck:team\" skill]\nFull skill body...\nUser: Revert unrelated changes and verify workspace",
+            },
+          },
+          {
+            type: "message",
+            message: {
+              role: "user",
+              content: "📋 TypeSafe task report — DONE \"Step 1\"\nDecision: APPROVED",
+            },
+          },
+          {
+            type: "message",
+            message: {
+              role: "user",
+              content: "<system-notice>\nBackground job bg_1 has completed.\nbun test v1.4.0\n 312 pass\n 0 fail\nRan 312 tests across 33 files.\n</system-notice>",
+            },
+          },
+        ],
+      },
+    });
+
+    expect(convo.userRequest).toBe("Revert unrelated changes and verify workspace");
+    expect(convo.userRequest).not.toContain("TypeSafe task report");
+    expect(convo.userRequest).not.toContain("Background job bg_1");
+    expect(convo.lastTestSummary).toContain("312 pass");
   });
 });

@@ -390,7 +390,7 @@ export function evaluateAdvisorIntent(ctx: AdvisorContext): AdvisorIntentResult 
       };
     }
 
-    // 2. Clean build / pre-existing satisfaction obsolescence (DataGuard pattern)
+    // 2. Clean build or verified test success obsolescence
     const hasBuildEvidence =
       ctx.hasCleanBuildEvidence === true ||
       CLEAN_BUILD_PATTERNS.some((p) => p.test(combinedContext));
@@ -445,7 +445,7 @@ export function evaluateAdvisorIntent(ctx: AdvisorContext): AdvisorIntentResult 
 
     if (
       workLog.length > 0 &&
-      /pass|implement|added|completed|fixed|moved|organized|refactor|verified|updated|tested|scout|diagnos|analy[sz]|investigat|identif|found|trace|review|plan|document|sync|deploy|check|resolv|root\s*cause|deliver|wrote|creat|built|\[toolCall:|\[toolResult:|\[Advisor\]:|hoàn thành|đã sửa|đã kiểm tra|thành công|đã xong|xác minh|báo cáo/i.test(
+      /pass|implement|added|completed|fixed|moved|organized|refactor|verified|updated|tested|scout|diagnos|analy[sz]|investigat|identif|found|trace|review|plan|document|sync|deploy|check|resolv|root\s*cause|deliver|wrote|creat|built|\[Advisor\]:|hoàn thành|đã sửa|đã kiểm tra|thành công|đã xong|xác minh|báo cáo/i.test(
         workLog
       )
     ) {
@@ -493,12 +493,15 @@ export function evaluateAdvisorIntent(ctx: AdvisorContext): AdvisorIntentResult 
       };
     }
 
-    if (
-      ctx.taskType === "analysis_research" ||
-      /^\s*(?:step\s*\d+\s*[:.-]\s*)?(?:scout|diagnos|investigat|research|analy[sz]|explore|find|audit|review|check|trace|inspect|kiểm tra|phân tích|tìm)\b/i.test(
+    const isImplLead =
+      /^\s*(?:(?:step|task|phase)\s*\d+\s*[:.-]\s*)?(?:implement\w*|fix\w*|build\w*|add\w*|create\s+src|refactor\w*|patch\w*|deploy\w*)\b/i.test(
         taskText
-      )
-    ) {
+      );
+    const isCognitiveTask =
+      /\b(?:scout\w*|diagnos\w*|investigat\w*|research\w*|analy[sz]\w*|explor\w*|find|audit\w*|review\w*|check\w*|trac\w*|inspect\w*|read\w*|clarif\w*|brainstorm\w*|plan|planning|design\w*|synthesi[sz]\w*|consult\w*|evaluat\w*|assess\w*|document\w*|journal\w*|organi[sz]\w*|verif\w*|ask\w*|propos\w*|validat\w*|compar\w*|summariz\w*|kiểm tra|phân tích|tìm|nghiên cứu|lập kế hoạch)\b/i.test(
+        taskText
+      );
+    if (ctx.taskType === "analysis_research" || (!isImplLead && isCognitiveTask)) {
       const reason = "Investigation or analysis task completed within active session context";
       return {
         verdict: "ALLOW",
@@ -630,16 +633,14 @@ export function arbitrateConsensus(
 export function formatConsensusEscalation(decision: BicameralConsensusDecision): string {
   const jevReasons = decision.jev.reasons.length > 0 ? decision.jev.reasons.join("; ") : "No specific reasons provided";
   return [
-    "┌─────────────────────────────────────────────────────────────┐",
-    "│ Bicameral Consensus Escalation (Sovereign Human Review)    │",
-    "├─────────────────────────────────────────────────────────────┤",
-    `│ Lobe 1 (Advisor Intent): ${decision.advisor.verdict} (Confidence ${decision.advisor.confidence.toFixed(2)})`.padEnd(61) + "│",
-    `│ Intent Rationale:        ${decision.advisor.reason.slice(0, 35)}`.padEnd(61) + "│",
-    `│ Lobe 2 (TypeSafe JEV Judge): ${decision.jev.verdict}`.padEnd(61) + "│",
-    `│ Evidence Findings:       ${jevReasons.slice(0, 35)}`.padEnd(61) + "│",
-    "├─────────────────────────────────────────────────────────────┤",
-    "│ Sovereign human confirmation needed: Approve or reject.    │",
-    "└─────────────────────────────────────────────────────────────┘",
+    "Bicameral Consensus Escalation (Sovereign Human Review)",
+    "─────────────────────────────────────────────────────────────",
+    `Lobe 1 (Advisor Intent): ${decision.advisor.verdict} (Confidence ${decision.advisor.confidence.toFixed(2)})`,
+    `Intent Rationale:        ${decision.advisor.reason.slice(0, 500)}`,
+    `Lobe 2 (TypeSafe JEV Judge): ${decision.jev.verdict}`,
+    `Evidence Findings:       ${jevReasons.slice(0, 500)}`,
+    "─────────────────────────────────────────────────────────────",
+    "Sovereign human confirmation needed: Approve or reject.",
   ].join("\n");
 }
 
@@ -685,7 +686,7 @@ export async function runBicameralMacroCheck(
   ctx: MacroCheckContext,
   client?: ExpertJudgeClient
 ): Promise<BicameralConsensusDecision & { macroResult: PhaseMacroCheckResult }> {
-  const advisor = evaluateAdvisorIntent({
+  let advisor = evaluateAdvisorIntent({
     operation: "done",
     task: ctx.todoTask || ctx.phaseTitle || "",
     userRequest: ctx.userRequest,
@@ -698,6 +699,14 @@ export async function runBicameralMacroCheck(
   });
 
   const jevMacro = await runPhaseMacroCheck(ctx, client);
+  if (!jevMacro.approved && jevMacro.verdict === "REJECT" && !jevMacro.escalateToUser) {
+    advisor = {
+      ...advisor,
+      verdict: "DISALLOW",
+      ckVerdict: "block",
+      reason: "Deliverable verification rejected by JEV; agent remediation required before human escalation",
+    };
+  }
   let jevVerdict: JevConsensusVerdict;
   if (jevMacro.approved) {
     jevVerdict = "APPROVE";
@@ -734,17 +743,26 @@ export async function evaluateBicameralDoneConsensus(ctx: {
     ctx.evidence && typeof ctx.evidence === "object"
       ? (ctx.evidence as Record<string, unknown>)
       : undefined;
-  const advisor = evaluateAdvisorIntent({
+  const testSummary = typeof evObj?.testOutput === "string" ? evObj.testOutput : undefined;
+  let advisor = evaluateAdvisorIntent({
     operation: "done",
     task: ctx.todoTask || ctx.phaseTitle || "",
     userRequest: ctx.userRequest,
     agentWorkLog: ctx.agentWorkLog,
-    testSummary: typeof evObj?.testOutput === "string" ? evObj.testOutput : undefined,
+    testSummary,
     diffSummary: typeof evObj?.gitStatus === "string" ? evObj.gitStatus : undefined,
   });
 
   let jevVerdict: JevConsensusVerdict;
   const jevMacro = ctx.macroResult;
+  if (!jevMacro.approved && jevMacro.verdict === "REJECT" && !jevMacro.escalateToUser) {
+    advisor = {
+      ...advisor,
+      verdict: "DISALLOW",
+      ckVerdict: "block",
+      reason: "Deliverable verification rejected by JEV; agent remediation required before human escalation",
+    };
+  }
   if (jevMacro.approved) {
     jevVerdict = "APPROVE";
   } else if (jevMacro.verdict === "NEXT_ACTION_REQUIRED") {
@@ -961,10 +979,23 @@ export async function runBicameralDecisionCheck(
         if (recChoice && recChoice !== "insufficient_evidence") {
           jevReasons.push(`JEV recommended option: "${recChoice}"`);
           const matchedIdx = normalizedOpts.findIndex((o) => o.label === recChoice);
-          if (matchedIdx >= 0 && (!advisor.recommendedOption || advisor.confidence <= 0.75)) {
+          if (matchedIdx >= 0) {
+            const matchedRationale =
+              advisor.rankedOptions?.find((r) => r.option === recChoice)?.rationale ||
+              "Recommended by TypeSafe JEV & Advisor";
+            if (advisor.rankedOptions && advisor.rankedOptions.length > 0) {
+              const promotedScore = Math.max(advisor.rankedOptions[0]?.score ?? 0.90, recConf ?? 0.90);
+              advisor.rankedOptions = advisor.rankedOptions
+                .map((r) => (r.option === recChoice ? { ...r, score: promotedScore } : r))
+                .sort((a, b) => {
+                  if (a.option === recChoice) return -1;
+                  if (b.option === recChoice) return 1;
+                  return b.score - a.score;
+                });
+            }
             advisor.recommendedOption = recChoice;
             advisor.recommendedIndex = matchedIdx;
-            advisor.recommendation = `Select "${recChoice}" (confirmed by TypeSafe JEV & Advisor).`;
+            advisor.recommendation = `Select "${recChoice}" — ${matchedRationale}.`;
             advisor.reason = advisor.recommendation;
             advisor.verdict = "ALLOW";
             advisor.ckVerdict = "proceed";

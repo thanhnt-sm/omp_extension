@@ -12,18 +12,36 @@ export function analyzeDiffForTestEvasion(diff: string): ASTAnalysisResult {
     return result;
   }
 
-  // Identify deleted assertions
+  // Identify deleted assertions (net reduction in assertion count)
   const deletedAssertionRegex = /(?:^|\n)-[ \t]*(?:expect\(|assert\(|assert\.[a-zA-Z]+\()/g;
+  const addedAssertionRegex = /(?:^|\n)\+[ \t]*(?:expect\(|assert\(|assert\.[a-zA-Z]+\()/g;
+  const removedAssertions: string[] = [];
   let match;
   while ((match = deletedAssertionRegex.exec(diff)) !== null) {
-    result.deletedAssertions.push(match[0].trim());
+    removedAssertions.push(match[0].trim());
+  }
+  let addedAssertionCount = 0;
+  while (addedAssertionRegex.exec(diff) !== null) {
+    addedAssertionCount++;
+  }
+  if (removedAssertions.length > addedAssertionCount) {
+    result.deletedAssertions.push(...removedAssertions.slice(addedAssertionCount));
     result.issues.push("Test evasion detected: git diff contains deleted assertions (expect/assert). Deleting tests to fake completion is prohibited.");
   }
 
-  // Identify deleted test blocks
+  // Identify deleted test blocks (net reduction in test block count)
   const deletedTestBlockRegex = /(?:^|\n)-[ \t]*(?:it\(|test\(|describe\()/g;
+  const addedTestBlockRegex = /(?:^|\n)\+[ \t]*(?:it\(|test\(|describe\()/g;
+  const removedBlocks: string[] = [];
   while ((match = deletedTestBlockRegex.exec(diff)) !== null) {
-    result.modifiedSuites.push(match[0].trim());
+    removedBlocks.push(match[0].trim());
+  }
+  let addedBlockCount = 0;
+  while (addedTestBlockRegex.exec(diff) !== null) {
+    addedBlockCount++;
+  }
+  if (removedBlocks.length > addedBlockCount) {
+    result.modifiedSuites.push(...removedBlocks.slice(addedBlockCount));
     result.issues.push("Detected deletion of test block or suite.");
   }
 

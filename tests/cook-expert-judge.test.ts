@@ -662,5 +662,215 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
       expect(res.decision).toBe("undecided");
       expect(res.verdict).toBe("ESCALATE");
     });
+
+    test("dual-primitive JEV calibration sends both deliverables_verdict choice and meets_criteria noul and preserves calibrated noul on REJECT", async () => {
+      let capturedQuestions: Record<string, { type: string; instructions: string }> = {};
+      const client: ExpertJudgeClient = {
+        evaluate: async ({ questions }) => {
+          capturedQuestions = questions;
+          return {
+            answers: {
+              deliverables_verdict: { choice: "REJECT", confidence: 0.85 },
+              meets_criteria: { noul: 0.42 },
+              architectural_drift: { choice: "no_drift" },
+              scope_mode: { choice: "HOLD" },
+            },
+          };
+        },
+      };
+      const res = await runPhaseMacroCheck(
+        {
+          todoTask: "Implement feature",
+          phaseTitle: "Phase 1",
+          planRequirements: ["Req 1"],
+          diffSummary: "1 file changed",
+          unifiedDiff: "+ const x = 1;",
+          testSummary: "PASS",
+        },
+        client
+      );
+      expect(capturedQuestions.deliverables_verdict?.type).toBe("choice");
+      expect(capturedQuestions.meets_criteria?.type).toBe("noul");
+      expect(res.approved).toBe(false);
+      expect(res.verdict).toBe("REJECT");
+      expect(res.meetsCriteriaNoul).toBe(0.42);
+      expect(res.reasons[0]).toContain("rejected");
+      expect(res.reasons[0]).toContain("P=0.42");
+    });
+
+    test("dual-primitive JEV fails closed when meets_criteria noul is invalid even if deliverables_verdict is present", async () => {
+      const client: ExpertJudgeClient = {
+        evaluate: async () => ({
+          answers: {
+            deliverables_verdict: { choice: "APPROVE", confidence: 0.95 },
+            meets_criteria: { noul: 1.5 },
+            architectural_drift: { choice: "no_drift" },
+            scope_mode: { choice: "HOLD" },
+          },
+        }),
+      };
+      const res = await runPhaseMacroCheck(
+        {
+          todoTask: "Verify bounds",
+          planRequirements: ["Req 1"],
+          diffSummary: "1 file changed",
+          unifiedDiff: "+ const x = 1;",
+          testSummary: "PASS",
+        },
+        client
+      );
+      expect(res.approved).toBe(false);
+      expect(res.error).toBe("unavailable");
+    });
+
+    test("downgrades deliverables_verdict APPROVE when meets_criteria < 0.80 (e.g. 0.45 -> NEXT_ACTION_REQUIRED, 0.15 -> REJECT)", async () => {
+      const partialClient: ExpertJudgeClient = {
+        evaluate: async () => ({
+          answers: {
+            deliverables_verdict: { choice: "APPROVE", confidence: 0.90 },
+            meets_criteria: { noul: 0.45 },
+            architectural_drift: { choice: "no_drift" },
+            scope_mode: { choice: "HOLD" },
+          },
+        }),
+      };
+      const partialRes = await runPhaseMacroCheck(
+        {
+          todoTask: "Partial implementation",
+          planRequirements: ["Req 1"],
+          diffSummary: "1 file changed",
+          unifiedDiff: "+ const x = 1;",
+          testSummary: "PASS",
+        },
+        partialClient
+      );
+      expect(partialRes.approved).toBe(false);
+      expect(partialRes.verdict).toBe("NEXT_ACTION_REQUIRED");
+      expect(partialRes.deliverablesVerdict).toBe("NEXT_ACTION_REQUIRED");
+      expect(partialRes.meetsCriteriaNoul).toBe(0.45);
+      expect(partialRes.reasons[0]).toContain("P=0.45 is below required threshold 0.80");
+
+      const rejectClient: ExpertJudgeClient = {
+        evaluate: async () => ({
+          answers: {
+            deliverables_verdict: { choice: "APPROVE", confidence: 0.88 },
+            meets_criteria: { noul: 0.15 },
+            architectural_drift: { choice: "no_drift" },
+            scope_mode: { choice: "HOLD" },
+          },
+        }),
+      };
+      const rejectRes = await runPhaseMacroCheck(
+        {
+          todoTask: "Stub implementation",
+          planRequirements: ["Req 1"],
+          diffSummary: "1 file changed",
+          unifiedDiff: "+ // TODO",
+          testSummary: "No testCommand provided",
+        },
+        rejectClient
+      );
+      expect(rejectRes.approved).toBe(false);
+      expect(rejectRes.verdict).toBe("REJECT");
+      expect(rejectRes.deliverablesVerdict).toBe("REJECT");
+      expect(rejectRes.meetsCriteriaNoul).toBe(0.15);
+      expect(rejectRes.reasons[0]).toContain("P=0.15 is below required threshold 0.80");
+    });
+
+    test("runDropJustificationCheck inverts drop_verdict.confidence (1 - confidence) when drop_verdict is REJECT and drop_justified is omitted", async () => {
+      const client58: ExpertJudgeClient = {
+        evaluate: async () => ({
+          answers: {
+            drop_verdict: { choice: "REJECT", confidence: 0.58 },
+          },
+        }),
+      };
+      const res58 = await runDropJustificationCheck(
+        { tasks: ["task-1"], remainingTasks: [] },
+        client58
+      );
+      expect(res58.decision).toBe("reject");
+      expect(res58.verdict).toBe("REJECT");
+      expect(res58.dropJustifiedNoul).toBe(0.42);
+
+      const client95: ExpertJudgeClient = {
+        evaluate: async () => ({
+          answers: {
+            drop_verdict: { choice: "REJECT", confidence: 0.95 },
+          },
+        }),
+      };
+      const res95 = await runDropJustificationCheck(
+        { tasks: ["task-1"], remainingTasks: [] },
+        client95
+      );
+      expect(res95.decision).toBe("reject");
+      expect(res95.verdict).toBe("REJECT");
+      expect(res95.dropJustifiedNoul).toBe(0.05);
+    });
+
+    test("runDropJustificationCheck validates malformed drop_justified noul even when drop_verdict is present", async () => {
+      const clientInvalid: ExpertJudgeClient = {
+        evaluate: async () => ({
+          answers: {
+            drop_verdict: { choice: "APPROVE", confidence: 0.95 },
+            drop_justified: { noul: 1.5 },
+          },
+        }),
+      };
+      const res = await runDropJustificationCheck(
+        { tasks: ["task-1"], remainingTasks: [] },
+        clientInvalid
+      );
+      expect(res.decision).toBe("unavailable");
+      expect(res.reasons.some((r) => r.includes("invalid or malformed drop_justified noul"))).toBe(true);
+    });
+
+    test("allows modified assertion when replacement assertion is added in git diff", async () => {
+      const evidence: MicroCheckEvidence = {
+        gitStatus: "M tests/feature.test.ts",
+        gitDiff: "--- a/tests/feature.test.ts\n+++ b/tests/feature.test.ts\n- expect(activeTasks.has('OldTask')).toBe(false);\n+ expect(activeTasks.has('NewTask')).toBe(false);",
+        testExitCode: 0,
+        testOutput: "PASS 4 tests",
+        cleanWorkingTree: false,
+      };
+
+      const res = await runTaskMicroCheck(evidence);
+      expect(res.passed).toBe(true);
+      expect(res.assertionDeleted).toBe(false);
+    });
+
+    test("runPhaseMacroCheck evaluates JEV even when attemptCount >= 3 and approves if JEV returns APPROVE", async () => {
+      let called = false;
+      const approveClient: ExpertJudgeClient = {
+        evaluate: async () => {
+          called = true;
+          return {
+            answers: {
+              deliverables_verdict: { choice: "APPROVE", confidence: 0.96 },
+              meets_criteria: { noul: 0.96 },
+              architectural_drift: { choice: "no_drift" },
+              scope_mode: { choice: "HOLD" },
+            },
+          };
+        },
+      };
+
+      const res = await runPhaseMacroCheck(
+        {
+          phaseTitle: "Fixed on attempt 3",
+          planRequirements: ["Req 1"],
+          diffSummary: "M src/fix.ts",
+          unifiedDiff: "+ fixed code",
+          testSummary: "PASS",
+          attemptCount: 3,
+        },
+        approveClient
+      );
+      expect(called).toBe(true);
+      expect(res.approved).toBe(true);
+      expect(res.verdict).toBe("APPROVE");
+      expect(res.escalateToUser).toBe(false);
+    });
   });
 });

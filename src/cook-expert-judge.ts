@@ -145,8 +145,11 @@ export async function runTaskMicroCheck(evidence: MicroCheckEvidence): Promise<M
     reasons.push(`Test suite failed with exit code ${evidence.testExitCode}. Test failure must be resolved before completing task.`);
   }
 
-  const assertionDeleted =
-    /(?:^|\n)-[ \t]*(?:expect\(|assert\(|assert\.[a-zA-Z]+\()/m.test(evidence.gitDiff);
+  const deletedAssertionMatches =
+    evidence.gitDiff.match(/(?:^|\n)-[ \t]*(?:expect\(|assert\(|assert\.[a-zA-Z]+\()/g) || [];
+  const addedAssertionMatches =
+    evidence.gitDiff.match(/(?:^|\n)\+[ \t]*(?:expect\(|assert\(|assert\.[a-zA-Z]+\()/g) || [];
+  const assertionDeleted = deletedAssertionMatches.length > addedAssertionMatches.length;
   if (assertionDeleted) {
     reasons.push("Test evasion detected: git diff contains deleted assertions (expect/assert). Deleting tests to fake completion is prohibited.");
   }
@@ -182,13 +185,6 @@ export async function runPhaseMacroCheck(
 ): Promise<MacroCheckResult> {
   const reasons: string[] = [];
 
-  if (ctx.attemptCount && ctx.attemptCount >= 3) {
-    return {
-      approved: false,
-      reasons: ["3 consecutive failed revision attempts reached. Halting autonomous loop for user escalation."],
-      escalateToUser: true,
-    };
-  }
   // Anti-spoofing heuristic: If code files are modified in diffSummary file paths,
   // forcefully override taskType to "code_change"
   const diffLines = (ctx.diffSummary || "").split(/\r?\n/);
@@ -228,30 +224,41 @@ export async function runPhaseMacroCheck(
     deliverablesQuestion = {
       type: "choice",
       instructions:
-        "Is the work described by `todo_task` complete, meeting `task_requirements`, as evidenced by `deliverable_artifacts`, `test_summary` and `agent_work_log`? `agent_work_log` is the agent's own unverified claim; trust file and test evidence over it. `plan_context` is background only and is NOT required for this task. Treat `user_request` as the user's authoritative intent.",
+        "Based on `deliverable_artifacts`, `test_summary`, and `agent_work_log`, does the completed work satisfy `todo_task` and `task_requirements`?",
       criteria: {
-        APPROVE: "Deliverables thoroughly satisfy the research or documentation criteria with concrete analysis or specifications",
-        REJECT: "Deliverables are incomplete, superficial, missing key requirements, or fail to address the planned goals",
-        NEXT_ACTION_REQUIRED: "Deliverables are partial, missing key requirements, or require plan revision",
+        APPROVE: "Deliverables satisfy the research or documentation criteria with concrete analysis or specifications",
+        REJECT: "Deliverables fail to address the task requirements or omit required analysis",
+        NEXT_ACTION_REQUIRED: "Deliverables are partial and need follow-up actions",
       },
     };
   } else {
     deliverablesQuestion = {
       type: "choice",
       instructions:
-        "Is the work described by `todo_task` complete, meeting `task_requirements`, as evidenced by `unified_diff`, `test_summary` and `agent_work_log`? `agent_work_log` is the agent's own unverified claim; trust file and test evidence over it. `plan_context` is background only and is NOT required for this task. Treat `user_request` as the user's authoritative intent.",
+        "Based on `unified_diff`, `test_summary`, and `agent_work_log`, does the completed work satisfy `todo_task` and `task_requirements`?",
       criteria: {
         APPROVE: ctx.testCommand
-          ? "Implementation fulfills all listed acceptance criteria with real passing tests"
-          : "Implementation fulfills the listed acceptance criteria for this task based on unified_diff and agent_work_log",
-        REJECT: "Implementation is partial, missing requirements, or stubs out needed functionality",
-        NEXT_ACTION_REQUIRED: "Implementation is partial, has failing tests, or requires plan delta",
+          ? "Implementation fulfills the task acceptance criteria with passing tests"
+          : "Implementation fulfills the task acceptance criteria based on unified_diff and agent_work_log",
+        REJECT: "Implementation fails to address the task requirements or stubs out needed functionality",
+        NEXT_ACTION_REQUIRED: "Implementation is partial, has failing tests, or needs follow-up actions",
       },
     };
   }
 
   const questions: Record<string, ExpertJudgeQuestion> = {
     deliverables_verdict: deliverablesQuestion,
+    meets_criteria: {
+      type: "noul",
+      instructions:
+        effectiveTaskType === "analysis_research" || effectiveTaskType === "doc_specification"
+          ? "Does the research or specification evidence in `deliverable_artifacts` and `agent_work_log` satisfy `todo_task` and `task_requirements`?"
+          : "Does the implementation in `unified_diff`, `test_summary`, and `agent_work_log` satisfy `todo_task` and `task_requirements`?",
+      criteria: {
+        true: "Deliverables and evidence satisfy the task requirements",
+        false: "Deliverables are incomplete, missing required evidence, or fail task criteria",
+      },
+    },
     architectural_drift: {
       type: "choice",
       instructions:
@@ -306,19 +313,26 @@ export async function runPhaseMacroCheck(
   const rawDeliverablesVerdict = answers.deliverables_verdict?.choice;
   const rawMeetsCriteria = answers.meets_criteria?.noul;
 
+  if (
+    rawMeetsCriteria !== undefined &&
+    (typeof rawMeetsCriteria !== "number" || !Number.isFinite(rawMeetsCriteria) || rawMeetsCriteria < 0 || rawMeetsCriteria > 1)
+  ) {
+    return {
+      approved: false,
+      reasons: ["TypeSafe evaluation unavailable: meets_criteria must be a finite probability in [0,1]."],
+      escalateToUser: true,
+      error: "unavailable",
+    };
+  }
+
+  const threshold = resolveAutoApprovalThreshold();
   let deliverablesVerdict: DeliverablesVerdict | undefined;
   if (rawDeliverablesVerdict && ["APPROVE", "REJECT", "NEXT_ACTION_REQUIRED"].includes(rawDeliverablesVerdict)) {
     deliverablesVerdict = rawDeliverablesVerdict;
-  } else if (rawMeetsCriteria !== undefined) {
-    if (typeof rawMeetsCriteria !== "number" || !Number.isFinite(rawMeetsCriteria) || rawMeetsCriteria < 0 || rawMeetsCriteria > 1) {
-      return {
-        approved: false,
-        reasons: ["TypeSafe evaluation unavailable: meets_criteria must be a finite probability in [0,1]."],
-        escalateToUser: true,
-        error: "unavailable",
-      };
+    if (deliverablesVerdict === "APPROVE" && rawMeetsCriteria !== undefined && rawMeetsCriteria < Math.min(0.50, threshold)) {
+      deliverablesVerdict = rawMeetsCriteria < 0.30 ? "REJECT" : "NEXT_ACTION_REQUIRED";
     }
-    const threshold = resolveAutoApprovalThreshold();
+  } else if (rawMeetsCriteria !== undefined) {
     deliverablesVerdict = rawMeetsCriteria >= threshold ? "APPROVE" : rawMeetsCriteria < 0.30 ? "REJECT" : "NEXT_ACTION_REQUIRED";
   } else {
     return {
@@ -333,7 +347,13 @@ export async function runPhaseMacroCheck(
   const scopeChoice = (answers.scope_mode?.choice ?? answers.scope_arbiter?.choice) as ScopeChoice | undefined;
   const riskScore = answers.risk_score?.score ?? answers.risk_security_triage?.score;
   const expertConfidence = answers.deliverables_verdict?.confidence ?? answers.architectural_drift?.confidence ?? answers.scope_mode?.confidence ?? rawMeetsCriteria ?? 0.95;
-  const meetsCriteriaNoul = rawMeetsCriteria ?? (deliverablesVerdict === "APPROVE" ? 1.0 : deliverablesVerdict === "NEXT_ACTION_REQUIRED" ? 0.5 : 0.0);
+  const meetsCriteriaNoul =
+    rawMeetsCriteria ??
+    (deliverablesVerdict === "APPROVE"
+      ? (answers.deliverables_verdict?.confidence ?? 1.0)
+      : deliverablesVerdict === "NEXT_ACTION_REQUIRED"
+        ? 0.5
+        : 0.0);
 
   if (!driftChoice || !scopeChoice) {
     return {
@@ -354,17 +374,37 @@ export async function runPhaseMacroCheck(
   let approved = true;
   if (deliverablesVerdict === "REJECT") {
     approved = false;
-    if (rawMeetsCriteria !== undefined && rawMeetsCriteria < 0.80) {
-      reasons.push(`Implementation score P=${rawMeetsCriteria.toFixed(2)} is below required threshold ${resolveAutoApprovalThreshold().toFixed(2)}.`);
+    if (rawMeetsCriteria !== undefined) {
+      if (rawMeetsCriteria < threshold) {
+        reasons.push(
+          `Deliverable verification rejected (${effectiveTaskType}): score P=${rawMeetsCriteria.toFixed(2)} is below required threshold ${threshold.toFixed(2)}.`
+        );
+      } else {
+        reasons.push(
+          `Deliverable verification rejected (${effectiveTaskType}): categorical verdict is ${deliverablesVerdict} (score P=${rawMeetsCriteria.toFixed(2)} vs threshold ${threshold.toFixed(2)}).`
+        );
+      }
     } else {
-      reasons.push("Deliverable verification rejected: implementation is evading work, malicious, or stubs out needed functionality.");
+      reasons.push(
+        `Deliverable verification rejected (${effectiveTaskType}): deliverables are incomplete, missing required evidence, or fail task criteria.`
+      );
     }
   } else if (deliverablesVerdict === "NEXT_ACTION_REQUIRED") {
     approved = false;
-    if (rawMeetsCriteria !== undefined && rawMeetsCriteria < 0.80) {
-      reasons.push(`Implementation score P=${rawMeetsCriteria.toFixed(2)} is below required threshold ${resolveAutoApprovalThreshold().toFixed(2)}.`);
+    if (rawMeetsCriteria !== undefined) {
+      if (rawMeetsCriteria < threshold) {
+        reasons.push(
+          `Next actions required (${effectiveTaskType}): score P=${rawMeetsCriteria.toFixed(2)} is below required threshold ${threshold.toFixed(2)}.`
+        );
+      } else {
+        reasons.push(
+          `Next actions required (${effectiveTaskType}): categorical verdict is ${deliverablesVerdict} (score P=${rawMeetsCriteria.toFixed(2)} vs threshold ${threshold.toFixed(2)}).`
+        );
+      }
     } else {
-      reasons.push("Next actions required: implementation is partial, has missing criteria, or requires plan adaptation.");
+      reasons.push(
+        `Next actions required (${effectiveTaskType}): deliverables are partial, has missing criteria, or requires plan adaptation.`
+      );
     }
   }
 
@@ -376,6 +416,11 @@ export async function runPhaseMacroCheck(
   if (scopeChoice === "REDUCTION") {
     approved = false;
     reasons.push("Scope reduction detected: implementation omitted planned deliverables.");
+  }
+
+  const reachedMaxAttempts = Boolean(ctx.attemptCount && ctx.attemptCount >= 3);
+  if (!approved && reachedMaxAttempts) {
+    reasons.push("3 consecutive failed revision attempts reached. Halting autonomous loop for user escalation.");
   }
 
   return {
@@ -620,16 +665,20 @@ export async function runDropJustificationCheck(
     const rawDropVerdict = response.answers.drop_verdict?.choice;
     const rawDropNoul = response.answers.drop_justified?.noul;
 
+    if (
+      rawDropNoul !== undefined &&
+      (typeof rawDropNoul !== "number" || !Number.isFinite(rawDropNoul) || rawDropNoul < 0 || rawDropNoul > 1)
+    ) {
+      return {
+        decision: "unavailable",
+        reasons: [`TypeSafe drop evaluation unavailable: invalid or malformed drop_justified noul probability (${String(rawDropNoul)})`],
+      };
+    }
+
     let dropVerdict: DropVerdict | undefined;
     if (rawDropVerdict && ["APPROVE", "REJECT", "ESCALATE"].includes(rawDropVerdict)) {
       dropVerdict = rawDropVerdict;
     } else if (rawDropNoul !== undefined) {
-      if (typeof rawDropNoul !== "number" || !Number.isFinite(rawDropNoul) || rawDropNoul < 0 || rawDropNoul > 1) {
-        return {
-          decision: "unavailable",
-          reasons: [`TypeSafe drop evaluation unavailable: invalid or malformed drop_justified noul probability (${String(rawDropNoul)})`],
-        };
-      }
       const threshold = resolveAutoApprovalThreshold();
       if (rawDropNoul >= threshold) dropVerdict = "APPROVE";
       else if (rawDropNoul < DROP_REJECT_FLOOR) dropVerdict = "REJECT";
@@ -641,7 +690,14 @@ export async function runDropJustificationCheck(
       };
     }
 
-    const dropJustifiedNoul = rawDropNoul ?? response.answers.drop_verdict?.confidence ?? (dropVerdict === "APPROVE" ? 1.0 : dropVerdict === "REJECT" ? 0.0 : 0.5);
+    const dropConf = response.answers.drop_verdict?.confidence;
+    const dropJustifiedNoul =
+      rawDropNoul ??
+      (dropVerdict === "APPROVE"
+        ? (dropConf ?? 1.0)
+        : dropVerdict === "REJECT"
+          ? (dropConf !== undefined ? Number(Math.max(0, 1 - dropConf).toFixed(2)) : 0.0)
+          : (dropConf ?? 0.5));
 
     if (dropVerdict === "APPROVE") {
       const reasonMsg = rawDropNoul !== undefined

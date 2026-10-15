@@ -3,6 +3,7 @@ import registerExtension, {
   runMultiPersonaDebate,
   constructMultiPersonaQuestions,
   normalizeQuestionForTypeSafe,
+  inferTaskType,
   type MultiPersonaDebateResult,
   type DebateJudgeClient,
 } from "../typesafe-planner";
@@ -134,6 +135,22 @@ describe("TypeSafe JEV Alignment: taskType inference & deliverableArtifacts", ()
     // Analysis/research when no diff or only untracked reports/markdown
     expect(inferTaskType("", "report content")).toBe("analysis_research");
     expect(inferTaskType("?? reports/audit.md", "audit findings")).toBe("analysis_research");
+  });
+
+  test("classifies cognitive, research, brainstorming, and planning tasks without code modifications as analysis_research while preserving anti-spoofing", () => {
+    // Cognitive/workflow tasks with empty gitStatus and no artifact files
+    expect(inferTaskType("", "", "Read relevant ck:* skills and inspect codebase")).toBe("analysis_research");
+    expect(inferTaskType("", "", "Clarify requirements and brainstorm 3 approaches")).toBe("analysis_research");
+    expect(inferTaskType("", "", "Step 2: Synthesize findings and consult advisor")).toBe("analysis_research");
+    expect(inferTaskType("", "", "Organize plan structure and journal decisions")).toBe("analysis_research");
+
+    // Implementation verb guard when gitStatus is empty
+    expect(inferTaskType("", "", "Implement plan execution in src/runner.ts")).toBe("code_change");
+    expect(inferTaskType("", "", "Step 1: Fix auth bug and refactor validation")).toBe("code_change");
+
+    // Anti-spoofing preserved when code files are modified
+    expect(inferTaskType(" M src/index.ts", "", "Brainstorm auth architecture")).toBe("code_change");
+    expect(inferTaskType("M src/planner.ts", "", "Read and clarify requirements")).toBe("code_change");
   });
 });
 
