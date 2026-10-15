@@ -51,7 +51,7 @@ Perform exhaustive red-team adversarial stress testing across the 7-attack secur
    - Verify immutable OMP loader pointer (`C:\Users\thant\.omp\agent\extensions\typesafe-planner.ts`).
    - Verify 100% pass on target directory test suites.
 4. **End-to-End Live Verification**:
-   - Run controlled live simulation of drop request with clean build evidence (DataGuard scenario), proving that sovereign human approval and non-blocking plan reconciliation function seamlessly.
+   - Run controlled live simulation of drop request with verified clean build evidence, proving that sovereign human approval and non-blocking plan reconciliation function seamlessly.
 
 ## Success Criteria
 - [ ] All 7 adversarial attack vectors successfully mitigated without numerical threshold crutches.

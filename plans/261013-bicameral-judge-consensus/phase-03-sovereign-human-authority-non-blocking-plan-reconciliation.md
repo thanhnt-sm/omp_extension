@@ -19,7 +19,7 @@ Implement the Sovereign Human Invariant in `typesafe-planner.ts` ensuring that h
     - When Gate 1/2 or Bicameral Consensus returns `NEXT_ACTION_REQUIRED` or rejected deliverables, the interceptor must NOT call `throw new Error(...)` to abort the agent session.
     - Instead, it formats an **Adaptive Plan Delta** (`<plan_reconciliation>`) extracting the exact missing requirements, synthesizes an updated `todo` proposal, and steers the agent/human to accept the revised plan.
     - If the human approves the reconciliation proposal, the agent proceeds immediately without terminal failure loops.
-  - Eliminate the DataGuard dead-end bug (`omp bị lỗi không thoát ra được`) by allowing drops of obsolete tasks when human confirms or when clean build evidence is provided.
+  - Eliminate the clean-build dead-end bug (`omp bị lỗi không thoát ra được`) by allowing drops of obsolete tasks when human confirms or when verified clean build evidence is provided.
 - Non-functional:
   - Zero terminal crashes: Agents are guided towards plan adaptation rather than trapped in rigid exception cycles.
   - Audit logging: Every human override and plan adaptation is durably recorded in task reports.

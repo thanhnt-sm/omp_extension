@@ -13,7 +13,7 @@
    - Updated `runDropJustificationCheck` and `runPhaseMacroCheck` to ask typed choice questions with backward-compatible legacy fallback mapping.
    - Refactored `generateVerificationScorecard` to output `VERDICT: APPROVED (JEV Confidence 0.95)` cleanly aligned without hardcoded numerical thresholds.
 2. **Advisor Intent Evaluator & Bicameral Consensus Engine (`src/bicameral-consensus.ts`):**
-   - Built `evaluateAdvisorIntent(ctx)`: Analyzes conversation history, user request prompts, and agent work logs to determine whether operations align with user goals (`ALLOW` | `DISALLOW` | `UNCERTAIN`). Specifically detects explicit user cancellations and clean build satisfaction (DataGuard pattern).
+   - Built `evaluateAdvisorIntent(ctx)`: Analyzes conversation history, user request prompts, and agent work logs to determine whether operations align with user goals (`ALLOW` | `DISALLOW` | `UNCERTAIN`). Specifically detects explicit user cancellations and clean-build task satisfaction.
    - Built `arbitrateConsensus(advisor, jev)`:
      * `ALLOW` + `APPROVE` $\implies$ `AUTO_APPROVE` (instant execution, zero prompts).
      * `DISALLOW` + `REJECT` $\implies$ `AUTO_REJECT` (actionable feedback).
@@ -23,7 +23,7 @@
 3. **Sovereign Human Authority & Non-Blocking Plan Reconciliation (`typesafe-planner.ts`, `src/remediation-generator.ts`):**
    - **Sovereign Human Override**: Human authorizations (via `isHuman`, `ui.confirm`, or explicit user prompt) are recorded in `hostAuthorizedTasks`. Downstream gates are prohibited from re-blocking.
    - **Non-Blocking Plan Reconciliation**: Implemented `synthesizePlanDelta` in `src/remediation-generator.ts`, producing `<plan_reconciliation>` blocks that guide agents toward plan adaptation rather than crashing with fatal exceptions.
-   - Fixed the DataGuard dead-end bug by recognizing clean build evidence as task satisfaction.
+   - Fixed the clean-build dead-end bug by recognizing verified clean build evidence as task satisfaction.
 4. **Adversarial Validation & Baseline Deployment (`tools/sync-baseline.cjs`):**
    - Validated against the full 7-attack adversarial stress matrix with 100% defense rate.
    - Development workspace: **272/272 passing tests across 32 files**.

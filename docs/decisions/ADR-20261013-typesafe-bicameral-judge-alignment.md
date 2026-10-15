@@ -14,7 +14,7 @@ In the current implementation, OMP's `typesafe-planner` extension and `cook-expe
 
 This architecture has caused severe operational friction in real-world workflows:
 1. **Double-Guessing the Model**: When JEV calculates calibrated confidence (e.g. $P=0.75$ on code deliverables or $P=0.35$ on drop justification), client-side code forces the evaluation into an ambiguous "undecided gray zone" $[0.30, 0.80)$ or throws blocking exceptions.
-2. **Terminal Agent Deadlocks ("omp bị lỗi không thoát ra được")**: When an agent legitimately finishes work or seeks to drop redundant tasks after a successful clean build (e.g., DataGuard build without MSBuild errors), the client interceptor throws unrecoverable errors rather than synthesizing next actions or respecting human intent.
+2. **Terminal Agent Deadlocks ("omp bị lỗi không thoát ra được")**: When an agent legitimately finishes work or seeks to drop redundant tasks after a successful clean build (e.g., a clean build with zero MSBuild errors), the client interceptor throws unrecoverable errors rather than synthesizing next actions or respecting human intent.
 3. **Configuration Sprawl**: Developers and users are forced to tune arbitrary environmental threshold variables (`TYPESAFE_AUTO_APPROVAL_THRESHOLD`) to bypass client-side barriers.
 
 The user mandates an architecture where:

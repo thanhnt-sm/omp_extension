@@ -56,7 +56,7 @@ Consensus      Conflict      Next Actions
    - Write tests for consensus scenarios:
      * User explicitly requested cancellation + JEV confirmed clean tests $\implies$ auto-drop approved.
      * Agent claims task obsolete but user never mentioned it + JEV finds unfulfilled requirements $\implies$ auto-rejected.
-     * Agent claims task obsolete after clean build (DataGuard scenario) + JEV uncertain $\implies$ human escalation with both reasons formatted.
+     * Agent claims task obsolete after verified clean build + JEV uncertain $\implies$ human escalation with both reasons formatted.
 2. **Implement `src/bicameral-consensus.ts`**:
    - Define `AdvisorIntentVerdict`: `"ALLOW" | "DISALLOW" | "UNCERTAIN"`.
    - Define `BicameralConsensusDecision`:
