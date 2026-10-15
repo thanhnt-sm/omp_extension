@@ -31,33 +31,31 @@ interface RedactPatternsModule {
 }
 
 function loadRedactModule(): RedactModule | null {
-  try {
-    const modPath = path.join(
-      os.homedir(),
-      ".claude",
-      "mcp",
-      "typesafe",
-      "typesafe-redact.cjs"
-    );
-    return nodeRequire(modPath) as RedactModule;
-  } catch {
-    return null;
+  const candidates = [
+    path.join(os.homedir(), ".claude", "mcp", "typesafe", "typesafe-redact.cjs"),
+    path.join(__dirname, "typesafe-redact.cjs"),
+  ];
+  for (const modPath of candidates) {
+    try {
+      const mod = nodeRequire(modPath) as RedactModule;
+      if (mod && typeof mod.preparePayload === "function") return mod;
+    } catch {}
   }
+  return null;
 }
 
 function loadPatternsModule(): RedactPatternsModule | null {
-  try {
-    const modPath = path.join(
-      os.homedir(),
-      ".claude",
-      "mcp",
-      "typesafe",
-      "typesafe-redact-patterns.cjs"
-    );
-    return nodeRequire(modPath) as RedactPatternsModule;
-  } catch {
-    return null;
+  const candidates = [
+    path.join(os.homedir(), ".claude", "mcp", "typesafe", "typesafe-redact-patterns.cjs"),
+    path.join(__dirname, "typesafe-redact-patterns.cjs"),
+  ];
+  for (const modPath of candidates) {
+    try {
+      const mod = nodeRequire(modPath) as RedactPatternsModule;
+      if (mod && typeof mod.detectSecret === "function") return mod;
+    } catch {}
   }
+  return null;
 }
 
 const ANTHROPIC_KEY_REGEX = /\bsk-ant-[A-Za-z0-9_-]{20,}\b/g;

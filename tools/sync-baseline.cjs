@@ -118,10 +118,11 @@ for (const relPath of filesToDeploy) {
   console.log(` -> Deployed: ${relPath}`);
 }
 
-// 3b. Sync Resolver to Global Claude Hooks Library
+// 3b. Sync Resolver & TypeSafe Runtime Modules to Global Directories
 try {
   const os = require("os");
-  const globalHooksLib = path.join(os.homedir(), ".claude", "hooks", "lib");
+  const claudeRoot = path.join(os.homedir(), ".claude");
+  const globalHooksLib = path.join(claudeRoot, "hooks", "lib");
   const globalResolverPath = path.join(globalHooksLib, "typesafe-enabled-resolver.cjs");
   const srcResolver = path.join(WORKSPACE_DIR, "src", "typesafe-enabled-resolver.cjs");
   if (fs.existsSync(srcResolver)) {
@@ -131,8 +132,45 @@ try {
     fs.copyFileSync(srcResolver, globalResolverPath);
     console.log(` -> Synced resolver to global hook: ${globalResolverPath}`);
   }
+
+  const globalMcpDir = path.join(claudeRoot, "mcp", "typesafe");
+  if (!fs.existsSync(globalMcpDir)) {
+    fs.mkdirSync(globalMcpDir, { recursive: true });
+  }
+  for (const cjsFile of [
+    "typesafe-api-client.cjs",
+    "typesafe-redact.cjs",
+    "typesafe-redact-patterns.cjs",
+    "typesafe-policy-client.cjs",
+  ]) {
+    const srcCjs = path.join(WORKSPACE_DIR, "src", cjsFile);
+    if (fs.existsSync(srcCjs)) {
+      const destCjs = path.join(globalMcpDir, cjsFile);
+      fs.copyFileSync(srcCjs, destCjs);
+      console.log(` -> Synced TypeSafe MCP module: ${destCjs}`);
+    }
+  }
+
+  const ckJsonPath = path.join(claudeRoot, ".ck.json");
+  if (!fs.existsSync(ckJsonPath)) {
+    fs.writeFileSync(
+      ckJsonPath,
+      JSON.stringify({ typesafe: { projects: ["*"], excludeProjects: [] } }, null, 2) + "\n",
+      "utf8"
+    );
+    console.log(` -> Provisioned global TypeSafe allowlist config: ${ckJsonPath}`);
+  }
+
+  // Remove stale target test files that were deleted from workspace
+  for (const staleRel of ["typesafe-planner.test.ts", "tests/cook-workflow-specs.test.ts"]) {
+    const staleTarget = path.join(TARGET_DIR, staleRel);
+    if (!fs.existsSync(path.join(WORKSPACE_DIR, staleRel)) && fs.existsSync(staleTarget)) {
+      fs.unlinkSync(staleTarget);
+      console.log(` -> Removed obsolete target file: ${staleRel}`);
+    }
+  }
 } catch (err) {
-  console.warn(`[WARNING] Could not sync global resolver hook:`, err.message);
+  console.warn(`[WARNING] Could not sync global resolver/MCP hook:`, err.message);
 }
 
 // 3c. Sync Advisor Agents to Global OMP Agents Directory
