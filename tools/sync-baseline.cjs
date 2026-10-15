@@ -112,7 +112,12 @@ function assertDestinationSafety(destinationPath) {
   assertNoExistingLinks(destinationPath, `destination ${destinationPath}`);
   if (fs.existsSync(destinationPath)) assertRegularFile(destinationPath, `destination ${destinationPath}`, { rejectHardlinks: true });
 }
-function parseArgs(argv) { if (argv.every((argument) => argument === "--dry-run")) return { dryRun: argv.includes("--dry-run") }; fail(`unknown argument: ${argv.find((argument) => argument !== "--dry-run")}`); }
+function parseArgs(argv) {
+  const supported = new Set(["--dry-run", "--bootstrap"]);
+  const unsupported = argv.find((argument) => !supported.has(argument));
+  if (unsupported) fail(`unknown argument: ${unsupported}`);
+  return { dryRun: argv.includes("--dry-run"), bootstrap: argv.includes("--bootstrap") };
+}
 function rootDestination(roots, root, relativePath) {
   if (!isSafeRelative(relativePath) || !Object.prototype.hasOwnProperty.call(roots, root)) fail(`unsafe manifest destination: ${root}/${relativePath}`);
   const destination = path.resolve(roots[root], ...relativePath.split("/"));
@@ -164,7 +169,11 @@ function preflight(config) {
   for (const entry of desired) assertDestinationSafety(rootDestination(roots, entry.root, entry.relativePath));
   return { workspaceDir, targetDir, backupDir, roots, inventory, desired };
 }
-function createPlan(preflightPlan) {
+function createPlan(preflightPlan, config) {
+  const manifestPath = path.join(preflightPlan.targetDir, MANIFEST_NAME);
+  if (config.bootstrap && fs.existsSync(manifestPath)) {
+    fail("bootstrap is allowed only when the target has no sync manifest");
+  }
   const previous = readManifest(preflightPlan.targetDir, preflightPlan.roots); const priorByKey = new Map(previous.entries.map((entry) => [manifestKey(entry.root, entry.relativePath), entry]));
   const desiredKeys = new Set(); const actions = []; const conflicts = [];
   for (const desired of preflightPlan.desired) {
@@ -173,6 +182,7 @@ function createPlan(preflightPlan) {
     else { assertDestinationSafety(destination); const currentHash = sha256File(destination);
       if (currentHash === sourceHash) actions.push({ action: "NOOP", ...desired, destination, sourceHash });
       else if (prior && prior.deployedHash === currentHash) actions.push({ action: "OVERWRITE", ...desired, destination, sourceHash, priorHash: currentHash });
+      else if (config.bootstrap) actions.push({ action: "OVERWRITE", ...desired, destination, sourceHash, priorHash: currentHash, bootstrap: true });
       else conflicts.push(`${desired.root}/${desired.relativePath}`);
     }
   }
@@ -349,10 +359,10 @@ function applyTransaction(plan, config) {
 }
 function sha256Text(text) { return crypto.createHash("sha256").update(text).digest("hex"); }
 function main() {
-  const { dryRun } = parseArgs(process.argv.slice(2)); const workspaceDir = process.env.OMP_WORKSPACE_DIR ? path.resolve(process.env.OMP_WORKSPACE_DIR) : path.resolve(__dirname, ".."); const homeDir = process.env.OMP_HOME_DIR ? path.resolve(process.env.OMP_HOME_DIR) : os.homedir(); const targetDir = process.env.OMP_TARGET_DIR ? path.resolve(process.env.OMP_TARGET_DIR) : path.normalize("C:/Users/thant/Projects/omp_extension"); const pointerPath = process.env.OMP_EXTENSION_POINTER ? path.resolve(process.env.OMP_EXTENSION_POINTER) : path.join(homeDir, ".omp", "agent", "extensions", "typesafe-planner.ts");
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-"); const backupDir = process.env.OMP_BACKUP_DIR ? path.resolve(process.env.OMP_BACKUP_DIR) : path.join(path.dirname(targetDir), `${path.basename(targetDir)}_backup_${timestamp}`); const config = { workspaceDir, targetDir, homeDir, pointerPath, backupDir, bunBin: process.env.OMP_BUN_BIN || "bun", skipVerifyTests: process.env.OMP_SKIP_VERIFY_TESTS === "1" };
-  const preflightPlan = preflight(config); const initialPlan = createPlan(preflightPlan); console.log(`Preflight succeeded for ${initialPlan.inventory.length} baseline files.`); console.log(`Managed actions: ${initialPlan.actions.map((action) => `${action.action}:${action.root}/${action.relativePath}`).join(", ") || "none"}`);
+  const { dryRun, bootstrap } = parseArgs(process.argv.slice(2)); const workspaceDir = process.env.OMP_WORKSPACE_DIR ? path.resolve(process.env.OMP_WORKSPACE_DIR) : path.resolve(__dirname, ".."); const homeDir = process.env.OMP_HOME_DIR ? path.resolve(process.env.OMP_HOME_DIR) : os.homedir(); const targetDir = process.env.OMP_TARGET_DIR ? path.resolve(process.env.OMP_TARGET_DIR) : path.normalize("C:/Users/thant/Projects/omp_extension"); const pointerPath = process.env.OMP_EXTENSION_POINTER ? path.resolve(process.env.OMP_EXTENSION_POINTER) : path.join(homeDir, ".omp", "agent", "extensions", "typesafe-planner.ts");
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-"); const backupDir = process.env.OMP_BACKUP_DIR ? path.resolve(process.env.OMP_BACKUP_DIR) : path.join(path.dirname(targetDir), `${path.basename(targetDir)}_backup_${timestamp}`); const config = { workspaceDir, targetDir, homeDir, pointerPath, backupDir, bunBin: process.env.OMP_BUN_BIN || "bun", skipVerifyTests: process.env.OMP_SKIP_VERIFY_TESTS === "1", bootstrap };
+  const preflightPlan = preflight(config); const initialPlan = createPlan(preflightPlan, config); console.log(`Preflight succeeded for ${initialPlan.inventory.length} baseline files.`); console.log(`Managed actions: ${initialPlan.actions.map((action) => `${action.bootstrap ? "BOOTSTRAP_OVERWRITE" : action.action}:${action.root}/${action.relativePath}`).join(", ") || "none"}`);
   if (dryRun) { console.log("Dry run completed; no lock, backup, staging, journal, or filesystem mutation was performed."); return; }
-  let lock; try { lock = acquireLock(initialPlan); const plan = createPlan(preflight(config)); const status = applyTransaction(plan, config); console.log(`${status}. Backup and journal retained: ${plan.backupDir}`); } finally { releaseLock(lock); }
+  let lock; try { lock = acquireLock(initialPlan); const plan = createPlan(preflight(config), config); const status = applyTransaction(plan, config); console.log(`${status}. Backup and journal retained: ${plan.backupDir}`); } finally { releaseLock(lock); }
 }
 try { main(); } catch (error) { console.error(`[ERROR] ${error instanceof Error ? error.message : String(error)}`); process.exitCode = error && error.exitCode === 2 ? 2 : 1; }

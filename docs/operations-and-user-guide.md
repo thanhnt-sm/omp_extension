@@ -44,7 +44,15 @@ export { default } from "D:/100.Software/Github/omp_extension/typesafe-planner.t
 
 ## 3. Operational Baseline Synchronization (`sync-baseline`)
 
-Synchronize only from this workspace through the sole deployment entry point:
+For the guided Windows path, double-click:
+
+```cmd
+tools\sync-baseline.bat
+```
+
+It runs `tools/promote-omp-global.ps1`, which validates the immutable loader, opens it for an external operator to repair when required, then runs the read-only preflight and managed transaction. The helper never writes the loader proxy itself.
+
+The underlying deployment entry point remains:
 
 ```bash
 node tools/sync-baseline.cjs
@@ -52,11 +60,13 @@ node tools/sync-baseline.cjs
 
 Use `node tools/sync-baseline.cjs --dry-run` first whenever the target's managed state is uncertain. A dry run performs the complete read-only preflight and reports managed actions/conflicts, but **does not** create a lock, backup, stage, journal, or modify any path.
 
+For a one-time migration from an existing unmanifested runtime, an operator may explicitly use `--bootstrap` (or `promote-omp-global.ps1 -Bootstrap`). Bootstrap is rejected after a manifest exists, snapshots every managed preimage, adopts only the managed allowlist, and still runs target verification. It is not a general force mode.
+
 ### 3.1 Managed transaction boundaries
 
 - The deployment manifest is `<target>/.sync-manifest.json`. It records SHA-256 hashes only for files managed by the transaction.
 - Managed destinations are the target inventory plus the exact allowlisted resolver, TypeSafe MCP files, and `advisor.md`/`ck-advisor.md` agent files. It never manages or deletes `.claude` configuration, skills, or the OMP extension proxy.
-- Existing byte-identical files can be recorded as managed without content mutation. Differing unowned files, or files modified since their recorded deployment hash, are conflicts and abort the run. There is no force/adopt/repair mode.
+- Existing byte-identical files can be recorded as managed without content mutation. Differing unowned files, or files modified since their recorded deployment hash, are conflicts and abort the run. The sole exception is the explicit one-time `--bootstrap` migration before any manifest exists.
 - A disappeared workspace file is pruned only when the destination remains unchanged from its prior managed hash. Unknown target files are left intact.
 - The OMP extension pointer remains immutable: preflight requires exactly the expected single export statement and the transaction never rewrites it.
 

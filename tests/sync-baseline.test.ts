@@ -363,3 +363,31 @@ test("manifest rejects protected and non-allowlisted global destinations before 
     }
   }
 });
+
+test("explicit bootstrap adopts only an unmanifested managed baseline", () => {
+  const fixture = createFixture();
+  const targetPlanner = path.join(fixture.target, "typesafe-planner.ts");
+  const globalResolver = path.join(fixture.home, ".claude", "hooks", "lib", "typesafe-enabled-resolver.cjs");
+  try {
+    writeFile(targetPlanner, "unowned target planner\n");
+    writeFile(globalResolver, "unowned global resolver\n");
+
+    const preview = runSync(fixture, {}, ["--dry-run", "--bootstrap"]);
+    expect(preview.status, preview.stderr).toBe(0);
+    expect(preview.stdout).toContain("BOOTSTRAP_OVERWRITE:target/typesafe-planner.ts");
+    expect(readFileSync(targetPlanner, "utf8")).toBe("unowned target planner\n");
+
+    const deployed = runSync(fixture, { OMP_SKIP_VERIFY_TESTS: "1" }, ["--bootstrap"]);
+    expect(deployed.status, deployed.stderr).toBe(0);
+    expect(readFileSync(targetPlanner, "utf8")).toBe("export default {};\n");
+    expect(readFileSync(globalResolver, "utf8")).toBe("module.exports = {};\n");
+    expect(existsSync(path.join(fixture.target, ".sync-manifest.json"))).toBe(true);
+
+    fixture.backup = path.join(fixture.root, "repeat-bootstrap-backup");
+    const repeated = runSync(fixture, {}, ["--dry-run", "--bootstrap"]);
+    expect(repeated.status).not.toBe(0);
+    expect(repeated.stderr).toContain("bootstrap is allowed only when the target has no sync manifest");
+  } finally {
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
