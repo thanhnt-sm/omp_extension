@@ -138,3 +138,8 @@ Implemented under strict Test-Driven Development (`--tdd`):
 1. **Dual-Cadence Cadence Thresholds:** Micro-check on every atomic task (local, 0 token) vs Macro-check on phase and review gates (TypeSafe System One). *(Confirmed & Recommended)*
 2. **Human Escalation Fallback:** On network drop or 503 from TypeSafe, prompt user via `ask` dialog rather than failing silently or blocking indefinitely. *(Confirmed & Recommended)*
 3. **Direct File Bypass Defense:** Intercept both tool calls (`todo done`) and file writes targeting `todo.json`. *(Confirmed & Recommended)*
+
+## Execution reconciliation — 2026-10-19
+
+Residual C02/C04/C06/C30/C35 ownership: [consolidated master](../261019-research-to-cook-execution/plan.md), with [source-evidenced dispositions](../reports/261019-research-to-cook-coverage.json). Preserve implemented behavior; do not replay historical recipes or infer completion from this link. Close each remaining objective only from its own required source/test/runtime proof, without a false whole-master blocker.
+

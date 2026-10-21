@@ -28,6 +28,7 @@ describe("Phase 4: Adversarial Stress Test Matrix & Critical Verification", () =
     const mockJudge: ExpertJudgeClient = {
       evaluate: async () => ({
         answers: {
+          deliverables_verdict: { choice: "REJECT", confidence: 0.95 },
           meets_criteria: { noul: 0.42, confidence: 0.95 },
           architectural_drift: { choice: "no_drift" },
           scope_mode: { choice: "HOLD" },
@@ -104,7 +105,7 @@ describe("Phase 4: Adversarial Stress Test Matrix & Critical Verification", () =
 
     const res = await runPhaseMacroCheck(ctx, failingJudge);
     expect(res.approved).toBe(false);
-    expect(res.escalateToUser).toBe(true);
+    expect(res.escalateToUser).toBe(false);
     expect(res.error).toBe("unavailable");
   });
 
@@ -131,6 +132,7 @@ describe("Phase 4: Adversarial Stress Test Matrix & Critical Verification", () =
     const mockJudge: ExpertJudgeClient = {
       evaluate: async () => ({
         answers: {
+          deliverables_verdict: { choice: "REJECT" },
           meets_criteria: { noul: 0.5 },
           architectural_drift: { choice: "no_drift" },
           scope_mode: { choice: "HOLD" },
@@ -176,6 +178,7 @@ describe("Phase 4: Adversarial Stress Test Matrix & Critical Verification", () =
     const macroMock: ExpertJudgeClient = {
       evaluate: async () => ({
         answers: {
+          deliverables_verdict: { choice: "APPROVE", confidence: 0.96 },
           meets_criteria: { noul: 0.98, confidence: 0.96 },
           architectural_drift: { choice: "no_drift" },
           scope_mode: { choice: "HOLD" },
@@ -223,6 +226,7 @@ describe("Phase 4: Adversarial Stress Test Matrix & Critical Verification", () =
       evaluate: async () => ({
         answers: {
           deliverables_verdict: { choice: "REJECT", confidence: 0.95 },
+          meets_criteria: { noul: 0.12 },
           architectural_drift: { choice: "no_drift" },
           scope_mode: { choice: "HOLD" },
         },

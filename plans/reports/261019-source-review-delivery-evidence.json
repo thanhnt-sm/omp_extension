@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-19",
+  "artifact": {
+    "path": "plans/reports/261019-typesafe-source-review-acceptance.md",
+    "bytes": 3590,
+    "sha256": "1c57a44ccc7ebd3ee230eb4279057fac4bfb01dd3277f87b8fcaa1803dce33e6"
+  },
+  "completeIndex": "plans/reports/261019-typesafe-source-review-index.json",
+  "advisorDiagnosis": "NativeReviewRecoveryAdvisor: review substance supported; publish compact proof, verify delivery, no unchanged native retry",
+  "initialSmoke": {
+    "exitCode": 1,
+    "classification": "scratch read-scope guard stopped before evidence reads; metadata-only diagnosis found four already-reviewed agent definitions and existing reports/todo-recovery-verification.md",
+    "correction": "Added only those already-authorized evidence categories; kept original whole-proof/16claim positive assertion and every competing input; added regular-file/hardlink/link containment checks"
+  },
+  "smoke": {
+    "exitCode": 0,
+    "bun": "1.4.0 Windows x64",
+    "scope": "prospective deployed-source/helper execution on current changed-file order, NOT exact Main baseline/wire or native operation",
+    "networkCalls": 0,
+    "nativeOperations": 0,
+    "reportBytes": 3590,
+    "changedFileCount": 117,
+    "control": {
+      "collectedBytes": 3668,
+      "collectedComplete": true,
+      "finalBytes": 7477,
+      "finalComplete": true,
+      "claimCount": 16,
+      "effectiveQuestion": "see_deployed_question_contract"
+    },
+    "competition": {
+      "collectedBytes": 8268,
+      "collectedComplete": false,
+      "finalBytes": 11152,
+      "finalComplete": false,
+      "claimCount": 0,
+      "effectiveQuestion": "see_deployed_question_contract"
+    },
+    "nativeRetryReady": false,
+    "meaning": "New compact proof is still omitted under current deployed collection; no native retry justified"
+  },
+  "limitations": [
+    "Actual deployed-source helpers and production payload preparation, injected observation-only judge client; zero network and native operations",
+    "Current117changed-file full-working-tree order is prospective, NOT Main original task baseline or exact posted wire",
+    "Guarded public project Markdown reads; no private prompt/key/raw state persisted",
+    "Positive report-only control is a diagnostic, not evidence removal from a real submission; all actual competition retained",
+    "Native3/23done20open0blocked; this new source-review target remains rejected/in_progress with debt. No approved native result is inferred"
+  ],
+  "nextAction": {
+    "owner": "thant/project runtime operator and implementation parent",
+    "action": "Complete all ready planning/source work; before a new native attempt demonstrate relevant target proof survives actual collector/preparation. If runtime plumbing must change/activate, obtain scoped managed-sync/restart authority and verify that path; do not implement16findings/H just to close this review",
+    "releaseCondition": "Verified exact-task submission fidelity plus fresh independent review, then same native operation with matching successful native result; no equality/historical-wire acceptance invented"
+  }
+}

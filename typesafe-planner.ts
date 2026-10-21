@@ -1,49 +1,62 @@
-// Implementation: 7 red-team vulnerability tests added, batch/mutative ops gated, 32KB payload boundary preserved, zero-evidence rejected, EGC deconflicted, and privilege guarded.
 // TypeSafe Planner Integration Extension for OMP
 // Connects OMP planning workflows with TypeSafe System One judgments (Choice, Noul, Score).
 
 import { createRequire } from "node:module";
+import { createHostToolInvocationRuntime } from "./src/host-tool-invocation";
 import crypto from "node:crypto";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readWorkspaceFile, listWorkspaceFiles } from "./src/typesafe-evidence-file.cjs";
+import { taskArtifactAssociation } from "./src/evidence-artifacts";
+import { fileMutationTargets, requestsPlanCompletion } from "./src/file-mutation-targets";
+import { writeRecoveryReport } from "./src/typesafe-evidence-file.cjs";
+import type { AdvisorHostServices } from "./src/advisor-host-types";
+import { currentSourceMutationGrant, sourceMutationAllowed, sourceMutationGrantCurrent } from "./src/source-mutation-authority";
+import { assertScopedPlanClosure, parsePlanCliCheck, phaseFileForCheck, PlanClosurePrerequisiteError } from "./src/plan-closure";
 import { evaluatePlanDraft, type PlanJudgeClient, type PlanQuestion } from "./src/plan-evaluator";
+import { runMultiPersonaDebate, type DebateJudgeClient } from "./src/debate-evaluator";
+import type { JudgePurpose, ResolvedToolPolicy, TrustedToolPolicy, PreparedRequestValidator, TypeSafePreparedRequest, TypeSafeJudgeResult } from "./src/payload-safety";
+import { scoreValue, type SemanticResponse, type SemanticTransportMetadata } from "./src/semantic-judge-client";
 import { verifyTaskCompletion, type GateJudgeClient, type GateQuestion } from "./src/verification-gate";
+import { readHostBranch, projectHostHistory, originalTodoInput } from "./src/host-history";
+import { canonicalDigest, nativeTodoInputDigest, normalizeNativeTodoInput, readNativeTodoOperation, validateNativeTodoTransition, type ContractHistoryProjection, type NormalizedNativeTodoInput } from "./src/task-contract";
+import { freezeContractValue } from "./src/task-contract-source";
+import { createSemanticApprovalPolicy } from "./src/semantic-approval-policy";
+import type { VerificationOutcome } from "./src/types/verification";
+import { createContractRuntime, type ContractBindingProposal, type ContractTaskSelector } from "./src/contract-runtime";
+import { createTaskEvidenceRuntime, type TaskEvidenceCollectParams } from "./src/task-evidence-runtime";
+import { createTaskVerificationRuntime, type TaskVerificationRuntime, type NativeTaskVerificationStage } from "./src/task-verification-runtime";
+import { createTodoLifecycleAuthority, type LifecyclePreparationInput } from "./src/todo-lifecycle-authority";
+import { registerAdvisorHost, type AdvisorHostAPI, type AdvisorHostExecuteContext, type AdvisorHostRegistration } from "./src/advisor-host";
+import type { ApprovedVerificationCommand } from "./src/verification-receipt";
+import type { SourceRetrievalRequest } from "./src/judge-evidence-packet";
 import {
-  collectTaskEvidence,
-  captureWorkspaceSnapshot,
-  diffSnapshots,
-  executeTestCommand,
   isPlanCliStub,
-  type TaskEvidenceResult,
+  DELIVERABLE_ARTIFACT_MAX_BYTES,
+  InsufficientDeliverableEvidenceError,
+  normalizeEvidencePath,
+  statusEvidencePaths,
+  isResearchReportPath,
+  hasProductCodeChanges,
+  deliverableArtifactsFromState,
   type WorkspaceSnapshot,
 } from "./src/evidence-collector";
 import { clampText } from "./src/payload-safety";
 import { sanitizeXmlText } from "./src/xml-enclosure";
 import {
-  runDropJustificationCheck,
-  DROP_REJECT_FLOOR,
-  runTaskMicroCheck,
-  runPhaseMacroCheck,
   evaluateScopeArbiter,
   evaluateDriftGuard,
   evaluateRiskSecurityTriage,
   generateVerificationScorecard,
-  evaluateAdvisorIntent,
-  runBicameralDropCheck,
-  runBicameralMacroCheck,
-  runBicameralDecisionCheck,
-  formatConsensusEscalation,
-  formatCkAdvisorReport,
-  type AdvisorDecisionKind,
-  type AdvisorOptionCandidate,
   type ExpertJudgeClient,
   type ExpertJudgeQuestion,
-  type ExpertJudgeResponse,
-  type DriftChoice,
-  type ScopeChoice,
 } from "./src/cook-expert-judge";
-import { synthesizePlanDelta } from "./src/remediation-generator";
+import {
+  evaluateAdvisorIntent,
+  type AdvisorOptionCandidate,
+} from "./src/bicameral-consensus";
 export interface PendingRemediation {
   taskId: string;
   gate: string;
@@ -65,19 +78,32 @@ export interface CanonicalTodoPhase {
   tasks: CanonicalTodoTask[];
 }
 
+interface TodoTargetBinding {
+  phase: string;
+  index: number;
+  phaseOrdinal: number;
+  content: string;
+}
+
+
 export interface StagedTodoCall {
   toolCallId: string;
+  sessionId: string;
   inputHash: string;
+  input: NormalizedNativeTodoInput;
   generation: number;
   revision: number;
   createdAt: number;
   op: string;
   affectedTasks: string[];
+  targetBindings: TodoTargetBinding[];
   replacedTasks: string[];
-  verifiedTasks: string[];
-  workspaceSnapshot: WorkspaceSnapshot;
+  preCommitPhases: CanonicalTodoPhase[];
+  workspaceSnapshot?: WorkspaceSnapshot;
+  verificationStages: NativeTaskVerificationStage[];
+  nativeResultObserved: boolean;
   pendingReports: TaskReport[];
-  provenance: "judge" | "human" | "host-authorization" | "gate1";
+  provenance: "judge" | "human" | "gate1";
 }
 
 interface CommittedTodoCall {
@@ -97,6 +123,7 @@ interface ToolDefinition<TParams> {
   label?: string;
   description: string;
   parameters: unknown;
+  approval?: "read" | "exec";
   execute: (
     toolCallId: string,
     params: TParams,
@@ -106,7 +133,7 @@ interface ToolDefinition<TParams> {
   ) => Promise<ExtensionToolResult>;
 }
 
-interface ExtensionAPI {
+export interface ExtensionAPI {
   zod: {
     object: (shape: Record<string, unknown>) => unknown;
     union: (options: unknown[]) => unknown;
@@ -114,11 +141,12 @@ interface ExtensionAPI {
     number: () => { optional: () => unknown; [key: string]: unknown };
     record: (valueType: unknown) => unknown;
     enum: (values: string[]) => unknown;
-    unknown: () => unknown;
-    array: (itemType: unknown) => { min: (n: number) => unknown; [key: string]: unknown };
+    unknown: () => { optional(): unknown };
+    array: (itemType: unknown) => { min: (n: number) => unknown; optional(): unknown; [key: string]: unknown };
   };
-  on: (event: string, handler: (event: unknown, ctx: unknown) => Promise<void> | void) => void;
+  on: (event: string, handler: (event: unknown, ctx: unknown) => unknown | Promise<unknown>) => void;
   registerTool: <T>(definition: ToolDefinition<T>) => void;
+  appendEntry?: (customType: string, data: unknown) => void;
   sendMessage: (
     message: string | { customType?: string; content: string; display?: boolean },
     options?: { deliverAs?: "steer" | "followUp" | "nextTurn" | "aside"; triggerTurn?: boolean }
@@ -129,6 +157,7 @@ export interface ExtensionRuntimeOptions {
   homeDir?: string;
   env?: Record<string, string | undefined>;
   preflightBudgetMs?: number;
+  toolPolicies?: Partial<Record<JudgePurpose, TrustedToolPolicy>>;
 }
 
 export interface PlannerSessionState {
@@ -142,6 +171,8 @@ export interface PlannerSessionState {
   pendingRemediations: Map<string, PendingRemediation>;
   consecutiveFailuresByTask: Map<string, number>;
   lastFailureReasonByTask: Map<string, string>;
+  nativeHistory?: ContractHistoryProjection;
+  debtByIncarnation: Map<string, { reason?: string; failures?: number; remediation?: PendingRemediation }>;
   stagedCalls: Map<string, StagedTodoCall>;
   committedCallTombstones: Map<string, CommittedTodoCall>;
   uninitialized: boolean;
@@ -177,6 +208,8 @@ type RuntimeOriginDigest = {
 type RuntimeOriginProof = {
   kind: "runtime-origin";
   algorithm: "sha256";
+  interpretation: "disk-observation-not-loaded-code-proof";
+  loadedFactoryDigest: string;
   entrypoint: RuntimeOriginDigest;
   bundledModules: RuntimeOriginDigest[];
 };
@@ -204,6 +237,8 @@ function getRuntimeOriginProof(): RuntimeOriginProof {
   cachedRuntimeOriginProof = {
     kind: "runtime-origin",
     algorithm: "sha256",
+    interpretation: "disk-observation-not-loaded-code-proof",
+    loadedFactoryDigest: canonicalDigest(Function.prototype.toString.call(registerExtension)),
     entrypoint: {
       origin: import.meta.url,
       sha256: sha256AtOrigin(import.meta.url),
@@ -225,10 +260,12 @@ interface EnabledResolverModule {
 
 interface RedactModule {
   preparePayload: (payload: unknown, opts?: { maxBytes?: number; apiKey?: string }) => unknown;
+  redactString: (value: string, opts?: { apiKey?: string }) => string;
 }
 
 interface ApiClientModule {
   validateInput: (args: unknown) => { ok: boolean; message?: string };
+  redactEvidenceState(state: unknown, options: { apiKey: string; homeDirs?: readonly string[] }): unknown;
   sanitizeAnswers: (
     questions: Record<string, TypeSafeQuestion>,
     rawAnswers: unknown
@@ -261,12 +298,25 @@ interface ApiClientModule {
   ) => { status: number; cooldown?: true; authFailed?: true; until?: number } | null;
 }
 
+
 interface PolicyClientModule {
-  checkPolicy(
-    baseline: string,
-    choice: string,
-    lattice: string[]
-  ): { ok: boolean; reason?: string; attempted?: string; baseline?: string; choice?: string };
+  resolveToolPolicies(
+    overrides?: Partial<Record<JudgePurpose, TrustedToolPolicy>>,
+    defaults?: { baseline: string; lattice: string[] }
+  ): Readonly<Record<JudgePurpose, ResolvedToolPolicy>>;
+  judgeWithPolicy(options: {
+    args: TypeSafeJudgeParams;
+    purpose: JudgePurpose;
+    trustedPolicy: ResolvedToolPolicy;
+    apiKey: string;
+    homeDir?: string;
+    signal?: AbortSignal;
+    fetchImpl: typeof fetch;
+    timeoutMs?: number;
+    totalBudgetMs?: number;
+    maxAttempts?: number;
+    validatePrepared?: PreparedRequestValidator;
+  }): Promise<TypeSafeJudgeResult>;
 }
 
 function loadResolverModule(): EnabledResolverModule | null {
@@ -281,7 +331,7 @@ function loadResolverModule(): EnabledResolverModule | null {
 function loadRedactModule(): RedactModule | null {
   try {
     const mod = nodeRequire(path.join(__dirname, "src", "typesafe-redact.cjs")) as RedactModule;
-    return mod && typeof mod.preparePayload === "function" ? mod : null;
+    return mod && typeof mod.preparePayload === "function" && typeof mod.redactString === "function" ? mod : null;
   } catch {
     return null;
   }
@@ -305,8 +355,8 @@ function loadApiClientModule(): ApiClientModule | null {
 function loadPolicyClientModule(pi?: ExtensionAPI): PolicyClientModule | null {
   try {
     const mod = nodeRequire(path.join(__dirname, "src", "typesafe-policy-client.cjs")) as PolicyClientModule;
-    if (mod && typeof mod.checkPolicy === "function") return mod;
-    throw new Error("missing checkPolicy export");
+    if (mod && typeof mod.resolveToolPolicies === "function" && typeof mod.judgeWithPolicy === "function") return mod;
+    throw new Error("missing canonical policy exports");
   } catch (err: unknown) {
     const detail = err instanceof Error ? err.message : String(err);
     if (pi && typeof pi.sendMessage === "function") {
@@ -325,10 +375,6 @@ function loadPolicyClientModule(pi?: ExtensionAPI): PolicyClientModule | null {
   }
 }
 
-const HOST_POLICY = {
-  baseline: process.env.TYPESAFE_BASELINE || "review",
-  lattice: process.env.TYPESAFE_LATTICE ? process.env.TYPESAFE_LATTICE.split(",") : ["auto", "review", "block"]
-};
 
 /**
  * Best-effort project directory for the resolver: OMP's per-call ctx.cwd
@@ -369,30 +415,20 @@ function sleep(ms: number): Promise<void> {
 export const COGNITIVE_TASK_PATTERN =
   /\b(?:scout\w*|diagnos\w*|investigat\w*|research\w*|analy[sz]\w*|explor\w*|find|audit\w*|review\w*|check\w*|trac\w*|inspect\w*|read\w*|clarif\w*|brainstorm\w*|plan|planning|design\w*|synthesi[sz]\w*|consult\w*|evaluat\w*|assess\w*|document\w*|journal\w*|organi[sz]\w*|verif\w*|ask\w*|propos\w*|validat\w*|compar\w*|summariz\w*|kiểm tra|phân tích|tìm|nghiên cứu|lập kế hoạch)\b/i;
 
-const IMPLEMENTATION_LEAD_PATTERN =
-  /^\s*(?:(?:step|task|phase)\s*\d+\s*[:.-]\s*)?(?:implement\w*|fix\w*|build\w*|add\w*|create\s+src|refactor\w*|patch\w*|deploy\w*)\b/i;
 
 export function inferTaskType(
   gitStatus: string,
   deliverableArtifacts?: string,
   taskDescription?: string
 ): "code_change" | "analysis_research" | "doc_specification" {
-  const statusLines = gitStatus.split("\n").map((l) => l.trim()).filter(Boolean);
-  
-  // Check for any code or config modifications
-  const hasCodeFiles = statusLines.some((line) => {
-    const filepath = line.replace(/^[MADRCU?! ]+\s+/, "");
-    return /\.(ts|tsx|js|jsx|cjs|mjs|py|go|rs|json|ya?ml|toml|sql|sh|bat|ps1)$/i.test(filepath) &&
-      !filepath.endsWith("package-lock.json");
-  });
-  if (hasCodeFiles) {
+  const filepaths = statusEvidencePaths(gitStatus);
+  if (hasProductCodeChanges(gitStatus, taskDescription)) {
     return "code_change";
   }
 
   // Check for documentation specifications (.md, .txt, .rst)
-  const docFilepaths = statusLines
-    .map((line) => line.replace(/^[MADRCU?! ]+\s+/, ""))
-    .filter((fp) => /\.(md|markdown|txt|rst|adoc)$/i.test(fp) && !fp.includes("reports/"));
+  const docFilepaths = filepaths
+    .filter((fp) => /\.(md|markdown|txt|rst|adoc)$/i.test(fp) && !isResearchReportPath(fp));
   const onlyFilteredPlanStubs =
     deliverableArtifacts === "" &&
     Boolean(taskDescription) &&
@@ -406,17 +442,13 @@ export function inferTaskType(
   if (deliverableArtifacts && deliverableArtifacts.trim().length > 0) {
     return "analysis_research";
   }
-  const hasReportFiles = statusLines.some((line) => {
-    const filepath = line.replace(/^[MADRCU?! ]+\s+/, "");
-    return filepath.includes("reports/") || filepath.includes("decisions/");
-  });
+  const hasReportFiles = filepaths.some(isResearchReportPath);
   if (hasReportFiles) {
     return "analysis_research";
   }
 
   if (
     taskDescription &&
-    !IMPLEMENTATION_LEAD_PATTERN.test(taskDescription) &&
     COGNITIVE_TASK_PATTERN.test(taskDescription)
   ) {
     return "analysis_research";
@@ -426,63 +458,64 @@ export function inferTaskType(
   return "code_change";
 }
 
-export function summarizeMarkdownArtifact(content: string, maxBytes: number = 8192): string {
-  if (Buffer.byteLength(content, "utf8") <= maxBytes) {
-    return content;
-  }
-  // AST-aware hunk summarization: preserve headings (#, ##, ###), lists, blockquotes, and key sections
-  const lines = content.split("\n");
-  const preserved: string[] = [];
-  let currentBytes = 0;
-  const reservedFooter = "\n\n... [markdown artifact summarized for size budget] ...";
-  const allowedBytes = maxBytes - Buffer.byteLength(reservedFooter, "utf8");
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    // Prioritize headings, table headers/rows, bullet points, and numbered lists
-    const isStructural =
-      /^#{1,6}\s+/.test(trimmed) ||
-      /^\|.*\|$/.test(trimmed) ||
-      /^(?:[-*+]|\d+\.)\s+/.test(trimmed) ||
-      /^>\s+/.test(trimmed);
-
-    const lineBytes = Buffer.byteLength(line + "\n", "utf8");
-    if (isStructural || currentBytes + lineBytes < allowedBytes * 0.7) {
-      if (currentBytes + lineBytes <= allowedBytes) {
-        preserved.push(line);
-        currentBytes += lineBytes;
-      } else {
-        break;
-      }
+export async function collectDeliverableArtifacts(
+  projectDir: string,
+  changedFiles: string[] = [],
+  taskDescription: string = ""
+): Promise<string> {
+  const candidates: { file: string; content: string; mandatory: boolean; relevance: number }[] = [];
+  let unreadable = 0;
+  for (const file of new Set(changedFiles.map(normalizeEvidencePath))) {
+    if (!/\.(?:md|markdown|txt|rst|adoc)$/i.test(file) && !isResearchReportPath(file)) continue;
+    if (path.isAbsolute(file) || path.win32.isAbsolute(file) || file.split("/").includes("..")) {
+      unreadable++;
+      continue;
     }
-  }
-
-  return preserved.join("\n") + reservedFooter;
-}
-
-export async function collectDeliverableArtifacts(projectDir: string, changedFiles: string[] = []): Promise<string> {
-  let combinedText = "";
-  const maxBytes = 8192; // 8KB cap to prevent token bloat
-
-  for (const file of changedFiles) {
-    if (/\.(md|markdown|txt|rst|adoc)$/i.test(file)) {
-      const fullPath = path.resolve(projectDir, file);
-      if (existsSync(fullPath)) {
-        try {
-          const rawContent = readFileSync(fullPath, "utf-8");
-          if (isPlanCliStub(rawContent)) {
-            continue;
-          }
-          const summarized = summarizeMarkdownArtifact(rawContent, 4096);
-          combinedText += `\n--- Deliverable: ${file} ---\n${summarized}\n`;
-          if (combinedText.length >= maxBytes) {
-            return combinedText.slice(0, maxBytes) + "\n[Summarized to 8KB artifact budget]";
-          }
-        } catch {}
-      }
+    let content: string;
+    try {
+      content = readWorkspaceFile(projectDir, file, { maxBytes: 1024 * 1024 }).bytes.toString("utf8");
+    } catch {
+      unreadable++;
+      continue;
     }
+    if (isPlanCliStub(content)) continue;
+    candidates.push({ file, content, ...taskArtifactAssociation(file, content, taskDescription) });
   }
-  return combinedText.trim();
+  if (candidates.length === 0 && unreadable === 0) return "";
+  candidates.sort((a, b) => Number(b.mandatory) - Number(a.mandatory) ||
+    b.relevance - a.relevance || a.file.localeCompare(b.file));
+  const mandatoryCount = candidates.filter((candidate) => candidate.mandatory).length;
+  const metadata = (selected: number, truncated: number): string =>
+    `\n[Artifact selection=${mandatoryCount ? "exact-task-bound" : "relevance-fallback (not completeness proof)"}; selected=${selected}; omitted=${candidates.length - selected}; unreadable=${unreadable}; truncated=${truncated}]\n`;
+  const blocks: string[] = [];
+  let bytes = 0;
+  let truncated = 0;
+  for (const candidate of candidates) {
+    const header = `--- Deliverable: ${candidate.file} ---\n`;
+    const block = `${header}${candidate.content}\n`;
+    const blockBytes = Buffer.byteLength(block, "utf8");
+    const footerBytes = Buffer.byteLength(metadata(blocks.length + 1, truncated), "utf8");
+    if (bytes + blockBytes + footerBytes <= DELIVERABLE_ARTIFACT_MAX_BYTES) {
+      blocks.push(block);
+      bytes += blockBytes;
+      continue;
+    }
+    if (candidate.mandatory) {
+      throw new InsufficientDeliverableEvidenceError();
+    }
+    const marker = "\n[Artifact truncated; omitted content is not evidence of completeness.]\n";
+    const remaining = DELIVERABLE_ARTIFACT_MAX_BYTES - bytes -
+      Buffer.byteLength(metadata(blocks.length + 1, truncated + 1) + header + marker, "utf8");
+    if (remaining <= 0) continue;
+    const contentBytes = Buffer.from(candidate.content, "utf8");
+    let end = Math.min(remaining, contentBytes.length);
+    while (end > 0 && (contentBytes[end] & 0xc0) === 0x80) end--;
+    const partial = header + contentBytes.subarray(0, end).toString("utf8") + marker;
+    blocks.push(partial);
+    bytes += Buffer.byteLength(partial, "utf8");
+    truncated++;
+  }
+  return blocks.join("") + metadata(blocks.length, truncated);
 }
 
 
@@ -610,7 +643,6 @@ export function sanitizeStateForTypeSafe(state: string | Record<string, unknown>
     user_request: true,
   };
   const LARGE_FIELD_KEYS: Record<string, true> = {
-    deliverable_artifacts: true,
     plan: true,
     plan_content: true,
     planContent: true,
@@ -621,6 +653,7 @@ export function sanitizeStateForTypeSafe(state: string | Record<string, unknown>
     for (const key of Object.keys(obj)) {
       const val = obj[key];
       if (typeof val === "string") {
+        if (key === "deliverable_artifacts") continue; // Already budgeted; never silently remove task-bound proof.
         if (key === "unified_diff" || key === "gitDiff" || key === "diff") {
           obj[key] = summarizeUnifiedDiff(val, 14000);
         } else {
@@ -649,6 +682,7 @@ export function sanitizeStateForTypeSafe(state: string | Record<string, unknown>
           typeof val === "string" &&
           key !== "unified_diff" &&
           key !== "gitDiff" &&
+          key !== "deliverable_artifacts" &&
           key !== "diff" &&
           val.length > 1500
         ) {
@@ -747,8 +781,6 @@ export function collectConversationContext(ctx: unknown): {
             const b = block as Record<string, unknown>;
             if (b.type === "text" && typeof b.text === "string" && b.text.trim().length > 0) {
               parts.push(b.text);
-            } else if (msg.role === "assistant" && b.type === "thinking" && typeof b.thinking === "string" && b.thinking.trim().length > 0) {
-              parts.push(b.thinking.trim());
             } else if (msg.role === "assistant" && b.type === "toolCall" && typeof b.name === "string") {
               const intentStr = typeof b.intent === "string" ? b.intent : (b.arguments && typeof b.arguments === "object" && typeof (b.arguments as Record<string, unknown>).i === "string" ? (b.arguments as Record<string, unknown>).i as string : "");
               parts.push(`[toolCall: ${b.name}${intentStr ? ` (${intentStr})` : ""}]`);
@@ -945,18 +977,16 @@ export function normalizeQuestionForTypeSafe(
   return normalized;
 }
 
-export function hasActiveEGC(cwd: string): boolean {
-  return (
-    process.env.EGC_ACTIVE === "1" ||
-    existsSync(path.join(cwd, ".omp", "egc.json"))
-  );
-}
 
 const OPEN_TODO_STATUSES = new Set<CanonicalTodoTask["status"]>(["pending", "in_progress", "blocked"]);
 const MUTATING_TODO_OPS = new Set(["init", "start", "done", "rm", "drop", "block", "unblock", "append"]);
 const TODO_STAGE_TTL_MS = 60_000;
 const TODO_TOMBSTONE_LIMIT = 128;
-const TODO_STAGE_LIMIT = 32;
+class NativeTodoGuardError extends Error {
+  constructor(message: string, readonly outcome?: Exclude<VerificationOutcome, { status: "APPROVED_PENDING_COMMIT" }>) {
+    super(message); this.name = "NativeTodoGuardError";
+  }
+}
 
 function cloneTodoPhases(phases: CanonicalTodoPhase[]): CanonicalTodoPhase[] {
   return phases.map((phase) => ({ name: phase.name, tasks: phase.tasks.map((task) => ({ ...task })) }));
@@ -972,20 +1002,6 @@ function activeTasksFromPhases(phases: CanonicalTodoPhase[]): Set<string> {
   return tasks;
 }
 
-function canonicalTodoInputHash(params: Record<string, unknown>): string {
-  const canonicalize = (value: unknown): unknown => {
-    if (Array.isArray(value)) return value.map(canonicalize);
-    if (value && typeof value === "object") {
-      return Object.fromEntries(
-        Object.entries(value as Record<string, unknown>)
-          .sort(([left], [right]) => left.localeCompare(right))
-          .map(([key, nested]) => [key, canonicalize(nested)])
-      );
-    }
-    return value;
-  };
-  return crypto.createHash("sha256").update(JSON.stringify(canonicalize(params))).digest("hex");
-}
 
 function taskMatches(phases: CanonicalTodoPhase[], taskName: string): CanonicalTodoTask[] {
   for (const phase of phases) {
@@ -1002,6 +1018,33 @@ function phaseMatches(phases: CanonicalTodoPhase[], phaseName: string): Canonica
 function allTodoTasks(phases: CanonicalTodoPhase[]): CanonicalTodoTask[] {
   return phases.flatMap((phase) => phase.tasks);
 }
+
+function resolveTodoTargets(
+  phases: CanonicalTodoPhase[],
+  taskName: string,
+  phaseName: string
+): TodoTargetBinding[] {
+  if (taskName) {
+    for (let phaseOrdinal = 0; phaseOrdinal < phases.length; phaseOrdinal++) {
+      const phase = phases[phaseOrdinal];
+      const index = phase.tasks.findIndex(task => task.content === taskName);
+      if (index >= 0) return !phaseName || phaseName === phase.name
+        ? [{ phase: phase.name, phaseOrdinal, index, content: taskName }] : [];
+    }
+    return [];
+  }
+  return phases.flatMap((phase, phaseOrdinal) => phaseName && phaseName !== phase.name ? []
+    : phase.tasks.map((task, index) => ({ phase: phase.name, phaseOrdinal, index, content: task.content })));
+}
+
+function sameTodoTargets(left: TodoTargetBinding[], right: TodoTargetBinding[]): boolean {
+  return left.length === right.length && left.every((target, index) =>
+    target.phase === right[index]?.phase &&
+    target.index === right[index]?.index &&
+    target.content === right[index]?.content
+  );
+}
+
 
 
 export interface GateRejectionOptions {
@@ -1112,210 +1155,11 @@ async function safeSendMessage(
   } catch {}
 }
 
-export async function assertNoActiveContractedTasks(
-  state: PlannerSessionState,
-  actionName: string,
-  evt: Record<string, unknown>,
-  pi: { sendMessage: (msg: Record<string, unknown>) => Promise<unknown> }
-): Promise<void> {
-  if (state.uninitialized || state.stagedCalls.size > 0 || state.activeContractedTasks.size > 0) {
-    const openTasks = Array.from(state.activeContractedTasks);
-    const pending = state.stagedCalls.size > 0 ? `; pending todo operation(s): ${state.stagedCalls.size}` : "";
-    const msg = `Plan closure rejected by TypeSafe Dual Verification Gate:
-- ${actionName} (${openTasks.join(", ") || "state rehydration required"}${pending}).
-NEXT ACTIONS FOR AGENT:
-1. Resolve all uncompleted tasks and settle pending todo operations.
-2. Ensure test assertions pass cleanly before marking the plan completed.`;
-    if (typeof evt.cancel === "function") {
-      (evt.cancel as (reason: string) => void)(msg);
-    }
-    await safeSendMessage(
-      pi,
-      { customType: "typesafe-compliance-escalation", content: msg },
-      { deliverAs: "steer" }
-    );
-    throw new Error(msg);
-  }
+function supportsAdvisorHost(api: ExtensionAPI): api is ExtensionAPI & AdvisorHostAPI {
+  const host = api as unknown as Record<string, unknown>;
+  return host.events !== null && typeof host.events === "object"
+    && ["getAllTools", "getActiveTools", "setActiveTools", "appendEntry"].every(name => typeof host[name] === "function");
 }
-export interface DebatePersonaVerdict {
-  score: number;
-  verdict?: string;
-}
-
-export interface MultiPersonaDebateResult {
-  approved: boolean;
-  modelTier: "fast";
-  personas: {
-    architect: DebatePersonaVerdict;
-    security: DebatePersonaVerdict;
-    performance: DebatePersonaVerdict;
-    ux: DebatePersonaVerdict;
-    devils_advocate: DebatePersonaVerdict;
-  };
-  consensusScore: number;
-  reasons: string[];
-}
-
-export interface DebateJudgeClient {
-  evaluateDebate: (params: {
-    state: string;
-    questions: Record<string, TypeSafeQuestion>;
-    model?: string;
-  }) => Promise<{
-    answers?: Record<string, { score: number; verdict?: string }>;
-    modelUsed?: string;
-    error?: string;
-  }>;
-}
-
-export function constructMultiPersonaQuestions(): Record<string, TypeSafeQuestion> {
-  return {
-    architect: {
-      type: "score",
-      instructions:
-        "Architect Persona: Evaluate architectural soundness, separation of concerns, and component boundary integrity.",
-      criteria: [
-        "Critically flawed architecture with broken modularity",
-        "Basic architecture with partial separation",
-        "Sound architecture with clean modular boundaries",
-        "Exemplary architecture with high maintainability",
-      ],
-    },
-    security: {
-      type: "score",
-      instructions:
-        "Security Persona: Evaluate threat surface, credential protection, boundary isolation, and attack resilience.",
-      criteria: [
-        "Severe security vulnerability or credentials exposed",
-        "Marginal security with weak invariants",
-        "Secure design with robust boundary isolation",
-        "Hardened zero-trust security posture",
-      ],
-    },
-    performance: {
-      type: "score",
-      instructions:
-        "Performance Persona: Evaluate computational complexity, latency bottlenecks, memory footprint, and token waste.",
-      criteria: [
-        "Excessive latency, runaway memory, or massive token waste",
-        "Adequate performance with unoptimized hot paths",
-        "Efficient execution with bounded resource consumption",
-        "Optimal performance with zero unnecessary overhead",
-      ],
-    },
-    ux: {
-      type: "score",
-      instructions:
-        "UX/DX Persona: Evaluate developer experience, API ergonomics, debuggability, and diagnostic clarity.",
-      criteria: [
-        "Confusing API, poor DX, uninformative errors",
-        "Acceptable ergonomics with minor friction",
-        "Clear, ergonomic design with descriptive diagnostics",
-        "Intuitive, seamless DX with crystal-clear feedback",
-      ],
-    },
-    devils_advocate: {
-      type: "score",
-      instructions:
-        "Devil's Advocate Persona: Challenge hidden assumptions, single points of failure, missing rollback paths, and edge cases.",
-      criteria: [
-        "Fatal blindspots and unhandled single points of failure",
-        "Significant unstated assumptions or missing fallback paths",
-        "Minor manageable edge cases",
-        "Resilient against adversarial edges and unexpected states",
-      ],
-    },
-  };
-}
-
-export async function runMultiPersonaDebate(
-  planContent: string,
-  client?: DebateJudgeClient
-): Promise<MultiPersonaDebateResult> {
-  const questions = constructMultiPersonaQuestions();
-  const state = JSON.stringify({
-    plan: planContent,
-    context: "Multi-Persona Pre-Analysis Debate (ck:predict)",
-  });
-
-  let response: {
-    answers?: Record<string, { score: number; verdict?: string }>;
-    modelUsed?: string;
-    error?: string;
-  };
-
-  if (client && typeof client.evaluateDebate === "function") {
-    response = await client.evaluateDebate({
-      state,
-      questions,
-      model: process.env.TYPESAFE_PREDICT_MODEL || "jev-latest",
-    });
-  } else {
-    response = {
-      modelUsed: process.env.TYPESAFE_PREDICT_MODEL || "jev-latest",
-      error: "TypeSafe debate client is unavailable",
-    };
-  }
-
-  const answers = response.answers || {};
-  const requiredPersonas = ["architect", "security", "performance", "ux", "devils_advocate"];
-  const unavailable = Boolean(response.error) || requiredPersonas.some((persona) => {
-    const answer = answers[persona];
-    return !answer || !Number.isFinite(answer.score);
-  });
-  const architectScore = unavailable ? 0 : answers.architect.score;
-  const securityScore = unavailable ? 0 : answers.security.score;
-  const performanceScore = unavailable ? 0 : answers.performance.score;
-  const uxScore = unavailable ? 0 : answers.ux.score;
-  const devilsScore = unavailable ? 0 : answers.devils_advocate.score;
-
-  const personas = {
-    architect: { score: architectScore, verdict: answers.architect?.verdict },
-    security: { score: securityScore, verdict: answers.security?.verdict },
-    performance: { score: performanceScore, verdict: answers.performance?.verdict },
-    ux: { score: uxScore, verdict: answers.ux?.verdict },
-    devils_advocate: { score: devilsScore, verdict: answers.devils_advocate?.verdict },
-  };
-
-  const consensusScore =
-    (architectScore + securityScore + performanceScore + uxScore + devilsScore) / 5;
-
-  const reasons: string[] = [];
-  if (unavailable) {
-    reasons.push(`TypeSafe debate unavailable: ${response.error || "required persona scores were missing or invalid"}.`);
-  }
-  if (consensusScore < 1.5) {
-    reasons.push(
-      `Multi-persona debate consensus score (${consensusScore.toFixed(2)}) is below 1.50 minimum threshold.`
-    );
-  }
-  if (securityScore < 1) {
-    reasons.push(
-      "Security Persona rejected plan: critical security vulnerabilities or credential exposure detected."
-    );
-  }
-  if (devilsScore < 1) {
-    reasons.push(
-      "Devil's Advocate Persona rejected plan: fatal unhandled blindspots or unstated assumptions."
-    );
-  }
-  if (architectScore < 1) {
-    reasons.push(
-      "Architect Persona rejected plan: severe architectural flaws or boundary violations."
-    );
-  }
-
-  const approved = reasons.length === 0;
-
-  return {
-    approved,
-    modelTier: "fast",
-    personas,
-    consensusScore,
-    reasons,
-  };
-}
-
 
 export default function registerExtension(
   pi: ExtensionAPI,
@@ -1325,6 +1169,13 @@ export default function registerExtension(
     homeDir: options.homeDir ?? os.homedir(),
     env: options.env ?? process.env,
   };
+  const policyClient = loadPolicyClientModule(pi);
+  const toolPolicies = policyClient?.resolveToolPolicies(options.toolPolicies, {
+    baseline: resolverOptions.env.TYPESAFE_BASELINE?.trim() || "review",
+    lattice: resolverOptions.env.TYPESAFE_LATTICE
+      ? resolverOptions.env.TYPESAFE_LATTICE.split(",").map((value) => value.trim())
+      : ["auto", "review", "block"],
+  });
   const state: PlannerSessionState = {
     resolverOptions,
     generation: 0,
@@ -1337,119 +1188,347 @@ export default function registerExtension(
     pendingRemediations: new Map<string, PendingRemediation>(),
     consecutiveFailuresByTask: new Map<string, number>(),
     lastFailureReasonByTask: new Map<string, string>(),
+    debtByIncarnation: new Map(),
     stagedCalls: new Map<string, StagedTodoCall>(),
     committedCallTombstones: new Map<string, CommittedTodoCall>(),
     uninitialized: false,
   };
   const z = pi.zod;
+  const pendingNativeObservations = new Set<string>();
+  const exercisedBySession = new Map<string, Map<string, StagedTodoCall>>();
+  function registerTool<T>(definition: ToolDefinition<T>): void {
+    pi.registerTool({ ...definition, execute: (callId, params, signal, onUpdate, ctx) => {
+      const owned = freezeContractValue(structuredClone(params));
+      return invocations.run(ctx, definition.name, callId, owned, () => definition.execute(callId, owned, signal, onUpdate, ctx));
+    } });
+  }
+  const approvalPolicy = createSemanticApprovalPolicy(resolverOptions.env);
+  const policyDigest = canonicalDigest({ policies: toolPolicies ?? null, approvalPolicy,
+    commands: [{ id: "workspace-tests", command: "bun test", timeoutMs: 300_000 }] });
+  const appendEntry = typeof pi.appendEntry === "function" ? pi.appendEntry.bind(pi) : undefined;
+  const invocations = createHostToolInvocationRuntime(appendEntry);
+  const contracts = appendEntry ? createContractRuntime({ appendEntry, invocations, policyDigest, approvedCommandIds: ["workspace-tests"] }) : undefined;
+  const evidenceRuntime = contracts ? createTaskEvidenceRuntime({ contracts, invocations, commands(contract, cwd) {
+    const commands = new Map<string, ApprovedVerificationCommand>();
+    if (!contract.approvedCommandIds.includes("workspace-tests")) return commands;
+    try {
+      const assets = listWorkspaceFiles(cwd, "tests", { maxFiles: 10_000 });
+      if (assets.length) commands.set("workspace-tests", {
+        id: "workspace-tests", command: "bun test", cwd, criterionIds: contract.criteria.map(criterion => criterion.id),
+        testAssetPaths: assets, timeoutMs: 300_000, kind: contract.taskKind === "implementation" ? "verification" : "diagnostic",
+      });
+    } catch { /* Missing or unsafe assets cannot become an executable verification command. */ }
+    return commands;
+  } }) : undefined;
+  let advisorRegistration: AdvisorHostRegistration | undefined;
+  const verificationRuntime = contracts && evidenceRuntime && appendEntry ? createTaskVerificationRuntime({
+    contracts, evidence: evidenceRuntime, invocations, policyDigest, approvalPolicy, appendEntry,
+    privacy: { apiKey: resolverOptions.env.TYPESAFE_API_KEY?.trim() ?? "", homeDirs: [resolverOptions.homeDir] },
+    createClient: (ctx, purpose, validatePrepared) => createExtensionJudgeClient(
+      resolverOptions.env.TYPESAFE_API_KEY?.trim() ?? "", undefined, ctx, purpose, validatePrepared),
+    getAdvisorReviews: async ctx => advisorRegistration ? advisorRegistration.reviews(ctx as AdvisorHostExecuteContext) : [],
+  }) : undefined;
+  const lifecycleAuthority = contracts && appendEntry ? createTodoLifecycleAuthority({
+    appendEntry, project: ctx => contracts.projection(ctx), apiKey: resolverOptions.env.TYPESAFE_API_KEY?.trim() ?? "",
+    hasDebt: (ctx, incarnation) => verificationRuntime?.hasDebt(ctx, incarnation.incarnationId) === true,
+  }) : undefined;
+  const privacyDigest = canonicalDigest({ projection: "canonical-public-v1", thinking: "excluded", homeRedaction: true });
+  const evaluationHost = appendEntry && policyClient && loadApiClientModule() ? (() => {
+    try {
+      const { createEvaluationHost } = nodeRequire("./src/evaluation-host.ts") as {
+        createEvaluationHost: typeof import("./src/evaluation-host").createEvaluationHost;
+      };
+      const { createPairedReviewDriver } = nodeRequire("./src/atomic-evaluation.ts") as {
+        createPairedReviewDriver: typeof import("./src/atomic-evaluation").createPairedReviewDriver;
+      };
+      return createEvaluationHost({
+        getRegistration: () => advisorRegistration,
+        facts(ctx) {
+          const branch = readHostBranch(ctx);
+          if (!branch) throw new Error("actual_host_branch_required");
+          const root = fileURLToPath(new URL(".", import.meta.url));
+          const files = ["typesafe-planner.ts", ...listWorkspaceFiles(root, "src", { maxFiles: 10_000 }),
+            ...listWorkspaceFiles(root, "tools", { maxFiles: 10_000 })].sort();
+          return { branchId: branch.branchId, requestEntryId: invocations.current(ctx)?.entryId ?? branch.entries[branch.entries.length - 1].id,
+            policyDigest, privacyDigest, candidateSourceManifestDigest: canonicalDigest(files.map(file => ({
+              path: file, sha256: readWorkspaceFile(root, file, { maxBytes: 4 * 1024 * 1024 }).sha256,
+            }))) };
+        },
+        driverOptions: () => ({ trustedPolicy: toolPolicies?.evaluation, apiKey: resolverOptions.env.TYPESAFE_API_KEY?.trim() ?? "", approvalPolicy }),
+        async requestHumanApproval(summary, ctx) {
+          const host = ctx as AdvisorHostExecuteContext & { hasUI?: boolean; ui?: { confirm?(title: string, message: string): Promise<boolean> } };
+          return host.hasUI === true && typeof host.ui?.confirm === "function"
+            && await host.ui.confirm("Authorize exact paid shadow evaluation?", summary) === true;
+        },
+        appendEntry, createDriver: createPairedReviewDriver,
+        projectPublic(value) {
+          const client = loadApiClientModule();
+          if (!client) throw new Error("canonical_public_projection_required");
+          return client.redactEvidenceState(value, { apiKey: resolverOptions.env.TYPESAFE_API_KEY?.trim() ?? "", homeDirs: [resolverOptions.homeDir] });
+        },
+      });
+    } catch { return undefined; }
+  })() : undefined;
+  const hostServices: AdvisorHostServices | undefined = verificationRuntime ? {
+    trustedAdvisorPolicy: toolPolicies?.advisor,
+    prepareReview: (...args) => verificationRuntime.advisorServices.prepareReview(...args),
+    createTaskRequest: (params, ctx, callId, preparation) =>
+      (preparation.draft.binding.purpose === "shadow" && evaluationHost ? evaluationHost.shadowServices : verificationRuntime.advisorServices)
+        .createTaskRequest(params, ctx, callId, preparation),
+    createConsultationRequest: (...args) => verificationRuntime.advisorServices.createConsultationRequest(...args),
+    onReceipt: (receipt, ctx) => (receipt.binding.purpose === "shadow" && evaluationHost ? evaluationHost.shadowServices : verificationRuntime.advisorServices).onReceipt(receipt, ctx),
+    isCurrent: (request, ctx) => (request.binding.purpose === "shadow" && evaluationHost ? evaluationHost.shadowServices : verificationRuntime.advisorServices).isCurrent(request, ctx),
+    deadline: (request, ctx) => (request.binding.purpose === "shadow" && evaluationHost ? evaluationHost.shadowServices : verificationRuntime.advisorServices).deadline?.(request, ctx),
+  } : undefined;
+  if (verificationRuntime && hostServices && supportsAdvisorHost(pi)) advisorRegistration = registerAdvisorHost(pi, hostServices, {
+    mutationDelegation: {
+      capture: ctx => contracts && !state.stagedCalls.size ? currentSourceMutationGrant(contracts, ctx, getProjectDir(ctx), policyDigest) : undefined,
+      isCurrent: (grant, ctx) => Boolean(contracts && !state.stagedCalls.size
+        && sourceMutationGrantCurrent(grant, contracts, ctx, getProjectDir(ctx), policyDigest)),
+    },
+    nativeTodo: {
+      beforeExecute: (params, ctx, callId, signal) => invocations.run(ctx, "todo", callId, params, async () => {
+        try {
+          await reconcileNativeCommits(ctx);
+          pruneTodoTransactions();
+          await stageNativeTodoCall({ input: params, toolCallId: callId }, ctx, signal);
+          const normalized = normalizeNativeTodoInput(params);
+          if (!normalized.valid) return { status: "EVIDENCE_REQUIRED" as const, reasons: [normalized.reason] };
+          return { status: "READY" as const, input: state.stagedCalls.get(callId)?.input ?? normalized.input };
+        } catch (error) {
+          if (error instanceof NativeTodoGuardError && error.outcome) return error.outcome;
+          return { status: "EVIDENCE_REQUIRED" as const, reasons: [error instanceof NativeTodoGuardError ? error.message : "native_preflight_unavailable"] };
+        }
+      }),
+      afterExecute(params, ctx, callId, result) {
+        const staged = state.stagedCalls.get(callId);
+        if (!staged) return;
+        staged.nativeResultObserved = true;
+        pendingNativeObservations.add(callId);
+        const native = result && typeof result === "object" ? result as Record<string, unknown> : undefined;
+        verificationRuntime.observeNativeResult(ctx, staged.verificationStages, {
+          callId, input: params, before: staged.preCommitPhases, details: native?.details, isError: native?.isError,
+        });
+      },
+    },
+  });
+
+  function publicResult(value: unknown): ExtensionToolResult {
+    const client = loadApiClientModule();
+    if (!client || typeof client.redactEvidenceState !== "function") return shortError("public_projection_unavailable");
+    const details = client.redactEvidenceState(value, { apiKey: resolverOptions.env.TYPESAFE_API_KEY?.trim() ?? "", homeDirs: [resolverOptions.homeDir] });
+    return { content: [{ type: "text", text: JSON.stringify(details) }], details };
+  }
+  const taskSelectorSchema = { task: z.string(), phase: z.string().optional() };
+  registerTool({
+    name: "typesafe_bind_task", label: "Bind genuine native task source", approval: "exec",
+    description: "Freeze the exact current Core todo incarnation and genuine original user request. Optional plan/phase is explicit source context, never the newest plan. Implementation scope needs actual cook or real host confirmation; proposed flags cannot authorize it.",
+    parameters: z.object({ ...taskSelectorSchema, planPath: z.string().optional(), phaseHeading: z.string().optional(), originalUserEntryId: z.string().optional() }),
+    async execute(callId, params: ContractBindingProposal, _signal, _onUpdate, ctx) {
+      if (!contracts) return publicResult({ status: "UNAVAILABLE", reasons: ["Supported host appendEntry and actual session history are required."] });
+      const outcome = await contracts.bind(ctx, callId, params);
+      if (outcome.status === "BOUND" && evidenceRuntime && !await evidenceRuntime.captureBaseline(ctx, outcome.contract)) {
+        return publicResult({ status: "EVIDENCE_REQUIRED", contract: outcome.contract,
+          reasons: ["Exact source was bound, but an authenticated pre-change workspace baseline is unavailable. No completion authority was granted."] });
+      }
+      return publicResult(outcome);
+    },
+  });
+  registerTool({
+    name: "typesafe_collect_evidence", label: "Collect authentic bounded task evidence", approval: "exec",
+    description: "Collect current source and fixed approved command receipts outside native preflight. Returns public hashes/manifests, not portable approval. Curation selects exact cached lines and retains every original criterion, omission, and parent obligation.",
+    parameters: z.object({ ...taskSelectorSchema, commandId: z.string().optional(), artifactPaths: z.array(z.string()).optional(), selections: z.array(z.unknown()).optional() }),
+    async execute(callId, params: TaskEvidenceCollectParams, _signal, _onUpdate, ctx) {
+      if (!evidenceRuntime) return publicResult({ status: "UNAVAILABLE", reasons: ["Supported task contract and evidence host are required."] });
+      const result = await evidenceRuntime.collect(ctx, callId, params);
+      const record = result.record;
+      return publicResult({ status: result.status, reasons: result.reasons, recordId: record?.id, contract: record?.contract,
+        evaluatedTreeDigest: record?.evidence.evaluatedTreeDigest, criteria: record?.contract.criteria,
+        sourceManifest: record?.sourceManifest.source, packetManifest: record?.packetSet.manifest, provenance: record?.provenance,
+        nextActions: result.status === "CURATION_REQUIRED"
+          ? ["Retrieve necessary cached source ranges, then provide explicit selections covering all original task criteria; no summary or omitted parent proof counts as completion."]
+          : undefined });
+    },
+  });
+  registerTool({
+    name: "typesafe_retrieve_evidence", label: "Retrieve authenticated cached source spans", approval: "read",
+    description: "Read exact cached source under the current task binding and full-file SHA. Large results require explicit line spans; no caller excerpt, ambient file reopening, silent clipping, or portable authorization.",
+    parameters: z.object({ ...taskSelectorSchema, path: z.string(), fullFileDigest: z.string(), spans: z.array(z.unknown()).optional() }),
+    async execute(_callId, params: ContractTaskSelector & SourceRetrievalRequest, _signal, _onUpdate, ctx) {
+      const record = evidenceRuntime?.get(ctx, params);
+      if (!record || !evidenceRuntime) return publicResult({ status: "EVIDENCE_REQUIRED", reasons: ["Collect current authenticated task source first."] });
+      const result = evidenceRuntime.retrieve(ctx, record, { path: params.path, fullFileDigest: params.fullFileDigest, spans: params.spans });
+      const client = loadApiClientModule();
+      if (!client) return shortError("public_projection_unavailable");
+      const projection = client.redactEvidenceState(result, { apiKey: resolverOptions.env.TYPESAFE_API_KEY?.trim() ?? "", homeDirs: [resolverOptions.homeDir] });
+      if (Buffer.byteLength(JSON.stringify(projection), "utf8") > 16_384) return publicResult({ status: "EVIDENCE_REQUIRED",
+        reasons: ["Requested source exceeds the read-output budget. Supply smaller exact line ranges; no bytes were silently clipped."] });
+      return publicResult({ retrieval: projection, originalFullFileDigest: params.fullFileDigest,
+        returnedRepresentationDigest: canonicalDigest(projection), representation: "canonical-redacted" });
+    },
+  });
+  registerTool({
+    name: "typesafe_review_task", label: "Review bound task outside native preflight", approval: "exec",
+    description: "Evaluate current authentic task evidence with the unchanged M rubric and actual independent Advisor receipt. H remains shadow-only. Returns typed prerequisites or approval-pending-commit; never changes native lifecycle.",
+    parameters: z.object(taskSelectorSchema),
+    async execute(callId, params: ContractTaskSelector, _signal, _onUpdate, ctx) {
+      return publicResult(verificationRuntime ? await verificationRuntime.review(ctx, callId, params)
+        : { status: "UNAVAILABLE", component: "host", reasons: ["Supported contract/evidence/real Advisor host is required."] });
+    },
+  });
+  registerTool({
+    name: "typesafe_prepare_todo_mutation", label: "Prepare exact lifecycle recovery", approval: "exec",
+    description: "Prepare block/drop/removal/replacement outside native preflight. Blocking needs owner, next action, unblock condition and resume command; exports a guarded durable public handoff. Scope reduction or blocking rejection debt requires genuine host human confirmation. No completion or debt forgiveness.",
+    parameters: z.object({ input: z.unknown(), handoff: z.unknown().optional() }),
+    async execute(_callId, params: LifecyclePreparationInput, _signal, _onUpdate, ctx) {
+      refreshTodoState(ctx);
+      return publicResult(lifecycleAuthority ? await lifecycleAuthority.prepare(ctx, params)
+        : { status: "UNAVAILABLE", reasons: ["Supported host lifecycle and persistent recovery are required."] });
+    },
+  });
+  registerTool({
+    name: "typesafe_resolve_historical_debt", label: "Reconcile exact historical debt", approval: "exec",
+    description: "Request genuine host human reconciliation for exact historical debt IDs on a completed, abandoned or removed incarnation. Does not approve native completion, forgive another incarnation, or mutate Core state.",
+    parameters: z.object({ incarnationId: z.string(), reason: z.string() }),
+    async execute(callId, params: { incarnationId: string; reason: string }, _signal, _onUpdate, ctx) {
+      return publicResult(verificationRuntime ? await verificationRuntime.resolveHistoricalDebt(ctx, callId, params)
+        : { status: "UNAVAILABLE", reasons: ["Supported historical debt host required."] });
+    },
+  });
+  registerTool({
+    name: "typesafe_recovery_report", label: "Export durable task recovery", approval: "exec",
+    description: "Export the actual bound task recovery state as a guarded public report with owner, next action, release condition and resume command. No native mutation, semantic retry or debt forgiveness.",
+    parameters: z.object(taskSelectorSchema),
+    async execute(_callId, params: ContractTaskSelector, _signal, _onUpdate, ctx) {
+      const recovery = verificationRuntime?.getRecovery(ctx, params);
+      if (!recovery) return publicResult({ status: "EVIDENCE_REQUIRED", reasons: ["No applicable bound recovery state exists; bind/review or inspect the original failure first."] });
+      const projection = publicResult({ recovery }).details;
+      const content = `# TypeSafe recovery handoff\n\n${JSON.stringify(projection, null, 2)}\n`;
+      const file = writeRecoveryReport(getProjectDir(ctx), { id: crypto.randomUUID(), content });
+      return publicResult({ status: "RECOVERY_EXPORTED", ...file, recovery: projection, authority: "none" });
+    },
+  });
+  registerTool({
+    name: "typesafe_eval_host", label: "Native signed shadow evaluation bridge", approval: "exec",
+    description: "Finite identity/authorize/prepare/collect bridge for frozen real paired M/H evaluation. Requires actual host human approval of genuine labels, exact models, operating points and paid budget; never approves native todo or deployment.",
+    parameters: z.object({ action: z.enum(["identity", "authorize", "prepare", "collect"]), run: z.string().optional(), protocolPath: z.string().optional(), requestId: z.string().optional() }),
+    async execute(_callId, params: { action: "identity" | "authorize" | "prepare" | "collect"; run?: string; protocolPath?: string; requestId?: string }, signal, _onUpdate, ctx) {
+      if (!evaluationHost) return publicResult({ status: "UNAVAILABLE", reasons: ["Supported real native host required."] });
+      const host = ctx as AdvisorHostExecuteContext;
+      try {
+        if (params.action === "identity") return await evaluationHost.identity(host);
+        if (params.action === "authorize") return await evaluationHost.authorizeRun(params, host);
+        if (params.action === "prepare") return await evaluationHost.prepare(params, host);
+        return await evaluationHost.collect(params, host, signal);
+      } catch {
+        return publicResult({ status: "UNAVAILABLE", reasons: ["Exact frozen host, source, corpus, original response or genuine authorization could not be authenticated. No substitute observation was fabricated."] });
+      }
+    },
+  });
+  pi.on("input", (event, ctx) => contracts?.captureCookInput(ctx, event));
   let originProofEmitted = false;
 
   // Session pre-flight probe is diagnostic only; todo state is always owned by
   // this factory's returned PlannerSessionState.
   const PROMPT_INJECTION =
-    "TypeSafe System One is integrated into the host for all human handoffs and task completions. Mutations (todo done, drop, plan updates) are governed by the Bicameral Consensus Engine: Lobe 1 (Advisor Intent) evaluates user intent and work logs, and Lobe 2 (JEV Judge) evaluates code diffs and test proofs. When a tool call or verification returns red notices with NEXT ACTIONS FOR AGENT or <plan_reconciliation>, you MUST execute the required actions autonomously: run relevant skills (ck:problem-solving, ck:plan, ck:research) to analyze, adapt plan.md and todo, and implement required deliverables. NEVER call 'ask' or ask human confirmation when actionable NEXT ACTIONS are provided. Human escalation is strictly reserved for irreconcilable conflicts where sovereign human confirmation is required.";
-  // Session Pre-Flight Health Probe (Phase 3): event-driven diagnostic probe on session_start.
+    "Native todos retain exact goals and incarnations from actual Core history. Bind the current target with typesafe_bind_task, collect approved evidence/command receipts using typesafe_collect_evidence, then call typesafe_review_task for the unchanged M assessment. Prepare an independent review with typesafe_prepare_advisor, execute its returned native task, then call typesafe_review_task again to compose the applicable cached M result with the actual Advisor receipt. No unchanged semantic dispatch is repeated merely because an Advisor receipt was added. Only afterward call native todo done; its short preflight runs no HTTP, test command, or child reasoning. Native arguments accept no extra requirements, testCommand, approval, human, EGC, or lifecycle flags." +
+    "\nThe default M rubric and raw probabilities are unchanged. H/atomic remains a shadow candidate until actual independent human holdout adoption. Missing full evidence is EVIDENCE_REQUIRED, not semantic failure; outages are UNAVAILABLE. Never retry unchanged semantic rejection, lower thresholds, rewrite a verdict, fake human/Advisor authority, or treat child passes as parent integration. Ordinary turn boundaries do not discard genuine applicable reviews." +
+    "\nAfter rejection, obtain actual read-only Advisor diagnosis, implement its concrete repairs through the parent, run affected modules and a changed-path smoke, then submit changed bound evidence. For external waits, preserve the exact goal, owner, next action, observable unblock condition, and resume command in a durable public recovery report. Prepare block/drop/rm/replacement with typesafe_prepare_todo_mutation outside native preflight; genuine human scope changes do not forgive debt or imply completion. A matching settled actual Core result is required for finality.";
   pi.on("session_start", async (_event: unknown, ctx: unknown) => {
     invalidateTodoState(ctx);
-    const agent = (ctx as Record<string, unknown> | undefined)?.agent as Record<string, unknown> | undefined;
-    if (agent?.kind === "sub") return;
+    const context = ctx as { agent?: { kind?: string }; ui?: { notify?(message: string, kind: string): void } } | undefined;
+    if (context?.agent?.kind === "sub") return;
     if (!originProofEmitted) {
       originProofEmitted = true;
-      await pi.sendMessage({
-        customType: "typesafe-health",
-        content: JSON.stringify(getRuntimeOriginProof()),
-        display: false,
-      }).catch(() => {});
+      await safeSendMessage(pi, { customType: "typesafe-health", content: JSON.stringify(getRuntimeOriginProof()), display: false });
+      await safeSendMessage(pi, { customType: "typesafe-planner", content: PROMPT_INJECTION, display: false }, { deliverAs: "nextTurn" });
     }
+    const apiKey = resolverOptions.env.TYPESAFE_API_KEY?.trim() ?? "";
+    const resolver = loadResolverModule();
+    const healthPolicy = toolPolicies?.health;
+    if (!apiKey || !resolver?.resolveTypeSafeEnabled(getProjectDir(ctx), resolverOptions).enabled || !policyClient || !healthPolicy?.ok) return;
+    let outcome: TypeSafeJudgeResult;
     try {
-      const apiKey = resolverOptions.env.TYPESAFE_API_KEY?.trim() || "";
-      if (!apiKey) return;
-
-      const resolverModule = loadResolverModule();
-      const apiClientModule = loadApiClientModule();
-      if (!resolverModule || !apiClientModule) return;
-
-      const projectDir = getProjectDir(ctx);
-      const { enabled } = resolverModule.resolveTypeSafeEnabled(projectDir, resolverOptions);
-      if (!enabled) return;
-
-      const extCtx = ctx as unknown as { ui?: { notify?: (msg: string, type: string) => void } };
-      const cooldown = apiClientModule.checkCredentialCooldown(apiKey);
-      if (cooldown) {
-        extCtx.ui?.notify?.("TypeSafe warning: diagnostic probe skipped while the credential is unavailable.", "warning");
-        return;
-      }
-
-      const probePayload = JSON.stringify({
-        state: "ping",
-        questions: { ping: { type: "noul", instructions: "ping" } },
-        model: "jev-latest",
+      outcome = await policyClient.judgeWithPolicy({
+        args: { state: "Transport availability diagnostic, not task verification.", questions: { ping: { type: "noul", instructions: "Return whether this diagnostic request was received." } }, model: "jev-latest" },
+        purpose: "health", trustedPolicy: healthPolicy, apiKey, fetchImpl: globalThis.fetch,
+        timeoutMs: 3000, totalBudgetMs: 3000, maxAttempts: 1,
       });
-      const outcome = await apiClientModule.requestWithRetry({
-        fetchImpl: globalThis.fetch,
-        apiKey,
-        body: probePayload,
-        timeoutMs: 3000,
-        totalBudgetMs: 3000,
-        maxAttempts: 1,
-      });
-      if (outcome.kind === "ok") {
-        extCtx.ui?.notify?.("TypeSafe: ONLINE (jev-latest)", "info");
-        await pi.sendMessage({
-          customType: "typesafe-health",
-          content: "TypeSafe: ONLINE (jev-latest)",
-          display: true,
-        }).catch(() => {});
-        await pi.sendMessage(
-          { customType: "typesafe-planner", content: PROMPT_INJECTION, display: false },
-          { deliverAs: "nextTurn" }
-        ).catch(() => {});
-        return;
-      }
-
-      const message = outcome.kind === "auth"
-        ? "TypeSafe warning: TYPESAFE_API_KEY is invalid or expired. Check your environment configuration."
-        : outcome.kind === "http_error" && outcome.status === 404
-          ? "TypeSafe warning: TypeSafe API routing failed (404). Check models.yml baseUrl configuration."
-          : outcome.kind === "http_error"
-            ? `TypeSafe warning: Pre-flight diagnostic probe failed (HTTP status ${outcome.status}).`
-            : "TypeSafe warning: Pre-flight diagnostic probe returned an invalid response.";
-      extCtx.ui?.notify?.(message, "warning");
-      await pi.sendMessage({
-        customType: "typesafe-health",
-        content: message,
-        display: true,
-      }).catch(() => {});
     } catch {
-      const message = "TypeSafe warning: TypeSafe API unreachable. Check internet connection or proxy settings.";
-      await pi.sendMessage({ customType: "typesafe-health", content: message, display: true }).catch(() => {});
+      await safeSendMessage(pi, { customType: "typesafe-health", content: "TypeSafe diagnostic implementation unavailable; no network diagnosis or task rejection is inferred.", display: true });
+      return;
     }
+    const message = outcome.ok
+      ? `TypeSafe transport available; resolved model: ${outcome.metadata.resolvedModel ?? "unreported"}. This is not semantic approval.`
+      : `TypeSafe diagnostic unavailable (${outcome.code}); no task was semantically rejected.`;
+    try { context?.ui?.notify?.(message, outcome.ok ? "info" : "warning"); }
+    catch { await safeSendMessage(pi, { customType: "typesafe-ui-unavailable", content: "Health notification UI failed; the transport result is unchanged.", display: false }); }
+    await safeSendMessage(pi, { customType: "typesafe-health", content: message, display: true });
   });
   function phasesFromBranch(ctx: unknown): CanonicalTodoPhase[] | undefined {
-    const manager = (ctx as Record<string, unknown> | undefined)?.sessionManager as Record<string, unknown> | undefined;
-    const entries = typeof manager?.getBranch === "function" ? manager.getBranch() : undefined;
-    if (!Array.isArray(entries)) return undefined;
-    for (const entry of [...entries].reverse()) {
-      if (!entry || typeof entry !== "object") continue;
-      const record = entry as Record<string, unknown>;
-      const customPhases =
-        record.customType === "user_todo_edit" &&
-        record.data &&
-        typeof record.data === "object" &&
-        (record.data as Record<string, unknown>).phases;
-      const result = (record.message && typeof record.message === "object" ? record.message : record) as Record<string, unknown>;
-      const details = result.details as Record<string, unknown> | undefined;
-      const resultPhases =
-        result.toolName === "todo" && !result.isError && details?.op !== "view" ? details?.phases : undefined;
-      const phases = customPhases ?? resultPhases;
-      if (Array.isArray(phases)) return cloneTodoPhases(phases as CanonicalTodoPhase[]);
+    const branch = readHostBranch(ctx);
+    if (!branch) return undefined;
+    for (const native of state.nativeHistory?.incarnations ?? []) {
+      const content = native.target.content;
+      const reason = state.lastFailureReasonByTask.get(content);
+      const remediation = state.pendingRemediations.get(content);
+      const failures = state.consecutiveFailuresByTask.get(content);
+      if (reason !== undefined || remediation !== undefined || failures !== undefined) {
+        state.debtByIncarnation.set(native.incarnationId, { reason, remediation, failures });
+      }
     }
-    return undefined;
+    const projection = contracts?.projection(ctx) ?? projectHostHistory(branch, getProjectDir(ctx));
+    const order = new Map(branch.entries.map((entry, index) => [entry.id, index]));
+    const events = [...projection.nativeFailures, ...projection.nativeSuccesses]
+      .sort((a, b) => (order.get(a.resultEntryId) ?? -1) - (order.get(b.resultEntryId) ?? -1));
+    for (const event of events) {
+      for (const target of event.targets) {
+        if (!target.before) continue;
+        if (event.outcome === "native_failure" && event.operation === "done"
+          && !state.debtByIncarnation.has(target.before.incarnationId)) {
+          state.debtByIncarnation.set(target.before.incarnationId, {
+            reason: `Unclassified native verification failure (${event.resultEntryId}); inspect the exact original operation and evidence.`,
+          });
+        } else if (event.outcome === "native_success" && event.operation === "done" && target.completionReported
+          && target.beforeStatus !== "completed" && target.afterStatus === "completed"
+          && target.before.incarnationId === target.after?.incarnationId) {
+          state.debtByIncarnation.delete(target.before.incarnationId);
+        }
+      }
+    }
+    const legacyRemediations = new Map(state.pendingRemediations);
+    const legacyReasons = new Map(state.lastFailureReasonByTask);
+    const legacyFailures = new Map(state.consecutiveFailuresByTask);
+    state.nativeHistory = projection;
+    state.lastFailureReasonByTask.clear();
+    state.pendingRemediations.clear();
+    state.consecutiveFailuresByTask.clear();
+    for (const native of projection.incarnations) {
+      const debt = state.debtByIncarnation.get(native.incarnationId);
+      if (!debt) continue;
+      if (debt.reason !== undefined) state.lastFailureReasonByTask.set(native.target.content, debt.reason);
+      if (debt.remediation !== undefined) state.pendingRemediations.set(native.target.content, debt.remediation);
+      if (debt.failures !== undefined) state.consecutiveFailuresByTask.set(native.target.content, debt.failures);
+    }
+    for (const [task, remediation] of legacyRemediations) {
+      const active = projection.nativePhases?.some(phase => phase.tasks.some(candidate =>
+        candidate.content === task && candidate.status !== "completed" && candidate.status !== "abandoned"));
+      const reincarnated = projection.nativeSuccesses.some(event => ["drop", "rm", "append"].includes(event.operation)
+        && event.targets.some(target => target.before?.target.content === task || target.after?.target.content === task));
+      if (!active || reincarnated || state.pendingRemediations.has(task)) continue;
+      state.pendingRemediations.set(task, remediation);
+      const reason = legacyReasons.get(task); if (reason !== undefined) state.lastFailureReasonByTask.set(task, reason);
+      const failures = legacyFailures.get(task); if (failures !== undefined) state.consecutiveFailuresByTask.set(task, failures);
+    }
+    state.uninitialized = !projection.nativeStateReliable && branch.entries.some(entry =>
+      entry.type === "message" && entry.message?.role === "toolResult" && entry.message.toolName === "todo"
+      || entry.type === "custom" && entry.customType === "user_todo_edit");
+    return projection.nativePhases ? cloneTodoPhases(projection.nativePhases) : undefined;
   }
 
   function pruneTodoTransactions(now = Date.now()): void {
     for (const [callId, stage] of state.stagedCalls) {
-      if (now - stage.createdAt > TODO_STAGE_TTL_MS) state.stagedCalls.delete(callId);
+      if (!stage.nativeResultObserved && now - stage.createdAt > TODO_STAGE_TTL_MS) state.stagedCalls.delete(callId);
     }
     for (const [callId, tombstone] of state.committedCallTombstones) {
       if (now - tombstone.committedAt > TODO_STAGE_TTL_MS) state.committedCallTombstones.delete(callId);
@@ -1462,247 +1541,99 @@ export default function registerExtension(
     if (JSON.stringify(phases) !== JSON.stringify(state.phases)) {
       state.phases = phases;
       state.revision++;
-      state.stagedCalls.clear();
-      state.uninitialized = false;
+      for (const [callId, stage] of state.stagedCalls) if (!stage.nativeResultObserved) state.stagedCalls.delete(callId);
     }
   }
 
   function invalidateTodoState(ctx: unknown): void {
+    lifecycleAuthority?.invalidate();
+    evidenceRuntime?.clear(ctx);
+    verificationRuntime?.invalidate(ctx, "session_lifecycle_changed");
+    for (const [callId, stage] of state.stagedCalls) if (stage.nativeResultObserved) {
+      let observed = exercisedBySession.get(stage.sessionId);
+      if (!observed) { observed = new Map(); exercisedBySession.set(stage.sessionId, observed); }
+      observed.set(callId, stage);
+    }
+    pendingNativeObservations.clear();
     state.generation++;
     state.revision++;
     state.stagedCalls.clear();
+    // An observed Core result is retained off-state until its authentic settled result
+    // re-enters this session. Lifecycle transitions must not leave a pre-persistence
+    // completion stage live on the new branch.
     state.committedCallTombstones.clear();
     state.taskBaselines.clear();
-    state.pendingRemediations.clear();
-    state.consecutiveFailuresByTask.clear();
-    state.lastFailureReasonByTask.clear();
     state.lastCheckpoint = undefined;
-    state.phases = phasesFromBranch(ctx) ?? [];
-    state.uninitialized = false;
+    const phases = phasesFromBranch(ctx);
+    if (phases) state.phases = phases;
+    else if (readHostBranch(ctx)) state.phases = [];
+    else state.uninitialized = true;
   }
 
-  function cancelTodoCall(evt: Record<string, unknown>, code: string): never {
-    if (typeof evt.cancel === "function") (evt.cancel as (reason: string) => void)(code);
-    throw new Error(code);
-  }
 
-  async function stageNativeTodoCall(evt: Record<string, unknown>, ctx: unknown): Promise<void> {
-    if (hasActiveEGC(getProjectDir(ctx))) return;
-    const params = (evt.params || evt.args || evt.input || {}) as Record<string, unknown>;
-    if ("ops" in params) cancelTodoCall(evt, "todo_ops_unsupported");
+  async function stageNativeTodoCall(evt: Record<string, unknown>, ctx: unknown, signal?: AbortSignal): Promise<void> {
+    const rawInput = evt.input;
+    const normalized = normalizeNativeTodoInput(rawInput);
+    if (!normalized.valid) throw new NativeTodoGuardError(normalized.reason);
+    const params = normalized.input;
+    if (params.op === "view") return;
     refreshTodoState(ctx);
-    if (state.uninitialized) cancelTodoCall(evt, "todo_state_uninitialized");
-    pruneTodoTransactions();
-    const inferredOp = typeof params.op === "string"
-      ? params.op
-        : Array.isArray(params.list) && params.list.length > 0
-          ? "init"
-          : Array.isArray(params.items) && params.items.length > 0
-            ? (typeof params.phase === "string" && params.phase.trim() ? "append" : "init")
-            : undefined;
-    if (!inferredOp || !MUTATING_TODO_OPS.has(inferredOp)) return;
+    const operation = readNativeTodoOperation(params, state.phases);
+    if (!operation || !MUTATING_TODO_OPS.has(operation)) return;
+    if (state.uninitialized) throw new NativeTodoGuardError("todo_state_uninitialized: observe actual native view before preparing a mutation.");
     const callId = typeof evt.toolCallId === "string" ? evt.toolCallId : "";
-    if (!callId) cancelTodoCall(evt, "todo_call_id_missing");
-    const inputHash = canonicalTodoInputHash(params);
-    if (state.stagedCalls.has(callId) || state.committedCallTombstones.has(callId)) {
-      cancelTodoCall(evt, "todo_call_id_duplicate");
-    }
-    if (state.stagedCalls.size >= TODO_STAGE_LIMIT) cancelTodoCall(evt, "todo_stage_capacity_exhausted");
-
-    let targets: CanonicalTodoTask[] = [];
-    const taskName = typeof params.task === "string" ? params.task : "";
-    const phaseName = typeof params.phase === "string" ? params.phase : "";
-    if (["done", "drop", "rm", "block", "unblock", "start"].includes(inferredOp)) {
-      targets = taskName ? taskMatches(state.phases, taskName) : phaseName ? phaseMatches(state.phases, phaseName) : allTodoTasks(state.phases);
-      if ((inferredOp === "block" || inferredOp === "unblock" || inferredOp === "start") && !taskName && !phaseName) {
-        return;
-      }
-      if ((taskName || phaseName) && targets.length === 0) return;
-    }
-    if (inferredOp === "done") targets = targets.filter((task) => task.status !== "completed");
-    const replacedTasks = inferredOp === "init"
-      ? allTodoTasks(state.phases).map((task) => task.content)
-      : [];
-    const destructiveTargets = inferredOp === "init"
-      ? allTodoTasks(state.phases)
-      : ["drop", "rm"].includes(inferredOp)
-        ? targets
-        : [];
-    const ctxRecord = (ctx as Record<string, unknown> | undefined) ?? {};
-    const initialGeneration = state.generation;
-    const initialRevision = state.revision;
-    const hostAuthorized = ctxRecord.isHuman === true;
-    let humanConfirmed = false;
-    if (destructiveTargets.length > 0 && !hostAuthorized) {
-      const apiKey = resolverOptions.env.TYPESAFE_API_KEY?.trim() || "";
-      const resolverModule = loadResolverModule();
-      const projectDir = getProjectDir(ctx);
-      if (!apiKey || !resolverModule?.resolveTypeSafeEnabled(projectDir, resolverOptions).enabled) {
-        cancelTodoCall(evt, "typesafe_verification_unavailable");
-      }
-      const conversation = collectConversationContext(ctx);
-      const decision = await runBicameralDropCheck(
-        {
-          tasks: destructiveTargets.map((task) => task.content),
-          reason: typeof params.reason === "string" ? params.reason : undefined,
-          userRequest: conversation.userRequest,
-          agentWorkLog: conversation.agentWorkLog,
-          remainingTasks: allTodoTasks(state.phases)
-            .filter((task) => !destructiveTargets.includes(task))
-            .map((task) => task.content),
-          planContext: state.phases.map((phase) => `${phase.name}: ${phase.tasks.map((task) => task.content).join(", ")}`),
-        },
-        createExtensionJudgeClient(apiKey, undefined, ctx)
-      );
-      if (state.generation !== initialGeneration || state.revision !== initialRevision) {
-        cancelTodoCall(evt, "todo_state_revised");
-      }
-      if (decision.verdict === "AUTO_REJECT" || decision.verdict === "RECONCILE_PLAN") {
-        cancelTodoCall(evt, `todo_drop_rejected: ${decision.reasons.join("; ")}`);
-      }
-      const confirm = (ctxRecord.ui as { confirm?: (title: string, message: string) => Promise<boolean> } | undefined)?.confirm;
-      if (ctxRecord.hasUI !== true || typeof confirm !== "function") {
-        cancelTodoCall(evt, "human_resolution_required");
-      }
-      try {
-        humanConfirmed = await confirm(
-          "TypeSafe: drop contracted task?",
-          `Drop task(s): ${destructiveTargets.map((task) => task.content).join(", ")}. Approve this exact target set?\n\n${formatConsensusEscalation(decision)}`
-        );
-      } catch {
-        cancelTodoCall(evt, "human_resolution_required");
-      }
-      if (!humanConfirmed) cancelTodoCall(evt, "human_resolution_required");
-      if (state.generation !== initialGeneration || state.revision !== initialRevision) {
-        cancelTodoCall(evt, "todo_state_revised");
-      }
-    }
-    const verifiedHostAuthorization = hostAuthorized || humanConfirmed;
-    const authorizationProvenance = hostAuthorized
-      ? "host-authorization"
-      : humanConfirmed
-        ? "human"
-        : "judge";
-    if (
-      inferredOp === "block" &&
-      targets.some((task) => state.lastFailureReasonByTask.has(task.content) || state.pendingRemediations.has(task.content)) &&
-      !verifiedHostAuthorization
-    ) {
-      cancelTodoCall(evt, "todo_block_unresolved_rejection");
-    }
-    const affectedTasks = targets.map((task) => task.content);
+    if (!callId) throw new NativeTodoGuardError("todo_call_id_missing");
+    const sessionId = readHostBranch(ctx)?.sessionId;
+    if (!sessionId) throw new NativeTodoGuardError("actual_native_session_required");
+    if (state.stagedCalls.has(callId) || state.committedCallTombstones.has(callId)) throw new NativeTodoGuardError("todo_call_id_duplicate");
+    if (state.stagedCalls.size) throw new NativeTodoGuardError("todo_native_commit_pending: wait for the actual settled Core result; do not retry semantic evaluation.");
+    const inputHash = nativeTodoInputDigest(rawInput);
+    const generation = state.generation;
+    const revision = state.revision;
+    const taskName = params.task ?? "";
+    const phaseName = params.phase ?? "";
+    let targetBindings = ["done", "drop", "rm", "block", "unblock", "start"].includes(operation)
+      ? resolveTodoTargets(state.phases, taskName, phaseName) : [];
+    if (operation === "done") targetBindings = targetBindings.filter(target =>
+      state.phases[target.phaseOrdinal]?.tasks[target.index]?.status !== "completed");
+    const verificationStages: NativeTaskVerificationStage[] = [];
     const controller = new AbortController();
-    const assertStageFresh = (): void => {
-      if (controller.signal.aborted) cancelTodoCall(evt, "preflight_budget_exhausted");
-      if (state.generation !== initialGeneration || state.revision !== initialRevision) {
-        cancelTodoCall(evt, "todo_state_revised");
-      }
-    };
+    const currentSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
     const timer = setTimeout(() => controller.abort(), options.preflightBudgetMs ?? 22_000);
-    let snapshot: WorkspaceSnapshot;
+    let provenance: StagedTodoCall["provenance"] = "gate1";
     try {
-      snapshot = await captureWorkspaceSnapshot(getProjectDir(ctx), {
-        signal: controller.signal,
-        timeoutMs: options.preflightBudgetMs ?? 22_000,
-      });
-      assertStageFresh();
-      if (inferredOp === "done" && affectedTasks.length > 0 && !verifiedHostAuthorization) {
-        const testCommand = typeof params.testCommand === "string" ? params.testCommand : undefined;
-        const testResult = testCommand
-          ? await executeTestCommand(testCommand, getProjectDir(ctx), options.preflightBudgetMs ?? 22_000, controller.signal)
-          : undefined;
-        assertStageFresh();
-        const evidenceByTask = new Map<string, TaskEvidenceResult>();
-        for (const task of targets) {
-          const evidence = await collectTaskEvidence({
-            cwd: getProjectDir(ctx),
-            taskId: task.content,
-            testCommand,
-            baseline: state.taskBaselines.get(task.content) ?? state.lastCheckpoint,
-            afterSnapshot: snapshot,
-            testResult,
-            taskDoneProven: true,
-            todoCompleted: true,
-            signal: controller.signal,
-          });
-          assertStageFresh();
-          evidenceByTask.set(task.content, evidence);
-          const micro = await runTaskMicroCheck(evidence);
-          assertStageFresh();
-          if (!micro.passed) {
-            assertStageFresh();
-            state.lastFailureReasonByTask.set(task.content, micro.reasons.join("; "));
-            state.consecutiveFailuresByTask.set(task.content, (state.consecutiveFailuresByTask.get(task.content) ?? 0) + 1);
-            cancelTodoCall(evt, buildGateRejectionMessage({ gate: "Gate 1 Micro-Check", taskId: task.content, reasons: micro.reasons, testCommand, testExitCode: evidence.testExitCode, testEvasion: micro.testEvasion }));
+      if (operation === "done" && targetBindings.length) {
+        if (!verificationRuntime) throw new NativeTodoGuardError("UNAVAILABLE: supported host contract, evidence, and real Advisor registration are required.");
+        for (const target of targetBindings) {
+          const result = await verificationRuntime.preflight(ctx, { task: target.content, phase: target.phase }, "done", currentSignal);
+          if (result.status !== "APPROVED_PENDING_COMMIT") throw new NativeTodoGuardError(JSON.stringify(result), result);
+          if (result.stage.target.phase !== target.phase || result.stage.target.phaseOrdinal !== target.phaseOrdinal
+            || result.stage.target.ordinal !== target.index || result.stage.target.content !== target.content) {
+            throw new NativeTodoGuardError("todo_review_target_mismatch");
           }
+          verificationStages.push(result.stage);
         }
-        const apiKey = resolverOptions.env.TYPESAFE_API_KEY?.trim() || "";
-        const resolverModule = loadResolverModule();
-        const projectDir = getProjectDir(ctx);
-        if (!apiKey || !resolverModule?.resolveTypeSafeEnabled(projectDir, resolverOptions).enabled) {
-          cancelTodoCall(evt, "typesafe_verification_unavailable");
-        }
-        const client = createExtensionJudgeClient(apiKey, controller.signal, ctx);
-        assertStageFresh();
-        const conversation = collectConversationContext(ctx);
-        for (const task of targets) {
-          const evidence = evidenceByTask.get(task.content);
-          const macro = await runBicameralMacroCheck(
-            {
-              todoTask: task.content,
-              phaseTitle: phaseName || task.content,
-              planRequirements: Array.isArray(params.requirements)
-                ? params.requirements.filter((item): item is string => typeof item === "string")
-                : [task.content],
-              diffSummary: evidence?.gitStatus ?? "",
-              unifiedDiff: evidence?.gitDiff ?? "",
-              testSummary: testCommand ? `${testCommand}\nexit ${testResult?.exitCode ?? "not-run"}\n${testResult?.output ?? ""}` : "No testCommand provided.",
-              attemptCount: state.consecutiveFailuresByTask.get(task.content) ?? 0,
-              taskType: "code_change",
-              deliverableArtifacts: await collectDeliverableArtifacts(projectDir),
-              userRequest: conversation.userRequest,
-              agentWorkLog: conversation.agentWorkLog,
-              testCommand,
-            },
-            client
-          );
-          assertStageFresh();
-          if (!macro.macroResult.approved) {
-            assertStageFresh();
-            state.lastFailureReasonByTask.set(task.content, macro.macroResult.reasons.join("; "));
-            state.pendingRemediations.set(task.content, {
-              taskId: task.content,
-              gate: "Gate 2 Macro-Check",
-              diffHash: hashToken(task.content + macro.macroResult.reasons.join("\n")),
-              reasons: macro.macroResult.reasons,
-              nextActions: macro.macroResult.reasons,
-              timestamp: Date.now(),
-            });
-            cancelTodoCall(evt, buildGateRejectionMessage({ gate: "Gate 2 Macro-Check", taskId: task.content, reasons: macro.macroResult.reasons }));
-          }
-        }
+        provenance = "judge";
+      } else if (["init", "drop", "rm", "block"].includes(operation)) {
+        if (!lifecycleAuthority) throw new NativeTodoGuardError("UNAVAILABLE: supported host lifecycle history is required.");
+        const result = await lifecycleAuthority.consume(ctx, params);
+        if (!result.allowed) throw new NativeTodoGuardError(result.reason);
+        if (operation !== "block" && (operation !== "init" || state.phases.length)) provenance = "human";
       }
-      assertStageFresh();
-      const proposedReport: TaskReport = {
-        kind: inferredOp === "done" ? "DONE" : "DROP",
-        tasks: affectedTasks,
-        approved: true,
-        decidedBy: authorizationProvenance,
-        reasons: [],
-      };
+      if (currentSignal.aborted) throw new NativeTodoGuardError("preflight_budget_exhausted");
+      if (nativeTodoInputDigest(rawInput) !== inputHash || state.generation !== generation || state.revision !== revision) {
+        throw new NativeTodoGuardError("todo_state_revised");
+      }
+      const affectedTasks = targetBindings.map(target => target.content);
       state.stagedCalls.set(callId, {
-        toolCallId: callId,
-        inputHash,
-        generation: initialGeneration,
-        revision: initialRevision,
-        createdAt: Date.now(),
-        op: inferredOp,
-        affectedTasks,
-        replacedTasks,
-        verifiedTasks: inferredOp === "done" ? affectedTasks : [],
-        workspaceSnapshot: snapshot,
-        pendingReports: ["done", "drop", "rm"].includes(inferredOp) ? [proposedReport] : [],
-        provenance: authorizationProvenance,
+        toolCallId: callId, sessionId, inputHash, input: params, generation, revision, createdAt: Date.now(), op: operation,
+        affectedTasks, targetBindings, replacedTasks: operation === "init" ? allTodoTasks(state.phases).map(task => task.content) : [],
+        preCommitPhases: cloneTodoPhases(state.phases), workspaceSnapshot: verificationStages[0]?.snapshot,
+        verificationStages, nativeResultObserved: false,
+        pendingReports: ["done", "drop", "rm"].includes(operation) && affectedTasks.length ? [{
+          kind: operation === "done" ? "DONE" : "DROP", tasks: affectedTasks, approved: true, decidedBy: provenance, reasons: [],
+        }] : [],
+        provenance,
       });
     } finally {
       clearTimeout(timer);
@@ -1711,97 +1642,57 @@ export default function registerExtension(
   async function handleTodoInterception(event: unknown, ctx: unknown): Promise<void> {
     if (!event || typeof event !== "object") return;
     const evt = event as Record<string, unknown>;
-    const toolName = (evt.tool || evt.name || evt.toolName) as string | undefined;
+    const toolName = evt.toolName as string | undefined;
     if (toolName === "todo") {
-      await stageNativeTodoCall(evt, ctx);
+      const normalized = normalizeNativeTodoInput(evt.input);
+      if (!normalized.valid) throw new NativeTodoGuardError(normalized.reason);
+      if (normalized.input.op !== "view" && !advisorRegistration?.todoReady(ctx as AdvisorHostExecuteContext)) {
+        throw new NativeTodoGuardError("UNAVAILABLE: the actual same-native todo execution guard is not active.");
+      }
       return;
     }
-    // Direct File Bypass Defense (RT-3) & Resource Integrity Shield (Phase 1)
     if (toolName === "write" || toolName === "edit") {
-      const params = (evt.params || evt.args || evt.input || {}) as Record<string, unknown>;
-      const targetPath = ((params.path as string) || (params.filepath as string) || "").trim();
-      const normalizedPath = targetPath.replace(/\\/g, "/");
-      const baseName = normalizedPath.split("/").pop() || "";
-
-      // Plan Completion & Closure Guard (Phase 3)
-      const inputContent = ((params.content as string) || (params.input as string) || "").trim();
-      const isPlanFile =
-        (!normalizedPath.includes("plans/reports/") && /plans[\/\\].*\.(md|markdown)$/i.test(normalizedPath)) ||
-        baseName === "plan.md" ||
-        /^phase-.*\.md$/i.test(baseName);
-      const isClosingPlan = /(?:^|\n)\+?status:\s*complete(?:d)?\b/im.test(inputContent);
-
-      if (isPlanFile && isClosingPlan) {
-        refreshTodoState(ctx);
-        pruneTodoTransactions();
-        await assertNoActiveContractedTasks(state, "Uncompleted contracted tasks exist", evt as Record<string, unknown>, pi);
+      const targets = fileMutationTargets(toolName, evt.input);
+      if (!targets.length) {
+        const raw = evt.input && typeof evt.input === "object" ? evt.input as Record<string, unknown> : {};
+        if (typeof raw.path === "string" && /^(?!file:)[a-z][a-z0-9+.-]*:\/\//i.test(raw.path)) return;
+        throw new NativeTodoGuardError("EVIDENCE_REQUIRED: unsupported local file-mutation wire shape; use the supported write/hashline edit ABI.");
       }
-      if (baseName === "todo.json" || baseName.startsWith(".todo")) {
-        const msg = "Direct file modification of todo.json is prohibited. Task state must be managed via the todo tool.";
-        if (typeof evt.cancel === "function") {
-          (evt.cancel as (r: string) => void)(msg);
+      const cwd = getProjectDir(ctx);
+      const bundleRoot = fileURLToPath(new URL(".", import.meta.url));
+      const protectedSources = new Set(["typesafe-planner.ts", ...listWorkspaceFiles(bundleRoot, "src", { maxFiles: 10_000 }),
+        ...listWorkspaceFiles(bundleRoot, "tools", { maxFiles: 10_000 })]);
+      const direct = contracts && !state.stagedCalls.size ? currentSourceMutationGrant(contracts, ctx, cwd, policyDigest) : undefined;
+      const delegated = await advisorRegistration?.delegatedMutationScope(ctx as AdvisorHostExecuteContext);
+      for (const target of targets) {
+        if (/^file:/i.test(target.path)) throw new NativeTodoGuardError("Use a canonical local path for file mutation; file URI aliases cannot bypass source guards.");
+        if (/^[a-z][a-z0-9+.-]*:\/\//i.test(target.path)) continue;
+        const resolved = path.resolve(cwd, target.path);
+        const normalized = resolved.replace(/\\/g, "/");
+        const relative = path.relative(cwd, resolved).replace(/\\/g, "/");
+        const baseName = path.basename(resolved).toLowerCase();
+        if (normalized.toLowerCase().includes("/.omp/agent/extensions/typesafe-planner.ts")) {
+          throw new NativeTodoGuardError("Global OMP proxy is immutable. Edit only the development workspace and use the authorized managed sync path.");
         }
-        await pi.sendMessage({
-          customType: "typesafe-compliance-escalation",
-          content: msg,
-        });
-        throw new Error(msg);
-      }
-      if (normalizedPath.toLowerCase().includes(".omp/agent/extensions/typesafe-planner.ts")) {
-        const msg = "Direct modification of the global OMP extension proxy (.omp/agent/extensions/typesafe-planner.ts) is prohibited. Work only within the workspace repository and deploy using `node tools/sync-baseline.cjs`.";
-        if (typeof evt.cancel === "function") {
-          (evt.cancel as (r: string) => void)(msg);
+        if (baseName === "todo.json" || baseName.startsWith(".todo")) {
+          throw new NativeTodoGuardError("Direct native todo storage edits are prohibited; use the real Core todo tool.");
         }
-        await pi.sendMessage({
-          customType: "typesafe-compliance-escalation",
-          content: msg,
-        });
-        throw new Error(msg);
-      }
-
-      const isTestEnv = process.env.BUN_ENV === "test" || process.env.NODE_ENV === "test";
-      const resolvedTarget = path.resolve(getProjectDir(ctx), targetPath).replace(/\\/g, "/").toLowerCase();
-      let isDevWorkspace = !isTestEnv;
-      if (isDevWorkspace) {
-        try {
-          const pkgPath = path.join(getProjectDir(ctx), "package.json");
-          const pkgName = existsSync(pkgPath) ? JSON.parse(readFileSync(pkgPath, "utf-8")).name : "";
-          isDevWorkspace = pkgName === "omp-typesafe-extension" || pkgName === "omp_extension";
-        } catch {
-          isDevWorkspace = false;
+        const isPlan = !normalized.includes("/plans/reports/") && (baseName === "plan.md" || /^phase-.*\.md$/i.test(baseName));
+        if (isPlan && requestsPlanCompletion(target.content)) {
+          await assertScopedPlanClosure(contracts, verificationRuntime, ctx, cwd, resolved);
         }
-      }
-
-      const isProtected = !isDevWorkspace && PROTECTED_INTEGRITY_PATTERNS.some((pattern) => {
-        const patLower = pattern.toLowerCase();
-        if (baseName.toLowerCase() === patLower) return true;
-        if (normalizedPath.toLowerCase().endsWith("/" + patLower)) return true;
-        try {
-          const resolved = path.resolve(getProjectDir(ctx), targetPath).replace(/\\/g, "/");
-          return resolved.toLowerCase().endsWith("/" + patLower) || resolved.toLowerCase() === patLower;
-        } catch {
-          return targetPath.toLowerCase().includes(patLower);
+        const deployment = path.join(resolverOptions.homeDir, "Projects", "omp_extension");
+        const deployedRelative = path.relative(deployment, resolved);
+        if (deployedRelative && !path.isAbsolute(deployedRelative) && !deployedRelative.split(path.sep).includes("..")) {
+          throw new NativeTodoGuardError("Direct active deployment writes are prohibited; use the reviewed managed sync transaction.");
         }
-      });
-
-      if (isProtected) {
-        const isAuthorizedContext =
-          Boolean((ctx as Record<string, unknown> | undefined)?.isHuman) ||
-          Boolean((ctx as Record<string, unknown> | undefined)?.authorized) ||
-          process.env.TYPESAFE_ALLOW_MODIFICATION === "1";
-
-        if (params.allowJudgeModification === true && isAuthorizedContext) {
-          return;
+        const protectedFile = protectedSources.has(relative) || PROTECTED_INTEGRITY_PATTERNS.some(pattern =>
+          baseName === pattern.toLowerCase() || normalized.toLowerCase().endsWith("/" + pattern.toLowerCase()));
+        const operation = target.operation === "modify" && !existsSync(resolved) ? "create" : target.operation;
+        if (protectedFile && !sourceMutationAllowed(direct, cwd, target.path, operation)
+          && !sourceMutationAllowed(delegated, cwd, target.path, operation)) {
+          throw new NativeTodoGuardError("HUMAN_REQUIRED: protected source mutation needs a current genuinely authorized implementation/operations contract covering this exact path and operation. Bind source first; child executors require actual supported same-workspace delegation. Payload flags, package names, test mode and environment markers cannot authorize it.");
         }
-        const msg = `Direct file modification of protected TypeSafe infrastructure (${baseName || targetPath}) is prohibited without verified human authorization.`;
-        if (typeof evt.cancel === "function") {
-          (evt.cancel as (r: string) => void)(msg);
-        }
-        await pi.sendMessage({
-          customType: "typesafe-integrity-violation",
-          content: msg,
-        });
-        throw new Error(msg);
       }
       return;
     }
@@ -1860,7 +1751,7 @@ export default function registerExtension(
         }
       }
 
-      const advisorLine = `\n💡 [Advisor / ck:advisor (${advisor.ckVerdict || advisor.verdict})]: ${advisor.recommendation || advisor.reason}`;
+      const advisorLine = `\n[Local intent heuristic only — not independent Advisor reasoning or approval]: ${advisor.recommendation || advisor.reason}`;
 
       if (!isEnabled || !apiKey) {
         const note = `\n\n⚠️ [TypeSafe System One: Evaluation offline / not configured]${advisorLine}`;
@@ -1949,7 +1840,7 @@ export default function registerExtension(
 
         await pi.sendMessage({
           customType: "typesafe-human-verdict",
-          content: `TypeSafe System One evaluated human handoff:\n- Risk: ${riskLabel} (${riskScore.toFixed(1)}/3)\n- Clarity: ${Math.round(clarity * 100)}%\n- Advisor (${advisor.ckVerdict || advisor.verdict}): ${advisor.recommendation || advisor.reason}`,
+          content: `TypeSafe advisory assessment of human handoff:\n- Risk: ${riskLabel} (${riskScore.toFixed(1)}/3)\n- Clarity: ${Math.round(clarity * 100)}%\n- Local heuristic only: ${advisor.recommendation || advisor.reason}\nNo native or human authority is granted by these annotations.`,
           display: true,
         });
       } catch {
@@ -1965,14 +1856,15 @@ export default function registerExtension(
     }
 
     
-    // Plan-CLI Execution Guard (Phase 3)
     if (toolName === "bash") {
-      const params = (evt.params || evt.args || evt.input || {}) as Record<string, unknown>;
-      const cmd = ((params.command as string) || (params.cmd as string) || "").trim();
-      if (/plan-cli(\.cjs)?\s+check/i.test(cmd)) {
-        refreshTodoState(ctx);
-        pruneTodoTransactions();
-        await assertNoActiveContractedTasks(state, "Cannot verify plan completion while uncompleted contracted tasks exist", evt as Record<string, unknown>, pi);
+      const params = evt.input && typeof evt.input === "object" ? evt.input as Record<string, unknown> : {};
+      const check = parsePlanCliCheck(typeof params.command === "string" ? params.command : "");
+      if (check.kind === "unsupported") throw new NativeTodoGuardError("EVIDENCE_REQUIRED: use one direct quoted plan-cli check command with explicit cwd; compound or ambiguous shell input cannot acquire closure authority.");
+      if (check.kind === "complete") {
+        const cwd = getProjectDir(ctx);
+        const directory = typeof params.cwd === "string" && params.cwd ? params.cwd : cwd;
+        const phase = phaseFileForCheck(cwd, directory, check.phase);
+        await assertScopedPlanClosure(contracts, verificationRuntime, ctx, cwd, phase);
       }
       return;
     }
@@ -1980,150 +1872,110 @@ export default function registerExtension(
     return;
   }
 
-  pi.on("tool_call", handleTodoInterception);
-
-  pi.on("tool_result", async (event: unknown, ctx: unknown) => {
-    if (!event || typeof event !== "object") return;
-    const evt = event as Record<string, unknown>;
-    const toolName = (evt.tool || evt.name || evt.toolName) as string | undefined;
-    if (toolName !== "todo") return;
-    pruneTodoTransactions();
-    const callId = typeof evt.toolCallId === "string" ? evt.toolCallId : "";
-    if (!callId || state.committedCallTombstones.has(callId)) return;
-    const staged = state.stagedCalls.get(callId);
-    if (!staged) {
-      refreshTodoState(ctx);
-      return;
-    }
-    state.stagedCalls.delete(callId);
-    if (evt.isError) return;
-    const details = (evt.details ?? (evt.result as Record<string, unknown> | undefined)?.details) as Record<string, unknown> | undefined;
-    const resultInput = (evt.params || evt.args || evt.input) as Record<string, unknown> | undefined;
-    const resultOp = typeof details?.op === "string" ? details.op : "";
-    const resultPhases = details?.phases;
-    const phasesAreCanonical =
-      Array.isArray(resultPhases) &&
-      resultPhases.every((phase) =>
-        phase &&
-        typeof phase === "object" &&
-        typeof (phase as Record<string, unknown>).name === "string" &&
-        Array.isArray((phase as Record<string, unknown>).tasks) &&
-        (phase as Record<string, unknown>).tasks.every((task) =>
-          task &&
-          typeof task === "object" &&
-          typeof (task as Record<string, unknown>).content === "string" &&
-          ["pending", "in_progress", "completed", "abandoned", "blocked"].includes((task as Record<string, unknown>).status as string)
-        )
-      );
-    if (
-      !details ||
-      !phasesAreCanonical ||
-      !resultInput ||
-      canonicalTodoInputHash(resultInput) !== staged.inputHash ||
-      resultOp !== staged.op ||
-      staged.generation !== state.generation ||
-      staged.revision !== state.revision
-    ) {
-      state.uninitialized = true;
-      refreshTodoState(ctx);
-      return;
-    }
-    const committedPhases = cloneTodoPhases(resultPhases as CanonicalTodoPhase[]);
-    if (staged.op === "done") {
-      const completed = Array.isArray(details.completedTasks) ? details.completedTasks : undefined;
-      const actual = staged.affectedTasks.filter((taskName) =>
-        taskMatches(committedPhases, taskName).some((task) => task.status === "completed")
-      );
-      const completedNames = new Set(
-        (completed ?? [])
-          .map((task) => typeof task === "string" ? task : typeof task === "object" && task ? (task as Record<string, unknown>).content : undefined)
-          .filter((task): task is string => typeof task === "string")
-      );
-      if (
-        !completed ||
-        actual.length !== staged.affectedTasks.length ||
-        staged.affectedTasks.some((taskName) => !completedNames.has(taskName))
-      ) {
-        state.uninitialized = true;
-        refreshTodoState(ctx);
-        return;
-      }
-    }
-    const previousOpen = activeTasksFromPhases(state.phases);
-    state.committedCallTombstones.set(callId, {
-      inputHash: staged.inputHash,
-      op: staged.op,
-      committedAt: Date.now(),
-    });
-    while (state.committedCallTombstones.size > TODO_TOMBSTONE_LIMIT) {
-      const oldest = state.committedCallTombstones.keys().next().value;
-      if (oldest) state.committedCallTombstones.delete(oldest);
-      else break;
-    }
-    for (const taskName of new Set(staged.replacedTasks)) {
-      state.taskBaselines.delete(taskName);
-      state.pendingRemediations.delete(taskName);
-      state.consecutiveFailuresByTask.delete(taskName);
-      state.lastFailureReasonByTask.delete(taskName);
-    }
-    state.phases = committedPhases;
-    state.uninitialized = false;
-    const currentTasks = new Set(allTodoTasks(state.phases).map((task) => task.content));
-    for (const taskName of previousOpen) {
-      const task = taskMatches(state.phases, taskName)[0];
-      if (!task || task.status === "completed" || task.status === "abandoned") {
-        state.taskBaselines.delete(taskName);
-        state.pendingRemediations.delete(taskName);
-        state.consecutiveFailuresByTask.delete(taskName);
-        state.lastFailureReasonByTask.delete(taskName);
-      }
-    }
-    for (const task of allTodoTasks(state.phases)) {
-      if (task.status === "in_progress" && !state.taskBaselines.has(task.content)) {
-        state.taskBaselines.set(task.content, staged.workspaceSnapshot);
-      }
-    }
-    for (const taskName of [...state.taskBaselines.keys()]) {
-      if (!currentTasks.has(taskName)) state.taskBaselines.delete(taskName);
-    }
-    for (const taskName of [...state.pendingRemediations.keys()]) {
-      if (!currentTasks.has(taskName)) state.pendingRemediations.delete(taskName);
-    }
-    for (const taskName of [...state.consecutiveFailuresByTask.keys()]) {
-      if (!currentTasks.has(taskName)) state.consecutiveFailuresByTask.delete(taskName);
-    }
-    for (const taskName of [...state.lastFailureReasonByTask.keys()]) {
-      if (!currentTasks.has(taskName)) state.lastFailureReasonByTask.delete(taskName);
-    }
-    if (staged.op === "done") state.lastCheckpoint = staged.workspaceSnapshot;
-    state.revision++;
-    if (staged.pendingReports.length > 0) {
-      await safeSendMessage(
-        pi,
-        {
-          customType: "typesafe-task-report",
-          content: staged.pendingReports.map(formatTaskReport).join("\n\n"),
-          display: true,
+  let nativeReconciliation: Promise<void> | undefined;
+  async function reconcileNativeCommits(ctx: unknown): Promise<void> {
+    if (!state.stagedCalls.size && !pendingNativeObservations.size) return;
+    if (nativeReconciliation) return nativeReconciliation;
+    nativeReconciliation = (async () => {
+      const branch = readHostBranch(ctx);
+      if (!branch) return;
+      const generation = state.generation;
+      for (const [callId, staged] of state.stagedCalls) {
+        const results = branch.entries.filter(entry => entry.type === "message"
+          && entry.message?.role === "toolResult" && entry.message.toolName === "todo" && entry.message.toolCallId === callId);
+        if (!results.length) continue;
+        if (results.length !== 1) { state.stagedCalls.delete(callId); state.uninitialized = true; continue; }
+        const entry = results[0];
+        const message = entry.message!;
+        if (message.isError === true) { state.stagedCalls.delete(callId); continue; }
+        const input = originalTodoInput(branch, callId);
+        const normalized = normalizeNativeTodoInput(input);
+        if ((message.isError !== undefined && message.isError !== false) || !normalized.valid
+          || nativeTodoInputDigest(normalized.input) !== staged.inputHash) {
+          state.stagedCalls.delete(callId); state.uninitialized = true; continue;
         }
-      );
+        const details = message.details && typeof message.details === "object" ? message.details as Record<string, unknown> : undefined;
+        const transition = validateNativeTodoTransition(staged.preCommitPhases, input, details?.phases, details);
+        if (!transition.valid || transition.operation !== staged.op) { state.stagedCalls.delete(callId); state.uninitialized = true; continue; }
+        const accepted = (contracts?.projection(ctx) ?? projectHostHistory(branch, getProjectDir(ctx))).nativeSuccesses
+          .find(event => event.resultEntryId === entry.id && event.callId === callId && event.inputDigest === staged.inputHash && event.operation === staged.op);
+        if (!accepted) { state.stagedCalls.delete(callId); state.uninitialized = true; continue; }
+        const verified = !staged.verificationStages.length || Boolean(verificationRuntime
+          && await verificationRuntime.commit(ctx, staged.verificationStages, {
+            callId, input, before: staged.preCommitPhases, details, resultEntryId: entry.id,
+          }));
+        if (readHostBranch(ctx)?.sessionId !== branch.sessionId || state.stagedCalls.get(callId) !== staged) return;
+        state.stagedCalls.delete(callId);
+        state.committedCallTombstones.set(callId, { inputHash: staged.inputHash, op: staged.op, committedAt: Date.now() });
+        while (state.committedCallTombstones.size > TODO_TOMBSTONE_LIMIT) {
+          const oldest = state.committedCallTombstones.keys().next().value;
+          if (oldest) state.committedCallTombstones.delete(oldest); else break;
+        }
+        if (staged.op === "done" && staged.workspaceSnapshot && verified) state.lastCheckpoint = staged.workspaceSnapshot;
+        if (!verified) {
+          await safeSendMessage(pi, { customType: "typesafe-native-reconciliation", display: true,
+            content: "Core lifecycle completion was observed, but its exact verification commit could not be authenticated. Rejection debt is retained; inspect the bound recovery report. No semantic approval is claimed." });
+        } else if (staged.pendingReports.length) {
+          await safeSendMessage(pi, { customType: "typesafe-task-report", display: true,
+            content: staged.pendingReports.map(formatTaskReport).join("\n\n") });
+        }
+      }
+      for (const callId of pendingNativeObservations) if (branch.entries.some(entry => entry.type === "message"
+        && entry.message?.role === "toolResult" && entry.message.toolName === "todo" && entry.message.toolCallId === callId)) {
+        pendingNativeObservations.delete(callId);
+      }
+      refreshTodoState(ctx);
+    })();
+    try { await nativeReconciliation; } finally { nativeReconciliation = undefined; }
+  }
+
+  pi.on("tool_call", async (event, ctx) => {
+    try {
+      await reconcileNativeCommits(ctx);
+      pruneTodoTransactions();
+      return await handleTodoInterception(event, ctx);
+    } catch (error) {
+      return { block: true, reason: error instanceof NativeTodoGuardError || error instanceof PlanClosurePrerequisiteError
+        ? error.message : "UNAVAILABLE: the source/history guard could not authenticate this operation. Preserve the original obligation and inspect the bound recovery report." };
     }
   });
+
+  pi.on("tool_result", async (event, ctx) => {
+    if (!event || typeof event !== "object") return;
+    const value = event as Record<string, unknown>;
+    const callId = typeof value.toolCallId === "string" ? value.toolCallId : undefined;
+    if (!callId) return;
+    // A lifecycle transition invalidates every pre-persistence stage. A late result
+    // can become historical evidence after an actual view, never retroactively
+    // commit a stale native mutation.
+    pendingNativeObservations.add(callId);
+    const staged = state.stagedCalls.get(callId);
+    if (staged) staged.nativeResultObserved = true;
+    // This middleware event is not finality. Only actual settled branch rows commit.
+    await reconcileNativeCommits(ctx);
+  });
+  for (const event of ["message_end", "before_agent_start"]) pi.on(event, (_event, ctx) => reconcileNativeCommits(ctx));
 
   for (const lifecycleEvent of ["session_switch", "session_branch", "session_tree"]) {
     pi.on(lifecycleEvent, (_event: unknown, ctx: unknown) => {
       invalidateTodoState(ctx);
     });
   }
-  pi.on("session_shutdown", () => {
+  pi.on("session_shutdown", async (_event, ctx) => {
+    await reconcileNativeCommits(ctx);
+    lifecycleAuthority?.invalidate();
+    evidenceRuntime?.clear(ctx);
+    verificationRuntime?.invalidate(ctx, "session_shutdown");
     state.generation++;
     state.revision++;
-    state.stagedCalls.clear();
+    for (const [callId, stage] of state.stagedCalls) if (!stage.nativeResultObserved) state.stagedCalls.delete(callId);
   });
   for (const lifecycleEvent of ["turn_end", "agent_end"]) {
-    pi.on(lifecycleEvent, () => {
+    pi.on(lifecycleEvent, async (_event, ctx) => {
+      await reconcileNativeCommits(ctx);
       state.generation++;
       state.revision++;
-      state.stagedCalls.clear();
+      for (const [callId, stage] of state.stagedCalls) if (!stage.nativeResultObserved) state.stagedCalls.delete(callId);
     });
   }
 
@@ -2147,294 +1999,87 @@ export default function registerExtension(
     params: TypeSafeJudgeParams,
     apiKey: string,
     signal?: AbortSignal,
-    ctx?: unknown
+    ctx?: unknown,
+    purpose: JudgePurpose = "judge",
+    validatePrepared?: PreparedRequestValidator
   ): Promise<ExtensionToolResult> {
-    const resolverModule = loadResolverModule();
-    if (!resolverModule) return DISABLED_RESULT;
-
-    const projectDir = getProjectDir(ctx);
-    const { enabled } = resolverModule.resolveTypeSafeEnabled(projectDir, resolverOptions);
-    if (!enabled) return DISABLED_RESULT;
-
-    const apiClientModule = loadApiClientModule();
-    if (!apiClientModule) return DISABLED_RESULT;
-    const credentialStatus = apiClientModule.checkCredentialCooldown(apiKey);
-    if (credentialStatus) {
-      return credentialStatus.authFailed
-        ? DISABLED_RESULT
-        : shortError(`http_${credentialStatus.status}`);
-    }
-
-    const policyClientModule = loadPolicyClientModule(pi);
-    if (!policyClientModule) return shortError("policy_client_missing");
-
-    const sanitizedState = sanitizeStateForTypeSafe(params.state);
-    const normalizedQuestions = normalizeQuestionForTypeSafe(params.questions);
-    const validParams = {
-      state: sanitizedState,
-      questions: normalizedQuestions,
-    };
-
-    const validation = apiClientModule.validateInput(validParams);
-    if (!validation.ok) {
-      return { content: [{ type: "text", text: validation.message ?? "invalid_input" }] };
-    }
-
-    const redactModule = loadRedactModule();
-    if (!redactModule) return DISABLED_RESULT;
-
-    const outgoing = {
-      state: validParams.state,
-      questions: validParams.questions,
-      model: typeof params.model === "string" && params.model.trim() ? params.model.trim() : "jev-latest",
-    };
-    let prepared: typeof outgoing;
-    try {
-      prepared = redactModule.preparePayload(outgoing, { maxBytes: MAX_BODY_BYTES, apiKey }) as typeof outgoing;
-    } catch (err: unknown) {
-      if (err instanceof Error && err.message === "payload rejected: secret in key") {
-        return { content: [{ type: "text", text: "payload rejected: secret in key" }] };
-      }
-      return shortError("redact_failed");
-    }
-
-    const bodyStr = JSON.stringify(prepared);
-    if (Buffer.byteLength(bodyStr, "utf8") > MAX_BODY_BYTES) {
-      return shortError("payload_too_large");
-    }
-
-    try {
-      const outcome = await apiClientModule.requestWithRetry({
-        fetchImpl: globalThis.fetch,
-        apiKey,
-        body: bodyStr,
-        signal,
-      });
-      if (outcome.kind === "auth") {
-        await pi.sendMessage({
-          customType: "typesafe-auth-recovery",
-          content: "TypeSafe authentication failed (HTTP 401/403). TYPESAFE_API_KEY is invalid or revoked. Update the key in your environment to automatically restore service.",
-          display: true,
-        }).catch(() => {});
-        return shortError("unauthorized");
-      }
-      if (outcome.kind === "http_error") return shortError(`http_${outcome.status}`);
-      if (outcome.kind === "bad_response" || !outcome.data || typeof outcome.data !== "object" || !("answers" in outcome.data)) {
-        return shortError("bad_response");
-      }
-      const answers = apiClientModule.sanitizeAnswers(prepared.questions, outcome.data.answers);
-      if (!answers) return shortError("bad_response");
-
-      for (const key of Object.keys(answers)) {
-        // Validate against `prepared.questions` (the post-redaction,
-        // post-cap version actually SENT), not `params.questions` — a
-        // `choice` option that was redacted/capped before sending is judged
-        // by the upstream API against what it actually received.
-        const q = prepared.questions[key];
-        if (q && q.type === "choice") {
-          const ans = answers[key];
-          if (ans && typeof ans === "object" && "choice" in ans && typeof ans.choice === "string") {
-            const criteriaKeys = q.criteria && typeof q.criteria === "object" ? Object.keys(q.criteria) : [];
-            const isLatticeQuestion = criteriaKeys.length > 0 && criteriaKeys.every((opt) => HOST_POLICY.lattice.includes(opt));
-            if (isLatticeQuestion || HOST_POLICY.lattice.includes(ans.choice)) {
-              const result = policyClientModule.checkPolicy(HOST_POLICY.baseline, ans.choice, HOST_POLICY.lattice);
-              if (!result.ok) {
-                return { content: [{ type: "text", text: `lattice-violation: ${result.reason}` }] };
-              }
+    const resolver = loadResolverModule();
+    if (!resolver?.resolveTypeSafeEnabled(getProjectDir(ctx), resolverOptions).enabled) return DISABLED_RESULT;
+    const boundPolicy = toolPolicies?.[purpose];
+    if (!policyClient || !boundPolicy) return shortError("policy_client_missing");
+    if (!boundPolicy.ok) return shortError("policy_invalid");
+    const artifacts = deliverableArtifactsFromState(params.state);
+    const redactor = artifacts === undefined ? undefined : loadRedactModule();
+    if (artifacts !== undefined && !redactor) return shortError("redact_unavailable");
+    const outcome = await policyClient.judgeWithPolicy({
+      args: params,
+      purpose,
+      trustedPolicy: boundPolicy,
+      apiKey,
+      homeDir: resolverOptions.homeDir,
+      signal,
+      fetchImpl: globalThis.fetch,
+      ...(artifacts === undefined && !validatePrepared ? {} : {
+        async validatePrepared(prepared: TypeSafePreparedRequest) {
+          if (artifacts !== undefined) {
+            const body = JSON.parse(prepared.body) as { state?: unknown };
+            if (deliverableArtifactsFromState(body.state) !== redactor!.redactString(artifacts, { apiKey })) {
+              return { ok: false as const, code: "insufficient_deliverable_evidence" };
             }
           }
-        }
+          return validatePrepared ? await validatePrepared(prepared) : { ok: true as const };
+        },
+      }),
+    });
+    if (!outcome.ok) {
+      if (outcome.authError) {
+        await safeSendMessage(pi, {
+          customType: "typesafe-auth-recovery",
+          content: "TypeSafe authentication failed. Update TYPESAFE_API_KEY in the environment to restore service.",
+          display: true,
+        });
       }
-
       return {
-        content: [{ type: "text", text: JSON.stringify({ answers }) }],
-        details: { answers },
+        ...shortError(outcome.code),
+        isError: true,
+        details: { code: outcome.code, metadata: outcome.metadata },
       };
-    } catch (err: unknown) {
-      const isAbort =
-        err instanceof Error &&
-        (err.name === "TimeoutError" || err.name === "AbortError");
-      return shortError(isAbort ? "timeout" : "network_error");
     }
+    const invocation = invocations.current(ctx);
+    if (invocation && verificationRuntime) verificationRuntime.observeAvailability(ctx, { callId: invocation.callId, purpose, metadata: outcome.metadata });
+    return publicResult({ answers: outcome.answers, metadata: outcome.metadata });
   }
   function createExtensionJudgeClient(
     apiKey: string,
     signal?: AbortSignal,
-    ctx?: unknown
-  ): ExpertJudgeClient & PlanJudgeClient & GateJudgeClient {
+    ctx?: unknown,
+    expertPurpose: JudgePurpose = "expert",
+    validatePrepared?: PreparedRequestValidator
+  ): ExpertJudgeClient & PlanJudgeClient & GateJudgeClient & DebateJudgeClient {
+    async function request(params: TypeSafeJudgeParams, purpose: JudgePurpose): Promise<SemanticResponse> {
+      if (!apiKey) return { error: "api_key_missing" };
+      const response = await executeTypeSafe(params, apiKey, signal, ctx, purpose, validatePrepared);
+      const details = response.details && typeof response.details === "object"
+        ? response.details as { answers?: Record<string, unknown>; metadata?: SemanticTransportMetadata }
+        : undefined;
+      if (!response.isError && details?.answers && typeof details.answers === "object") {
+        return { answers: details.answers, metadata: details.metadata };
+      }
+      return { error: response.content[0]?.text || "judge_unavailable", metadata: details?.metadata };
+    }
     return {
-      async evaluateDebate(params: {
-        state: string;
-        questions: Record<string, TypeSafeQuestion>;
-        model?: string;
-      }) {
-        const targetModel = params.model || process.env.TYPESAFE_PREDICT_MODEL || "jev-latest";
-        if (!apiKey) {
-          return { error: "TYPESAFE_API_KEY environment variable is missing", modelUsed: targetModel };
-        }
-        const res = await executeTypeSafe(
-          {
-            state: params.state,
-            questions: params.questions,
-            model: targetModel,
-          },
-          apiKey,
-          signal,
-          ctx
-        );
-
-        if (res.details && typeof res.details === "object" && "answers" in res.details) {
-          return {
-            answers: res.details.answers as Record<string, { score: number; verdict?: string }>,
-            modelUsed: targetModel,
-          };
-        }
-
-        const text = res.content?.[0]?.text;
-        if (text && text.startsWith("{")) {
-          try {
-            const parsed = JSON.parse(text);
-            if (parsed && typeof parsed === "object" && "answers" in parsed) {
-              return {
-                answers: parsed.answers as Record<string, { score: number; verdict?: string }>,
-                modelUsed: targetModel,
-              };
-            }
-          } catch {
-            // Fall through to a fail-closed unavailable result.
-          }
-        }
-        return { error: text || "TypeSafe debate evaluation unavailable", modelUsed: targetModel };
-      },
-
-      async evaluate(params: {
-        state: string;
-        questions: Record<string, ExpertJudgeQuestion>;
-      }): Promise<ExpertJudgeResponse> {
-        const res = await executeTypeSafe(
-          {
-            state: params.state,
-            questions: params.questions as Record<string, TypeSafeQuestion>,
-          },
-          apiKey,
-          signal,
-          ctx
-        );
-
-        if (res.details && typeof res.details === "object" && "answers" in res.details) {
-          const rawAnswers = res.details.answers;
-          return { answers: rawAnswers as ExpertJudgeResponse["answers"] };
-        }
-
-        try {
-          const text = res.content?.[0]?.text;
-          if (text && text.startsWith("{")) {
-            const parsed = JSON.parse(text) as { answers?: ExpertJudgeResponse["answers"] };
-            if (parsed && typeof parsed === "object" && parsed.answers) {
-              return { answers: parsed.answers };
-            }
-          }
-          return { error: text || "TypeSafe evaluation failed" };
-        } catch {
-          return { error: res.content?.[0]?.text || "TypeSafe evaluation failed" };
-        }
-      },
-
-      async evaluatePlan(params: {
-        state: string;
-        questions: Record<string, PlanQuestion>;
-      }) {
-        const res = await executeTypeSafe(
-          {
-            state: params.state,
-            questions: params.questions as Record<string, TypeSafeQuestion>,
-          },
-          apiKey,
-          signal,
-          ctx
-        );
-
-        if (res.details && typeof res.details === "object" && "answers" in res.details) {
-          const rawAnswers = res.details.answers;
-          return {
-            answers: rawAnswers as {
-              scope_mode?: { choice: string };
-              algorithm_depth?: { score: number };
-              task_actionability?: { noul: number };
-              claude_isolation_adherence?: { noul: number };
-            },
-          };
-        }
-
-        try {
-          const text = res.content?.[0]?.text;
-          if (text && text.startsWith("{")) {
-            const parsed = JSON.parse(text) as {
-              answers?: {
-                scope_mode?: { choice: string };
-                algorithm_depth?: { score: number };
-                task_actionability?: { noul: number };
-                claude_isolation_adherence?: { noul: number };
-              };
-            };
-            if (parsed && typeof parsed === "object" && parsed.answers) {
-              return { answers: parsed.answers };
-            }
-          }
-          return { error: text || "TypeSafe evaluation failed" };
-        } catch {
-          return { error: res.content?.[0]?.text || "TypeSafe evaluation failed" };
-        }
-      },
-
-      async evaluateGate(params: {
-        state: string;
-        questions: Record<string, GateQuestion>;
-      }) {
-        const res = await executeTypeSafe(
-          {
-            state: params.state,
-            questions: params.questions as Record<string, TypeSafeQuestion>,
-          },
-          apiKey,
-          signal,
-          ctx
-        );
-
-        if (res.details && typeof res.details === "object" && "answers" in res.details) {
-          const rawAnswers = res.details.answers;
-          return {
-            answers: rawAnswers as {
-              meets_criteria?: { noul: number };
-              plan_drift?: { choice: string };
-              claude_account_untouched?: { noul: number };
-            },
-          };
-        }
-
-        try {
-          const text = res.content?.[0]?.text;
-          if (text && text.startsWith("{")) {
-            const parsed = JSON.parse(text) as {
-              answers?: {
-                meets_criteria?: { noul: number };
-                plan_drift?: { choice: string };
-                claude_account_untouched?: { noul: number };
-              };
-            };
-            if (parsed && typeof parsed === "object" && parsed.answers) {
-              return { answers: parsed.answers };
-            }
-          }
-          return { error: text || "TypeSafe evaluation failed" };
-        } catch {
-          return { error: res.content?.[0]?.text || "TypeSafe evaluation failed" };
-        }
-      },
+      evaluate: (params) => request(params, expertPurpose),
+      evaluatePlan: (params) => request(params, "plan"),
+      evaluateGate: (params) => request(params, "advisory"),
+      evaluateDebate: (params) => request({
+        ...params,
+        model: params.model || resolverOptions.env.TYPESAFE_PREDICT_MODEL?.trim()
+          || resolverOptions.env.TYPESAFE_DEBATE_MODEL?.trim() || "jev-latest",
+      }, "debate"),
     };
   }
 
-  pi.registerTool({
+  registerTool({
     name: "typesafe_judge",
     label: "TypeSafe Judge",
     description:
@@ -2457,13 +2102,13 @@ export default function registerExtension(
       _onUpdate?: (result: ExtensionToolResult) => void,
       ctx?: unknown
     ): Promise<ExtensionToolResult> {
-      const apiKey = process.env.TYPESAFE_API_KEY?.trim();
+      const apiKey = resolverOptions.env.TYPESAFE_API_KEY?.trim();
       if (!apiKey) return DISABLED_RESULT;
       return executeTypeSafe(params, apiKey, signal, ctx);
     },
   });
 
-  pi.registerTool({
+  registerTool({
     name: "typesafe_rerank",
     label: "TypeSafe Rerank",
     description: "Rank multiple candidate strings or code snippets against a query. Returns candidates ordered by relevance score.",
@@ -2478,8 +2123,11 @@ export default function registerExtension(
       _onUpdate?: (result: ExtensionToolResult) => void,
       ctx?: unknown
     ): Promise<ExtensionToolResult> {
-      const apiKey = process.env.TYPESAFE_API_KEY?.trim();
+      const apiKey = resolverOptions.env.TYPESAFE_API_KEY?.trim();
       if (!apiKey) return DISABLED_RESULT;
+      const policy = toolPolicies?.rerank;
+      if (!policy?.ok) return shortError("policy_invalid");
+      if (!Array.isArray(params.candidates) || !params.candidates.length || params.candidates.length > policy.maxQuestionsPerRequest) return shortError("question_limit_exceeded");
 
       const questions: Record<string, TypeSafeQuestion> = {};
       for (let i = 0; i < params.candidates.length; i++) {
@@ -2495,29 +2143,22 @@ export default function registerExtension(
       }
 
       const state = { query: params.query, candidates: params.candidates };
-      const res = await executeTypeSafe({ state, questions }, apiKey, signal, ctx);
-      
-      if (res.content[0].text.startsWith("TypeSafe error:") || res.content[0].text === "TypeSafe disabled" || res.content[0].text.startsWith("lattice-violation:")) {
-        return res;
+      const res = await executeTypeSafe({ state, questions }, apiKey, signal, ctx, "rerank");
+      if (res.isError || !res.details || typeof res.details !== "object") return res;
+      const details = res.details as { answers?: Record<string, unknown>; metadata?: unknown };
+      if (!details.answers) return shortError("bad_response");
+      const ranked: Array<{ candidate: string; score: number }> = [];
+      for (let index = 0; index < params.candidates.length; index++) {
+        const score = scoreValue(details.answers[`candidate_${index}`], 2);
+        if (score === undefined) return shortError("bad_response");
+        ranked.push({ candidate: params.candidates[index], score });
       }
-      
-      try {
-        const parsed = JSON.parse(res.content[0].text);
-        const answers = parsed.answers;
-        const scoredCandidates = params.candidates.map((c, i) => {
-          const ans = answers[`candidate_${i}`];
-          const score = (ans && typeof ans === "object" && "score" in ans && typeof ans.score === "number") ? ans.score : 0;
-          return { candidate: c, score };
-        });
-        scoredCandidates.sort((a, b) => b.score - a.score);
-        return { content: [{ type: "text", text: JSON.stringify({ ranked: scoredCandidates }) }] };
-      } catch (e) {
-        return shortError("bad_response");
-      }
+      ranked.sort((left, right) => right.score - left.score);
+      return publicResult({ ranked, answers: details.answers, metadata: details.metadata });
     }
   });
 
-  pi.registerTool({
+  registerTool({
     name: "typesafe_evaluate_multi",
     label: "TypeSafe Multi-Label Evaluation",
     description: "Evaluate the exact same state against multiple dimension labels simultaneously.",
@@ -2532,10 +2173,14 @@ export default function registerExtension(
       _onUpdate?: (result: ExtensionToolResult) => void,
       ctx?: unknown
     ): Promise<ExtensionToolResult> {
-      const apiKey = process.env.TYPESAFE_API_KEY?.trim();
+      const apiKey = resolverOptions.env.TYPESAFE_API_KEY?.trim();
       if (!apiKey) return DISABLED_RESULT;
+      const policy = toolPolicies?.multi;
+      if (!policy?.ok) return shortError("policy_invalid");
+      if (!Array.isArray(params.dimensions) || !params.dimensions.length || params.dimensions.length > policy.maxQuestionsPerRequest) return shortError("question_limit_exceeded");
+      if (new Set(params.dimensions).size !== params.dimensions.length) return shortError("duplicate_question_id");
 
-      const questions: Record<string, TypeSafeQuestion> = {};
+      const questions: Record<string, TypeSafeQuestion> = Object.create(null);
       for (const dim of params.dimensions) {
         questions[dim] = {
           type: "noul",
@@ -2546,11 +2191,11 @@ export default function registerExtension(
           }
         };
       }
-      return executeTypeSafe({ state: params.state, questions }, apiKey, signal, ctx);
+      return executeTypeSafe({ state: params.state, questions }, apiKey, signal, ctx, "multi");
     }
   });
 
-  pi.registerTool({
+  registerTool({
     name: "typesafe_elevate_plan",
     label: "TypeSafe Plan Elevation",
     description:
@@ -2568,85 +2213,52 @@ export default function registerExtension(
       _onUpdate?: (result: ExtensionToolResult) => void,
       ctx?: unknown
     ): Promise<ExtensionToolResult> {
-      const apiKey = process.env.TYPESAFE_API_KEY?.trim() || "";
+      const apiKey = resolverOptions.env.TYPESAFE_API_KEY?.trim() ?? "";
       const client = createExtensionJudgeClient(apiKey, signal, ctx);
-
-      const debate = await runMultiPersonaDebate(params.planContent, client);
-      if (!debate.approved) {
-        const rejectionResult = {
-          approved: false,
-          claudeIsolationSafe: true,
-          reasons: [
-            "Multi-persona pre-analysis debate rejected plan:",
-            ...debate.reasons,
-          ],
-          debate,
-          feedback: `Plan rejected by Multi-Persona Debate (fast-model tier):\n- ${debate.reasons.join("\n- ")}`,
-        };
-        return {
-          content: [{ type: "text", text: JSON.stringify(rejectionResult, null, 2) }],
-          details: rejectionResult,
-        };
-      }
-
       const resolvedUserPrompt = params.userPrompt || collectConversationContext(ctx).userRequest || undefined;
-      const result = await evaluatePlanDraft({ ...params, userPrompt: resolvedUserPrompt }, client);
-      const combined = { ...result, debate };
-      return {
-        content: [{ type: "text", text: JSON.stringify(combined, null, 2) }],
-        details: combined,
+      const result = await evaluatePlanDraft({ ...params, userPrompt: resolvedUserPrompt }, client, { approvalPolicy });
+      const debate = result.approved ? await runMultiPersonaDebate(params.planContent, client) : {
+        approved: false, status: "unavailable" as const,
+        reasons: ["Independent multi-persona review was not dispatched because the plan evaluation did not approve."],
       };
+      return publicResult({ ...result, approved: result.approved && debate.approved, status: result.approved ? debate.status : result.status,
+        reasons: [...result.reasons, ...debate.reasons], debate, advisoryOnly: true });
     },
   });
 
-  pi.registerTool({
-    name: "typesafe_verify_completion",
-    label: "TypeSafe Task Completion Dual Gate",
-    description:
-      "Advisory pre-flight verification tool. Evaluates task completion via Gate 1 deterministic local verification and Gate 2 TypeSafe System One semantic validation without mutating task state. ADVISORY ONLY: Agent retries MUST be capped at <= 2 attempts to avoid loop thrashing.",
-    parameters: z.object({
-      taskId: z.string(),
-      planPath: z.string().optional(),
-      testCommand: z.string().optional(),
-      timeoutMs: z.number().optional(),
-    }),
-    async execute(
-      _toolCallId: string,
-      params: { taskId: string; planPath?: string; testCommand?: string; timeoutMs?: number },
-      signal?: AbortSignal,
-      _onUpdate?: (result: ExtensionToolResult) => void,
-      ctx?: unknown
-    ): Promise<ExtensionToolResult> {
-      const cwd = getProjectDir(ctx);
-      const apiKey = process.env.TYPESAFE_API_KEY?.trim() || "";
-      const client = createExtensionJudgeClient(apiKey, signal, ctx);
-      const result = await verifyTaskCompletion({ ...params, cwd }, client);
-      return {
-        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-        details: result,
-      };
+  registerTool({
+    name: "typesafe_verify_completion", label: "Advisory bound-evidence dual gate", approval: "read",
+    description: "Inspect current already-collected task evidence using advisory deterministic and semantic gates. Executes no caller command and grants no native authority. Use typesafe_review_task plus an actual independent Advisor for native staging.",
+    parameters: z.object({ taskId: z.string(), phase: z.string().optional() }),
+    async execute(_callId, params: { taskId: string; phase?: string }, signal, _onUpdate, ctx) {
+      const record = evidenceRuntime?.get(ctx, { task: params.taskId, phase: params.phase });
+      if (!record || !evidenceRuntime || !await evidenceRuntime.isCurrent(ctx, record)) return publicResult({
+        status: "EVIDENCE_REQUIRED", advisoryOnly: true, reasons: ["Collect current approved contract/source/verification evidence first."] });
+      const nativePurposeClient = createExtensionJudgeClient(resolverOptions.env.TYPESAFE_API_KEY?.trim() ?? "", signal, ctx, "native_done");
+      const client: GateJudgeClient = { evaluateGate: nativePurposeClient.evaluate };
+      return publicResult({ ...await verifyTaskCompletion({
+        cwd: getProjectDir(ctx), taskId: record.contract.target.content, contract: record.contract,
+        baseline: record.baseline, afterSnapshot: record.snapshot, verificationReceipt: record.verificationReceipt,
+        authorizedMutationReceipts: record.evidence.authorizedMutationReceipts, signal,
+      }, client, { approvalPolicy }), advisoryOnly: true });
     },
   });
-  const criteriaBase = z.array(z.string());
-  const criteriaSchema =
-    criteriaBase && typeof criteriaBase === "object" && "optional" in criteriaBase && typeof criteriaBase.optional === "function"
-      ? criteriaBase.optional()
-      : criteriaBase;
+  const criteriaSchema = z.array(z.string()).optional();
 
-  pi.registerTool({
+  registerTool({
     name: "typesafe_expert_review",
     label: "TypeSafe Expert Review",
     description:
-      "Invokes TypeSafe System One and Bicameral Advisor expert evaluation: scope_arbiter (scope adherence and reduction prevention), drift_guard (architectural deviation and creep detection), risk_security_triage (technical risk and trade-off rating), or advisor / ck:advisor (structured technical decision verdict, option ranking, and recommendation).",
+      "Advisory TypeSafe assessments for scope adherence, drift, and technical risk. These are not independent native Advisor reasoning and cannot authorize task completion.",
     parameters: z.object({
-      role: z.enum(["scope_arbiter", "drift_guard", "risk_security_triage", "advisor", "ck:advisor"]),
+      role: z.enum(["scope_arbiter", "drift_guard", "risk_security_triage"]),
       context: z.union([z.string(), z.record(z.unknown())]),
       criteria: criteriaSchema,
     }),
     async execute(
       _toolCallId: string,
       params: {
-        role: "scope_arbiter" | "drift_guard" | "risk_security_triage" | "advisor" | "ck:advisor";
+        role: "scope_arbiter" | "drift_guard" | "risk_security_triage";
         context: string | Record<string, unknown>;
         criteria?: string[];
       },
@@ -2654,126 +2266,37 @@ export default function registerExtension(
       _onUpdate?: (result: ExtensionToolResult) => void,
       ctx?: unknown
     ): Promise<ExtensionToolResult> {
-      const apiKey = process.env.TYPESAFE_API_KEY?.trim() || "";
-      const client = apiKey ? createExtensionJudgeClient(apiKey, signal, ctx) : undefined;
-      let result: unknown;
-      if (params.role === "scope_arbiter") {
-        const planStr = typeof params.context === "string" ? params.context : JSON.stringify(params.context);
-        result = await evaluateScopeArbiter(planStr, params.criteria?.join("\n") || "Implement plan", client);
-      } else if (params.role === "drift_guard") {
-        const diffStr = typeof params.context === "string" ? params.context : JSON.stringify(params.context);
-        result = await evaluateDriftGuard(diffStr, params.criteria || [], client);
-      } else if (params.role === "advisor" || params.role === "ck:advisor") {
-        const convo = collectConversationContext(ctx);
-        const ctxObj =
-          params.context && typeof params.context === "object"
-            ? (params.context as Record<string, unknown>)
-            : undefined;
-        const questionStr =
-          (typeof ctxObj?.question === "string" ? ctxObj.question : undefined) ||
-          (typeof ctxObj?.task === "string" ? ctxObj.task : undefined) ||
-          (typeof params.context === "string" ? params.context : JSON.stringify(params.context));
-        const optionsList = Array.isArray(ctxObj?.options)
-          ? (ctxObj.options as Array<string | AdvisorOptionCandidate>)
-          : params.criteria;
-        const decisionKind =
-          typeof ctxObj?.decision === "string"
-            ? (ctxObj.decision as AdvisorDecisionKind)
-            : "general";
-        const constraints =
-          (Array.isArray(ctxObj?.constraints) || typeof ctxObj?.constraints === "string"
-            ? (ctxObj.constraints as string | string[])
-            : undefined) || params.criteria;
-        result = await runBicameralDecisionCheck(
-          {
-            decision: decisionKind,
-            question: questionStr,
-            options: optionsList,
-            recommendedIndex:
-              typeof ctxObj?.recommended === "number" ? ctxObj.recommended : undefined,
-            constraints,
-            userRequest:
-              (typeof ctxObj?.userRequest === "string" ? ctxObj.userRequest : undefined) ||
-              convo.userRequest,
-            agentWorkLog:
-              (typeof ctxObj?.agentWorkLog === "string" ? ctxObj.agentWorkLog : undefined) ||
-              convo.agentWorkLog,
-            context: params.context,
-          },
-          client
-        );
-      } else {
-        result = await evaluateRiskSecurityTriage(params.context, client);
+      const apiKey = resolverOptions.env.TYPESAFE_API_KEY?.trim() ?? "";
+      if (!apiKey) return publicResult({ approved: false, status: "unavailable", advisoryOnly: true,
+        reasons: ["Independent TypeSafe expert review is unavailable; no injected credential was supplied, so no provider request was dispatched."] });
+      const client = createExtensionJudgeClient(apiKey, signal, ctx);
+      if (!["scope_arbiter", "drift_guard", "risk_security_triage"].includes(params.role)) return shortError("invalid_role");
+      try {
+        let result: unknown;
+        if (params.role === "scope_arbiter") {
+          const planStr = typeof params.context === "string" ? params.context : JSON.stringify(params.context);
+          result = await evaluateScopeArbiter(planStr, params.criteria?.join("\n") || "Implement plan", client);
+        } else if (params.role === "drift_guard") {
+          const diffStr = typeof params.context === "string" ? params.context : JSON.stringify(params.context);
+          result = await evaluateDriftGuard(diffStr, params.criteria || [], client);
+        } else {
+          result = await evaluateRiskSecurityTriage(params.context, client);
+        }
+        return publicResult(result);
+      } catch {
+        return publicResult({ approved: false, status: "unavailable", advisoryOnly: true,
+          reasons: ["Independent TypeSafe expert review is unavailable; no approval or native authority was produced."] });
       }
-      return {
-        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-        details: result,
-      };
     },
   });
 
-  const optionalStringSchema =
-    (() => {
-      const s = z.string();
-      return s && typeof s === "object" && "optional" in s && typeof s.optional === "function"
-        ? s.optional()
-        : s;
-    })();
-
-  pi.registerTool({
-    name: "typesafe_advisor",
-    label: "TypeSafe & ck:advisor Decision Engine",
-    description:
-      "Consults the Bicameral Advisor (ck:advisor + TypeSafe JEV) when the agent needs a decision on architecture, approach, plan review, phase risk, or stuck tasks. Always returns a structured Verdict (proceed | revise | block), Recommendation, Ranked options, Findings, and Confidence.",
-    parameters: z.object({
-      decision: optionalStringSchema,
-      question: z.string(),
-      options: criteriaSchema,
-      constraints: criteriaSchema,
-      context: z.union([z.string(), z.record(z.unknown())]),
-    }),
-    async execute(
-      _toolCallId: string,
-      params: {
-        decision?: string;
-        question: string;
-        options?: string[];
-        constraints?: string[];
-        context?: string | Record<string, unknown>;
-      },
-      signal?: AbortSignal,
-      _onUpdate?: (result: ExtensionToolResult) => void,
-      ctx?: unknown
-    ): Promise<ExtensionToolResult> {
-      const apiKey = process.env.TYPESAFE_API_KEY?.trim() || "";
-      const client = apiKey ? createExtensionJudgeClient(apiKey, signal, ctx) : undefined;
-      const convo = collectConversationContext(ctx);
-      const ctxObj =
-        params.context && typeof params.context === "object"
-          ? (params.context as Record<string, unknown>)
-          : undefined;
-      const optionsList =
-        params.options ||
-        (Array.isArray(ctxObj?.options)
-          ? (ctxObj.options as Array<string | AdvisorOptionCandidate>)
-          : undefined);
-      const result = await runBicameralDecisionCheck(
-        {
-          decision: (params.decision as AdvisorDecisionKind) || "general",
-          question: params.question,
-          options: optionsList,
-          constraints: params.constraints,
-          userRequest: convo.userRequest,
-          agentWorkLog: convo.agentWorkLog,
-          context: params.context,
-        },
-        client
-      );
-      return {
-        content: [{ type: "text", text: result.report + "\n\n" + JSON.stringify(result, null, 2) }],
-        details: result,
-      };
-    },
-  });
+  if (!advisorRegistration) {
+    for (const name of ["typesafe_advisor", "typesafe_prepare_advisor"]) registerTool({
+      name, label: "Independent native Advisor unavailable",
+      description: "Requires the real supported native task/schema/hooks/read-only/provider adapter. A local heuristic or fabricated receipt cannot substitute for this missing host prerequisite.",
+      parameters: z.object({ question: z.string().optional(), task: z.string().optional(), phase: z.string().optional() }),
+      async execute() { return publicResult({ status: "UNAVAILABLE", reasons: ["Supported actual native Advisor host API is required."] }); },
+    });
+  }
   return state;
 }

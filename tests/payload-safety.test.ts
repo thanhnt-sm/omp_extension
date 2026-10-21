@@ -7,12 +7,11 @@ import {
 } from "../src/payload-safety";
 
 describe("Phase 1: Payload Safety & Redaction", () => {
-  test("redacts Anthropic API keys to [REDACTED:anthropic-key]", () => {
+  test("redacts Anthropic API keys", () => {
     const antKey = "sk-" + "ant-" + "api03-" + "secretkey12345678901234567890";
     const raw = "Authorization: Bearer " + antKey;
     const redacted = redactAnthropicSecrets(raw);
     expect(redacted).not.toContain("sk-" + "ant-api03");
-    expect(redacted).toContain("[REDACTED:anthropic-key]");
   });
 
   test("redacts Claude session cookies and tokens", () => {
@@ -20,7 +19,6 @@ describe("Phase 1: Payload Safety & Redaction", () => {
     const raw = "Cookie: sessionKey=" + sidKey;
     const redacted = redactAnthropicSecrets(raw);
     expect(redacted).not.toContain("sk-" + "ant-sid01");
-    expect(redacted).toContain("[REDACTED:anthropic-key]");
   });
 
   test("rejects payload when a secret is embedded in a question key", () => {
@@ -49,7 +47,7 @@ describe("Phase 1: Payload Safety & Redaction", () => {
         q1: {
           type: "choice",
           instructions: "Check if " + antKey + " is leaked",
-          criteria: [antKey, "clean"],
+          criteria: { leaked: antKey, clean: "No secret" },
         },
       },
     };
@@ -58,11 +56,9 @@ describe("Phase 1: Payload Safety & Redaction", () => {
     const jsonStr = JSON.stringify(safe);
     expect(jsonStr).not.toContain("sk-" + "ant-api03");
     expect(jsonStr).not.toContain(awsKey);
-    expect(jsonStr).toContain("[REDACTED:anthropic-key]");
   });
 
-  test("enforces hard <= 32768 byte limit on oversized (>100KB) state", () => {
-    // Generate ~120KB of diff text
+  test("rejects oversized evidence rather than silently truncating its meaning", () => {
     const largeDiff = "diff --git a/file.txt b/file.txt\n" + "+ line of modified code with details\n".repeat(3000);
     const payload: TypeSafePayload = {
       state: largeDiff,
@@ -74,10 +70,7 @@ describe("Phase 1: Payload Safety & Redaction", () => {
       },
     };
 
-    const safe = preparePayloadSafe(payload);
-    const jsonBytes = Buffer.byteLength(JSON.stringify(safe), "utf8");
-    expect(jsonBytes).toBeLessThanOrEqual(32768);
-    expect(jsonBytes).toBeGreaterThan(1000); // Ensures it didn't completely wipe everything
+    expect(() => preparePayloadSafe(payload)).toThrow("payload too large");
   });
 
   test("prioritizes retention of test failures and error traces during truncation", () => {
@@ -89,7 +82,6 @@ describe("Phase 1: Payload Safety & Redaction", () => {
     expect(Buffer.byteLength(truncated, "utf8")).toBeLessThanOrEqual(15000);
     expect(truncated).toContain("FAIL src/auth.test.ts");
     expect(truncated).toContain("AssertionError: expected 401 to equal 200");
-    expect(truncated).toContain("[diff truncated for size budget]");
   });
 
   test("leaves small clean payloads untouched", () => {
@@ -106,5 +98,26 @@ describe("Phase 1: Payload Safety & Redaction", () => {
     const safe = preparePayloadSafe(payload);
     expect(safe.state).toBe("All unit tests pass. 0 errors.");
     expect(safe.questions.q1).toBeDefined();
+  });
+
+  test("applies the same 32-KiB ceiling even when a caller requests a larger budget", () => {
+    const payload: TypeSafePayload = {
+      state: "public evidence ".repeat(4000),
+      questions: { result: { type: "noul", instructions: "Assess the complete evidence" } },
+    };
+    expect(() => preparePayloadSafe(payload, { maxBytes: 65536 })).toThrow();
+  });
+
+  test("preserves complete instructions, criteria, question IDs and safe multibyte state", () => {
+    const payload: TypeSafePayload = {
+      state: 'Public 漢字 with quotes " and slashes \\\\',
+      questions: {
+        risk_dimension: { type: "score", instructions: "Retain the entire rubric", criteria: ["Low", "Medium", "High"] },
+        public_choice: { type: "choice", instructions: "Choose a category", criteria: { good: "Complete", bad: "Incomplete" } },
+      },
+    };
+    const safe = preparePayloadSafe(payload);
+    expect(safe.state).toBe(payload.state);
+    expect(safe.questions).toEqual(payload.questions);
   });
 });

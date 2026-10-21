@@ -1,0 +1,1 @@
+Synthetic deterministic fixture; no provider call, human approval, live spend, or native authority.

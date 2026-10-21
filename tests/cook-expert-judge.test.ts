@@ -1,4 +1,8 @@
+import { checkDeterministicPreconditions } from "../src/verification-gate";
+import type { TaskEvidenceResult } from "../src/evidence-collector";
+import type { TaskContract } from "../src/types/verification";
 import { describe, expect, test } from "bun:test";
+import { createSemanticApprovalPolicy } from "../src/semantic-approval-policy";
 import {
   runTaskMicroCheck,
   runPhaseMacroCheck,
@@ -8,7 +12,6 @@ import {
   generateVerificationScorecard,
   runDropJustificationCheck,
   DROP_REJECT_FLOOR,
-  resolveAutoApprovalThreshold,
   type ExpertJudgeClient,
   type MicroCheckEvidence,
   type MacroCheckContext,
@@ -19,6 +22,25 @@ import {
 
 describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
   describe("Cadence 1: runTaskMicroCheck (Local Deterministic Gate 1)", () => {
+    test.each([
+      ["documentation mentions only", " M docs/recovery.md", "diff --git a/docs/recovery.md b/docs/recovery.md\n--- a/docs/recovery.md\n+++ b/docs/recovery.md\n@@ -0,0 +1 @@\n+Read .claude/hooks and .claude.json; do not edit them.", ["docs/recovery.md"], true],
+      ["similar basename", " M docs/.claude-guide.md", "", ["docs/.claude-guide.md"], true],
+      ["protected deletion", " D .claude.json", "diff --git a/.claude.json b/.claude.json\n--- a/.claude.json\n+++ /dev/null", [], false],
+      ["rename out", 'R  ".claude/private file.json" -> "docs/private file.json"', 'diff --git a/.claude/private file.json b/docs/private file.json\nrename from .claude/private file.json\nrename to docs/private file.json', ["docs/private file.json"], false],
+      ["rename in", "R  docs/config.json -> .claude/config.json", "", [], false],
+      ["Windows paths", "", "", ["nested\\.claude\\settings.json"], false],
+      ["quoted diff path", "", 'diff --git "a/.claude/private file.json" "b/.claude/private file.json"', [], false],
+      ["metadata contradicts headers", "", "diff --git a/.claude.json b/.claude.json", ["docs/safe.md"], false],
+    ])("uses real paths in both gates: %s", async (_name, gitStatus, gitDiff, changedFiles, safe) => {
+      const evidence: TaskEvidenceResult = {
+        gitStatus: gitStatus as string, gitDiff: gitDiff as string,
+        changedFiles: changedFiles as string[], testExitCode: 0, testOutput: "verified",
+        cleanWorkingTree: false, criteria: [], criteriaSource: "none",
+        diffScope: "task-baseline", timestamp: new Date().toISOString(),
+      };
+      expect((await runTaskMicroCheck(evidence)).claudeSafe).toBe(safe as boolean);
+      expect(checkDeterministicPreconditions(evidence).claudeSafe).toBe(safe as boolean);
+    });
     test("passes fast on clean test run with zero tokens", async () => {
       const evidence: MicroCheckEvidence = {
         gitStatus: "M src/feature.ts",
@@ -119,6 +141,7 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
     test.each([NaN, Infinity, -Infinity, -0.01, 1.01, undefined, null, "0.95"])("fails closed for invalid macro probability %s", async (score) => {
       const result = await runPhaseMacroCheck({ phaseTitle: "Verify", planRequirements: [], diffSummary: "", unifiedDiff: "", testSummary: "PASS" }, {
         evaluate: async () => ({ answers: {
+          deliverables_verdict: { choice: "APPROVE" },
           meets_criteria: { noul: score as number },
           architectural_drift: { choice: "no_drift" },
           scope_mode: { choice: "HOLD" },
@@ -126,7 +149,7 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
       });
       expect(result.approved).toBe(false);
       expect(result.error).toBe("unavailable");
-      expect(result.escalateToUser).toBe(true);
+      expect(result.outcome?.status).toBe("UNAVAILABLE");
       expect(result.meetsCriteriaNoul).toBeUndefined();
     });
 
@@ -136,13 +159,14 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
       });
       expect(result.approved).toBe(false);
       expect(result.error).toBe("unavailable");
-      expect(result.escalateToUser).toBe(true);
+      expect(result.outcome?.status).toBe("UNAVAILABLE");
       expect(result.reasons.join(" ")).not.toContain("private transport detail");
     });
-    test("approves phase when criteria met (>=0.80) and no drift", async () => {
+    test("approves phase when explicit verdict and actual probability satisfy existing policy with no drift", async () => {
       const mockClient: ExpertJudgeClient = {
         evaluate: async () => ({
           answers: {
+            deliverables_verdict: { choice: "APPROVE" },
             meets_criteria: { noul: 0.95 },
             architectural_drift: { choice: "no_drift" },
             scope_mode: { choice: "HOLD" },
@@ -176,6 +200,7 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
           evaluatedQuestions = questions;
           return {
             answers: {
+              deliverables_verdict: { choice: "APPROVE" },
               meets_criteria: { noul: 0.90 },
               architectural_drift: { choice: "no_drift" },
               scope_mode: { choice: "HOLD" },
@@ -209,6 +234,7 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
           evaluatedQuestions = questions;
           return {
             answers: {
+              deliverables_verdict: { choice: "APPROVE" },
               meets_criteria: { noul: 0.90 },
               architectural_drift: { choice: "no_drift" },
               scope_mode: { choice: "HOLD" },
@@ -236,6 +262,7 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
       const mockClient: ExpertJudgeClient = {
         evaluate: async () => ({
           answers: {
+            deliverables_verdict: { choice: "APPROVE" },
             meets_criteria: { noul: 0.42 },
             architectural_drift: { choice: "no_drift" },
             scope_mode: { choice: "HOLD" },
@@ -261,6 +288,7 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
       const mockClient: ExpertJudgeClient = {
         evaluate: async () => ({
           answers: {
+            deliverables_verdict: { choice: "APPROVE" },
             meets_criteria: { noul: 0.85 },
             architectural_drift: { choice: "unapproved_deviation" },
             scope_mode: { choice: "HOLD" },
@@ -366,7 +394,7 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
   });
 
   describe("Scorecard Generator & Escalation", () => {
-    test("generates formatted scorecard matching review-cycle.md template without 0.80 wall", () => {
+    test("probability-only scorecard does not manufacture a categorical approval", () => {
       const scorecard = generateVerificationScorecard({
         meetsCriteriaNoul: 0.95,
         driftChoice: "no_drift",
@@ -375,17 +403,19 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
       });
 
       expect(scorecard).toContain("TypeSafe System One Verification Scorecard");
-      expect(scorecard).toContain("Meets Plan Deliverables: P = 0.95 (VERDICT: APPROVED)");
+      expect(scorecard).toContain("Meets Plan Deliverables: P = 0.95 (categorical verdict unavailable)");
+      expect(scorecard).not.toContain("VERDICT: APPROVED");
       expect(scorecard).not.toContain("0.80");
       expect(scorecard).toContain("Architectural Drift:     None (Strict adherence)");
       expect(scorecard).toContain("Scope Mode:              HOLD (All requirements covered)");
-      expect(scorecard).toContain("Expert Evaluator:        Approved (Confidence 0.92)");
+      expect(scorecard).toContain("Choice Confidence:       0.92 (not approval authority)");
     });
 
     test("bounded revision loop escalates to user on 3rd failed attempt", async () => {
       const mockClient: ExpertJudgeClient = {
         evaluate: async () => ({
           answers: {
+            deliverables_verdict: { choice: "REJECT" },
             meets_criteria: { noul: 0.3 },
             architectural_drift: { choice: "no_drift" },
             scope_mode: { choice: "HOLD" },
@@ -425,7 +455,7 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
 
       const res = await runPhaseMacroCheck(ctx, offlineClient);
       expect(res.approved).toBe(false);
-      expect(res.escalateToUser).toBe(true);
+      expect(res.outcome?.status).toBe("UNAVAILABLE");
       expect(res.error).toBe("unavailable");
     });
   });
@@ -437,6 +467,7 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
         if (noul === undefined) return { answers: {} };
         return {
           answers: {
+            drop_verdict: { choice: "APPROVE" },
             drop_justified: { noul, confidence: 0.95 },
           },
         };
@@ -500,22 +531,22 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
     test("missing drop_justified answer returns unavailable", async () => {
       const res = await runDropJustificationCheck(dummyContext, makeMockClient());
       expect(res.decision).toBe("unavailable");
-      expect(res.reasons.some((r) => r.includes("missing drop_justified answer"))).toBe(true);
+      expect(res.reasons.join(" ")).toContain("drop_justified");
     });
     test("malformed NaN drop_justified noul returns unavailable", async () => {
       const res = await runDropJustificationCheck(dummyContext, makeMockClient(NaN));
       expect(res.decision).toBe("unavailable");
-      expect(res.reasons.some((r) => r.includes("invalid or malformed drop_justified noul"))).toBe(true);
+      expect(res.error).toBe("bad_response");
     });
 
     test("malformed out-of-bounds drop_justified noul returns unavailable", async () => {
       const negativeRes = await runDropJustificationCheck(dummyContext, makeMockClient(-0.25));
       expect(negativeRes.decision).toBe("unavailable");
-      expect(negativeRes.reasons.some((r) => r.includes("invalid or malformed drop_justified noul"))).toBe(true);
+      expect(negativeRes.error).toBe("bad_response");
 
       const overflowRes = await runDropJustificationCheck(dummyContext, makeMockClient(1.25));
       expect(overflowRes.decision).toBe("unavailable");
-      expect(overflowRes.reasons.some((r) => r.includes("invalid or malformed drop_justified noul"))).toBe(true);
+      expect(overflowRes.error).toBe("bad_response");
     });
 
     test("thrown exception inside evaluate returns unavailable", async () => {
@@ -530,13 +561,14 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
       expect(res.reasons.some((r) => r.includes("unavailable"))).toBe(true);
     });
 
-    test("dynamic threshold override via env is respected", async () => {
+    test("trusted configured threshold is frozen before later environment changes", async () => {
+      const approvalPolicy = createSemanticApprovalPolicy({ TYPESAFE_AUTO_APPROVAL_THRESHOLD: "0.90" });
       const orig = process.env.TYPESAFE_AUTO_APPROVAL_THRESHOLD;
       try {
-        process.env.TYPESAFE_AUTO_APPROVAL_THRESHOLD = "0.90";
-        expect(resolveAutoApprovalThreshold()).toBe(0.90);
-        // 0.85 would normally approve, but under 0.90 override it falls into undecided
-        const res = await runDropJustificationCheck(dummyContext, makeMockClient(0.85));
+        process.env.TYPESAFE_AUTO_APPROVAL_THRESHOLD = "0.01";
+        expect(approvalPolicy.threshold).toBe(0.90);
+        expect(Object.isFrozen(approvalPolicy)).toBe(true);
+        const res = await runDropJustificationCheck(dummyContext, makeMockClient(0.85), { approvalPolicy });
         expect(res.decision).toBe("undecided");
         expect(res.reasons.some((r) => r.includes("P=0.85"))).toBe(true);
       } finally {
@@ -558,7 +590,7 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
       expect(scorecard).toContain("Meets Plan Deliverables: VERDICT: APPROVED (JEV Confidence 0.95)");
     });
 
-    test("categorical deliverables verdict APPROVE approves macro check", async () => {
+    test("categorical APPROVE confidence alone cannot replace missing probability", async () => {
       const client: ExpertJudgeClient = {
         evaluate: async () => ({
           answers: {
@@ -578,9 +610,9 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
         },
         client
       );
-      expect(res.approved).toBe(true);
-      expect(res.verdict).toBe("APPROVE");
-      expect(res.deliverablesVerdict).toBe("APPROVE");
+      expect(res.approved).toBe(false);
+      expect(res.error).toBe("unavailable");
+      expect(res.meetsCriteriaNoul).toBeUndefined();
     });
 
     test("categorical deliverables verdict REJECT rejects macro check", async () => {
@@ -588,6 +620,7 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
         evaluate: async () => ({
           answers: {
             deliverables_verdict: { choice: "REJECT", confidence: 0.91 },
+            meets_criteria: { noul: 0.2 },
             architectural_drift: { choice: "no_drift" },
             scope_mode: { choice: "HOLD" },
           },
@@ -613,6 +646,7 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
         evaluate: async () => ({
           answers: {
             deliverables_verdict: { choice: "NEXT_ACTION_REQUIRED", confidence: 0.88 },
+            meets_criteria: { noul: 0.4 },
             architectural_drift: { choice: "no_drift" },
             scope_mode: { choice: "HOLD" },
           },
@@ -638,6 +672,7 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
         evaluate: async () => ({
           answers: {
             drop_verdict: { choice: "APPROVE", confidence: 0.95 },
+            drop_justified: { noul: 0.95 },
           },
         }),
       };
@@ -654,6 +689,7 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
         evaluate: async () => ({
           answers: {
             drop_verdict: { choice: "REJECT", confidence: 0.95 },
+            drop_justified: { noul: 0.10 },
           },
         }),
       };
@@ -670,6 +706,7 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
         evaluate: async () => ({
           answers: {
             drop_verdict: { choice: "ESCALATE", confidence: 0.85 },
+            drop_justified: { noul: 0.50 },
           },
         }),
       };
@@ -741,7 +778,7 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
       expect(res.error).toBe("unavailable");
     });
 
-    test("downgrades deliverables_verdict APPROVE when meets_criteria <= 0.50 (e.g. 0.45 -> NEXT_ACTION_REQUIRED, 0.15 -> REJECT) without 0.80 wall", async () => {
+    test("threshold veto changes typed disposition without rewriting raw APPROVE or probability", async () => {
       const partialClient: ExpertJudgeClient = {
         evaluate: async () => ({
           answers: {
@@ -763,8 +800,9 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
         partialClient
       );
       expect(partialRes.approved).toBe(false);
-      expect(partialRes.verdict).toBe("NEXT_ACTION_REQUIRED");
-      expect(partialRes.deliverablesVerdict).toBe("NEXT_ACTION_REQUIRED");
+      expect(partialRes.verdict).toBe("APPROVE");
+      expect(partialRes.deliverablesVerdict).toBe("APPROVE");
+      expect(partialRes.outcome?.status).toBe("EVIDENCE_REQUIRED");
       expect(partialRes.meetsCriteriaNoul).toBe(0.45);
       expect(partialRes.reasons[0]).toContain("P=0.45");
       expect(partialRes.reasons[0]).not.toContain("0.80");
@@ -790,14 +828,15 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
         rejectClient
       );
       expect(rejectRes.approved).toBe(false);
-      expect(rejectRes.verdict).toBe("REJECT");
-      expect(rejectRes.deliverablesVerdict).toBe("REJECT");
+      expect(rejectRes.verdict).toBe("APPROVE");
+      expect(rejectRes.deliverablesVerdict).toBe("APPROVE");
+      expect(rejectRes.outcome?.status).toBe("REJECTED");
       expect(rejectRes.meetsCriteriaNoul).toBe(0.15);
       expect(rejectRes.reasons[0]).toContain("P=0.15");
       expect(rejectRes.reasons[0]).not.toContain("0.80");
     });
 
-    test("runDropJustificationCheck inverts drop_verdict.confidence (1 - confidence) when drop_verdict is REJECT and drop_justified is omitted", async () => {
+    test("drop rejection confidence is never inverted into fabricated Noul", async () => {
       const client58: ExpertJudgeClient = {
         evaluate: async () => ({
           answers: {
@@ -809,9 +848,9 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
         { tasks: ["task-1"], remainingTasks: [] },
         client58
       );
-      expect(res58.decision).toBe("reject");
-      expect(res58.verdict).toBe("REJECT");
-      expect(res58.dropJustifiedNoul).toBe(0.42);
+      expect(res58.decision).toBe("unavailable");
+      expect(res58.error).toBe("bad_response");
+      expect(res58.dropJustifiedNoul).toBeUndefined();
 
       const client95: ExpertJudgeClient = {
         evaluate: async () => ({
@@ -824,9 +863,9 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
         { tasks: ["task-1"], remainingTasks: [] },
         client95
       );
-      expect(res95.decision).toBe("reject");
-      expect(res95.verdict).toBe("REJECT");
-      expect(res95.dropJustifiedNoul).toBe(0.05);
+      expect(res95.decision).toBe("unavailable");
+      expect(res95.error).toBe("bad_response");
+      expect(res95.dropJustifiedNoul).toBeUndefined();
     });
 
     test("runDropJustificationCheck validates malformed drop_justified noul even when drop_verdict is present", async () => {
@@ -843,7 +882,7 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
         clientInvalid
       );
       expect(res.decision).toBe("unavailable");
-      expect(res.reasons.some((r) => r.includes("invalid or malformed drop_justified noul"))).toBe(true);
+      expect(res.error).toBe("bad_response");
     });
 
     test("allows modified assertion when replacement assertion is added in git diff", async () => {
@@ -892,5 +931,85 @@ describe("Phase 2: Cook Expert Judge & Dual-Cadence Engine", () => {
       expect(res.verdict).toBe("APPROVE");
       expect(res.escalateToUser).toBe(false);
     });
+  });
+});
+
+describe("Strict semantic primitive and packet regressions", () => {
+  const context: MacroCheckContext = { todoTask: "Investigate failure and report root cause", taskType: "analysis_research", planRequirements: ["Report evidence and root cause"], diffSummary: "", unifiedDiff: "", testSummary: "No testCommand provided", agentWorkLog: "Public investigation found a stale receipt binding." };
+  const validAnswers = {
+    deliverables_verdict: { choice: "APPROVE", confidence: 0.61 }, meets_criteria: { noul: 0.94 },
+    architectural_drift: { choice: "no_drift" }, scope_mode: { choice: "HOLD" },
+  };
+  test.each(["deliverables_verdict", "meets_criteria", "architectural_drift", "scope_mode"])("missing requested primitive %s is unavailable", async key => {
+    const answers: Record<string, unknown> = { ...validAnswers };
+    delete answers[key];
+    const result = await runPhaseMacroCheck(context, { evaluate: async () => ({ answers }) });
+    expect(result.approved).toBe(false);
+    expect(result.outcome?.status).toBe("UNAVAILABLE");
+    expect(result.meetsCriteriaNoul).toBeUndefined();
+  });
+  test.each(["other", "unknown", "ALLOW", "", 1, null])("unknown scope choice %s is not implicit approval", async choice => {
+    const result = await runPhaseMacroCheck(context, { evaluate: async () => ({ answers: { ...validAnswers, scope_mode: { choice } } }) });
+    expect(result.approved).toBe(false);
+    expect(result.error).toBe("unavailable");
+  });
+  test("preserves actual probability, independent confidence, metadata and immutable raw answers", async () => {
+    const metadata = { policyIdentity: "policy", purpose: "native_done", maxQuestionsPerRequest: 128, questionIds: Object.keys(validAnswers), questionCount: 4, bodyBytes: 400, attempts: 2, resolvedModel: "provider-model", usage: { inputTokens: 12 } };
+    const result = await runPhaseMacroCheck(context, { evaluate: async () => ({ answers: validAnswers, metadata }) });
+    expect(result.approved).toBe(true);
+    expect(result.meetsCriteriaNoul).toBe(0.94);
+    expect(result.expertConfidence).toBe(0.61);
+    expect(result.metadata).toEqual(metadata);
+    expect(result.rawAnswers).not.toBe(validAnswers);
+    expect(Object.isFrozen(result.rawAnswers?.meets_criteria)).toBe(true);
+  });
+  test("does not silently truncate task criteria, user request or public task evidence", async () => {
+    let state = "";
+    const suffix = "LAST-EXACT-CRITERION";
+    await runPhaseMacroCheck({ ...context, planRequirements: ["requirement ".repeat(500) + suffix], userRequest: "context ".repeat(500) + "END-REQUEST", agentWorkLog: "public evidence ".repeat(500) + "END-EVIDENCE" },
+      { evaluate: async request => { state = request.state; return { answers: validAnswers }; } });
+    expect(state).toContain(suffix);
+    expect(state).toContain("END-REQUEST");
+    expect(state).toContain("END-EVIDENCE");
+  });
+  test.each([NaN, Infinity, -Infinity, -0.1, 3.1, "2", undefined])("risk score validates its own 0..3 range: %s", async score => {
+    await expect(evaluateRiskSecurityTriage("Task", { evaluate: async () => ({ answers: { risk_security_triage: { score } } }) })).rejects.toThrow("score in [0,3]");
+  });
+  test("valid score greater than one is not misparsed as a probability", async () => {
+    const result = await evaluateRiskSecurityTriage("Task", { evaluate: async () => ({ answers: { risk_security_triage: { score: 2.5 } } }) });
+    expect(result.score).toBe(2.5);
+    expect(result.acceptable).toBe(false);
+  });
+  test("trusted investigation contract requires exact criterion coverage and names missing evidence without demanding implementation", async () => {
+    const digest = "a".repeat(64);
+    const source = { path: "plan.md", digest, startLine: 1, endLine: 1, text: "Report the observed root cause" };
+    const request = { sessionId: "session", entryId: "request", digest, kind: "user_request" as const };
+    const contract: TaskContract = {
+      schemaVersion: 1, contractId: "contract", revision: 1, revisionId: "revision", incarnationId: "incarnation",
+      creation: { sessionId: "session", branchId: "branch", entryId: "native-result", callId: "native-call" },
+      target: { phase: "Investigation", phaseOrdinal: 0, content: context.todoTask, ordinal: 0 }, taskKind: "research",
+      allowedMutationScope: { paths: ["report.md"], operations: ["read"] },
+      approvedSource: { kind: "user_request", path: "request", digest, approval: request, spans: [source] },
+      originalUserRequest: request, amendments: [], criteria: [{ id: "root-cause-report", kind: "acceptance", text: source.text, source }],
+      approvedCommandIds: [], parentRequirements: [], policyDigest: digest,
+    };
+    let state = "";
+    const result = await runPhaseMacroCheck({ ...context, contract, criterionEvidence: { "root-cause-report": ["artifact:report"] } }, {
+      evaluate: async params => {
+        state = params.state;
+        expect(params.questions.criterion_0.instructions).toContain("root-cause-report");
+        return { answers: { ...validAnswers, criterion_0: { choice: "evidence_missing" } } };
+      },
+    });
+    expect(result.approved).toBe(false);
+    expect(result.verdict).toBe("APPROVE");
+    expect(result.outcome?.status).toBe("EVIDENCE_REQUIRED");
+    expect(result.reasons.join(" ")).toContain("root-cause-report");
+    expect(result.reasons.join(" ")).not.toContain("missing implementation");
+    expect(state).toContain("native-result");
+    expect(state).toContain("artifact:report");
+    const absent = await runPhaseMacroCheck({ ...context, contract }, { evaluate: async () => ({ answers: validAnswers }) });
+    expect(absent.outcome?.status).toBe("UNAVAILABLE");
+    expect(absent.reasons.join(" ")).toContain("root-cause-report");
   });
 });

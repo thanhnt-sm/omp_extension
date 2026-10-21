@@ -29,3 +29,8 @@ Comprehensive 4-phase TDD overhaul resolving all 7 critical defects uncovered du
 - [x] `sanitizeStateForTypeSafe` preserves `"tail"` for `agent_work_log`, `test_summary`, and `user_request`.
 - [x] `todo(op="init", list=[...])` and bare `todo(op="rm")` are tracked in `activeContractedTasks` and gated by the Drop Gate.
 - [x] All unit and integration test suites pass via `bun test` and baseline is deployed via `node tools/sync-baseline.cjs`.
+
+## Execution reconciliation — 2026-10-19
+
+Residual C05/C08/C09/C12/C15/C18 ownership: [consolidated master](../261019-research-to-cook-execution/plan.md), with [source-evidenced dispositions](../reports/261019-research-to-cook-coverage.json). Preserve working untracked/native/task fixes; finish full baseline interval, coherent evidence, strict primitive and recovery/report semantics. Historical completion does not replace actual per-objective proof.
+

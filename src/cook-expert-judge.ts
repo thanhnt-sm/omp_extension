@@ -1,27 +1,20 @@
-import { createRequire } from "node:module";
-import { preparePayloadSafe, isSecretInKey, clampText } from "./payload-safety";
+import {
+  createSemanticJudgeClient, choiceValue, choiceConfidence, noulValue, scoreValue,
+  type SemanticResponse, type SemanticTransportMetadata,
+} from "./semantic-judge-client";
+import { isSecretInKey, clampText } from "./payload-safety";
+import type { TaskContract, VerificationOutcome } from "./types/verification";
+import { freezeContractValue } from "./task-contract-source";
 import { encloseUntrusted } from "./xml-enclosure";
 import { analyzeDiffForTestEvasion } from "./ast-analyzer";
 
-import { resolveAutoApprovalThreshold } from "./verification-gate";
-
-type ApiClient = {
-  requestWithRetry: (options: { fetchImpl: typeof fetch; apiKey: string; body: string }) => Promise<
-    { kind: "ok"; data: unknown } | { kind: "auth" | "http_error"; status: number } | { kind: "bad_response" }
-  >;
-  checkCredentialCooldown: (apiKey: string) => { status: number } | null;
-  sanitizeAnswers: (questions: Record<string, unknown>, rawAnswers: unknown) => Record<string, unknown> | null;
-};
-function loadApiClient(): ApiClient | null {
-  try {
-    const client = createRequire(import.meta.url)("./typesafe-api-client.cjs") as ApiClient;
-    return typeof client.requestWithRetry === "function" && typeof client.sanitizeAnswers === "function" ? client : null;
-  } catch {
-    return null;
-  }
-}
-
-export { resolveAutoApprovalThreshold } from "./verification-gate";
+import { DEFAULT_SEMANTIC_APPROVAL_OPTIONS, passesSemanticApproval, type SemanticApprovalOptions } from "./semantic-approval-policy";
+import { semanticFailureDisposition } from "./semantic-failure";
+import {
+  touchesClaudeBoundary,
+  hasProductCodeChanges,
+  DELIVERABLE_ARTIFACT_MAX_BYTES,
+} from "./evidence-collector";
 
 export interface MicroCheckEvidence {
   gitStatus: string;
@@ -29,6 +22,7 @@ export interface MicroCheckEvidence {
   testExitCode: number | null;
   testOutput: string;
   cleanWorkingTree: boolean;
+  changedFiles?: string[];
   nonGitFallbackUsed?: boolean;
   taskDoneProven?: boolean;
   todoCompleted?: boolean;
@@ -60,6 +54,9 @@ export interface MacroCheckContext {
   agentWorkLog?: string;
   diffScope?: string;
   testCommand?: string;
+  /** Host-owned contract/evidence; never inferred from an agent's task label. */
+  contract?: TaskContract;
+  criterionEvidence?: Readonly<Record<string, readonly string[]>>;
 }
 
 export type JevVerdict = "APPROVE" | "REJECT" | "NEXT_ACTION_REQUIRED" | "ESCALATE";
@@ -80,6 +77,9 @@ export interface MacroCheckResult {
   expertConfidence?: number;
   escalateToUser?: boolean;
   error?: string;
+  outcome?: VerificationOutcome;
+  metadata?: SemanticTransportMetadata;
+  rawAnswers?: Readonly<Record<string, unknown>>;
 }
 
 export interface ExpertJudgeQuestion {
@@ -88,61 +88,18 @@ export interface ExpertJudgeQuestion {
   criteria?: string[] | Record<string, string>;
 }
 
-export interface ExpertJudgeResponse {
-  answers?: {
-    deliverables_verdict?: { choice: DeliverablesVerdict; confidence?: number };
-    drop_verdict?: { choice: DropVerdict; confidence?: number };
-    meets_criteria?: { noul: number; confidence?: number };
-    drop_justified?: { noul: number; confidence?: number };
-    architectural_drift?: { choice: DriftChoice; confidence?: number };
-    architectural_drift_guard?: { choice: DriftChoice; confidence?: number };
-    scope_mode?: { choice: ScopeChoice; confidence?: number };
-    scope_arbiter?: { choice: ScopeChoice; confidence?: number };
-    risk_score?: { score: number };
-    risk_security_triage?: { score: number };
-  };
-  error?: string;
-}
+export interface ExpertJudgeResponse extends SemanticResponse {}
 
 export interface ExpertJudgeClient {
   evaluate: (params: {
-    state: string;
+    state: string | Record<string, unknown>;
     questions: Record<string, ExpertJudgeQuestion>;
   }) => Promise<ExpertJudgeResponse>;
 }
 
-const defaultJudgeClient: ExpertJudgeClient = {
-  async evaluate({ state, questions }) {
-    const apiKey = process.env.TYPESAFE_API_KEY?.trim();
-    if (!apiKey) return { error: "TYPESAFE_API_KEY environment variable is missing" };
-    const apiClient = loadApiClient();
-    if (!apiClient) return { error: "typesafe_api_client_unavailable" };
-    const cooldown = apiClient.checkCredentialCooldown(apiKey);
-    if (cooldown) return { error: `http_${cooldown.status}` };
-    try {
-      const sanitized = preparePayloadSafe({
-        state,
-        questions: questions as Record<string, { type: "choice" | "score" | "noul"; instructions: string; criteria?: string[] }>,
-        model: "jev-latest",
-      }, { apiKey });
-      const outcome = await apiClient.requestWithRetry({
-        fetchImpl: globalThis.fetch,
-        apiKey,
-        body: JSON.stringify(sanitized),
-      });
-      if (outcome.kind !== "ok") {
-        return { error: "status" in outcome ? `http_${outcome.status}` : "bad_response" };
-      }
-      const rawAnswers = outcome.data && typeof outcome.data === "object" && "answers" in outcome.data
-        ? outcome.data.answers
-        : undefined;
-      const answers = apiClient.sanitizeAnswers(sanitized.questions, rawAnswers);
-      return answers ? { answers: answers as ExpertJudgeResponse["answers"] } : { error: "bad_response" };
-    } catch (err) {
-      return { error: err instanceof Error && (err.name === "AbortError" || err.name === "TimeoutError") ? "timeout" : "network_error" };
-    }
-  },
-};
+const defaultJudgeClient: ExpertJudgeClient = createSemanticJudgeClient({ purpose: "expert" });
+const nativeDoneJudgeClient = createSemanticJudgeClient({ purpose: "native_done" });
+const nativeDropJudgeClient = createSemanticJudgeClient({ purpose: "native_drop" });
 
 /**
  * Gate 1: Fast deterministic micro-check running locally in <150ms with 0 tokens.
@@ -150,10 +107,11 @@ const defaultJudgeClient: ExpertJudgeClient = {
 export async function runTaskMicroCheck(evidence: MicroCheckEvidence): Promise<MicroCheckResult> {
   const reasons: string[] = [];
 
-  const touchesClaude =
-    /(?:^|[\s/\\])\.claude[/\\]/i.test(evidence.gitStatus) ||
-    /(?:^|[\s/\\])\.claude[/\\]/i.test(evidence.gitDiff) ||
-    /\.claude\.json/i.test(evidence.gitStatus);
+  const touchesClaude = touchesClaudeBoundary(
+    evidence.gitStatus,
+    evidence.gitDiff,
+    evidence.changedFiles
+  );
 
   const claudeSafe = !touchesClaude;
   if (!claudeSafe) {
@@ -199,42 +157,48 @@ export async function runTaskMicroCheck(evidence: MicroCheckEvidence): Promise<M
  */
 export async function runPhaseMacroCheck(
   ctx: MacroCheckContext,
-  client: ExpertJudgeClient = defaultJudgeClient
+  client: ExpertJudgeClient = nativeDoneJudgeClient,
+  options: SemanticApprovalOptions = DEFAULT_SEMANTIC_APPROVAL_OPTIONS,
 ): Promise<MacroCheckResult> {
   const reasons: string[] = [];
 
-  // Anti-spoofing heuristic: If code files are modified in diffSummary file paths,
-  // forcefully override taskType to "code_change"
-  const diffLines = (ctx.diffSummary || "").split(/\r?\n/);
-  const containsCodeChanges = diffLines.some((l) => {
-    let p = l.slice(3).trim();
-    if (p.includes(" -> ")) p = p.split(" -> ").pop()?.trim() || p;
-    if (p.startsWith('"') && p.endsWith('"')) p = p.slice(1, -1);
-    return /\.(ts|tsx|js|jsx|cjs|mjs|py|go|rs|json|ya?ml|toml|sql|sh|bat|ps1)\b/i.test(p);
-  });
-  const effectiveTaskType = containsCodeChanges ? "code_change" : (ctx.taskType ?? "code_change");
+  // Shared applicability is rubric selection, never a permission boundary.
+  const taskKind = ctx.contract?.taskKind;
+  const effectiveTaskType = hasProductCodeChanges(ctx.diffSummary || "", ctx.todoTask, ctx.contract)
+    ? "code_change" : taskKind === "research" || taskKind === "review"
+      ? "analysis_research" : (ctx.taskType ?? "code_change");
+  if (Buffer.byteLength(ctx.deliverableArtifacts || "", "utf8") > DELIVERABLE_ARTIFACT_MAX_BYTES) {
+    return {
+      approved: false,
+      reasons: ["insufficient_deliverable_evidence: required artifact evidence exceeds the UTF-8 delivery budget."],
+      error: "insufficient_deliverable_evidence",
+      outcome: { status: "EVIDENCE_REQUIRED", missingCriterionIds: ctx.contract?.criteria.map((c) => c.id) ?? [], reasons: ["Required artifact evidence exceeds the delivery budget; provide a complete bounded evidence packet."] },
+    };
+  }
 
   const statePayload: Record<string, string> = {
-    todo_task: encloseUntrusted(clampText(ctx.todoTask || ctx.phaseTitle || "", 950, "head"), "todo_task"),
-    task_requirements: encloseUntrusted(clampText((ctx.planRequirements || []).join("\n"), 1950, "head"), "task_requirements"),
-    user_request: encloseUntrusted(clampText(ctx.userRequest || "unavailable", 1950, "tail"), "user_request"),
-    agent_work_log: encloseUntrusted(clampText(ctx.agentWorkLog || "unavailable", 1950, "tail"), "agent_work_log"),
+    todo_task: encloseUntrusted(ctx.contract?.target.content ?? ctx.todoTask ?? ctx.phaseTitle ?? "", "todo_task"),
+    task_requirements: encloseUntrusted((ctx.contract?.criteria.map((c) => `${c.id}: ${c.text}`) ?? ctx.planRequirements ?? []).join("\n"), "task_requirements"),
+    user_request: encloseUntrusted(ctx.userRequest || "unavailable", "user_request"),
+    agent_work_log: encloseUntrusted(ctx.agentWorkLog || "unavailable", "agent_work_log"),
     diff_scope: encloseUntrusted(
       ctx.diffScope === "task-baseline"
         ? "task-baseline: only files changed since this task started"
         : "full-working-tree: no task-start baseline; may include unrelated pre-existing changes",
       "diff_scope"
     ),
-    diff_summary: encloseUntrusted(clampText(ctx.diffSummary || "", 1950, "head"), "diff_summary"),
+    diff_summary: encloseUntrusted(ctx.diffSummary || "", "diff_summary"),
     unified_diff: encloseUntrusted(ctx.unifiedDiff || "", "unified_diff"),
-    test_summary: encloseUntrusted(clampText(ctx.testSummary || "", 1950, "tail"), "test_summary"),
+    test_summary: encloseUntrusted(ctx.testSummary || "", "test_summary"),
   };
   if (ctx.planContext && ctx.planContext.length > 0) {
-    statePayload.plan_context = encloseUntrusted(clampText(ctx.planContext.join("\n"), 1950, "head"), "plan_context");
+    statePayload.plan_context = encloseUntrusted(ctx.planContext.join("\n"), "plan_context");
   }
   if (ctx.deliverableArtifacts) {
-    statePayload.deliverable_artifacts = encloseUntrusted(clampText(ctx.deliverableArtifacts, 4940, "head"), "deliverable_artifacts");
+    statePayload.deliverable_artifacts = encloseUntrusted(ctx.deliverableArtifacts, "deliverable_artifacts");
   }
+  if (ctx.contract) statePayload.task_contract = encloseUntrusted(JSON.stringify(ctx.contract), "task_contract");
+  if (ctx.criterionEvidence) statePayload.criterion_evidence = encloseUntrusted(JSON.stringify(ctx.criterionEvidence), "criterion_evidence");
   const rawState = JSON.stringify(statePayload);
 
   const hasExplicitTestCmd = Boolean(
@@ -243,7 +207,7 @@ export async function runPhaseMacroCheck(
       !ctx.testSummary.includes("No testCommand provided")
   );
   const scopeNote =
-    " Evaluate ONLY the current sub-task in `todo_task` and `task_requirements` (`user_request` and `plan_context` are background context for the broader session; do not penalize for unstarted future tasks)." +
+    " Evaluate ONLY the full current task and each task criterion; preserve exact criterion IDs. `user_request` and `plan_context` describe wider obligations, not unstarted task deliverables. Investigation/report tasks require concrete findings and task-bound evidence, not unrelated implementation or test changes." +
     (effectiveTaskType === "code_change"
       ? " Note: `unified_diff` may be summarized per file for size budget; corroborate with `diff_summary`, `test_summary`, and `agent_work_log`."
       : "") +
@@ -317,6 +281,14 @@ export async function runPhaseMacroCheck(
       },
     },
   };
+  const criterionQuestions = ctx.contract?.criteria.map((criterion, index) => ({ key: `criterion_${index}`, criterion })) ?? [];
+  for (const { key, criterion } of criterionQuestions) {
+    questions[key] = {
+      type: "choice",
+      instructions: `Assess only criterion ${criterion.id}: ${criterion.text}. Select evidence_missing for missing task evidence; do not invent implementation requirements for investigation/report tasks.`,
+      criteria: { satisfied: "Task-bound evidence satisfies this criterion", violated: "Evidence contradicts this exact criterion", evidence_missing: "A required evidence prerequisite for this criterion is absent" },
+    };
+  }
   for (const key of Object.keys(questions)) {
     if (isSecretInKey(key)) {
       throw new Error(`Security violation: secret token detected in question key "${key}"`);
@@ -327,137 +299,57 @@ export async function runPhaseMacroCheck(
   try {
     response = await client.evaluate({ state: rawState, questions });
   } catch {
-    return {
-      approved: false,
-      reasons: ["TypeSafe evaluation unavailable: judge request failed. Check connectivity and retry verification."],
-      escalateToUser: true,
-      error: "unavailable",
-    };
+    response = { error: "transport_unavailable" };
   }
-
+  const unavailable = (reason: string): MacroCheckResult => ({
+    approved: false, reasons: [reason], error: "unavailable", metadata: response.metadata, escalateToUser: false,
+    outcome: { status: "UNAVAILABLE", component: "semantic_judge", reasons: [reason] },
+    rawAnswers: response.answers ? freezeContractValue(structuredClone(response.answers)) : undefined,
+  });
   if (response.error || !response.answers) {
-    return {
-      approved: false,
-      reasons: [`TypeSafe verification error: ${response.error ?? "No answers returned"}`],
-      escalateToUser: true,
-      error: "unavailable",
-    };
+    const outcome = semanticFailureDisposition(response.error, ctx.contract?.criteria.map(criterion => criterion.id));
+    return { ...unavailable(outcome.reasons.join(" ")), outcome };
   }
-
   const answers = response.answers;
-  const rawDeliverablesVerdict = answers.deliverables_verdict?.choice;
-  const rawMeetsCriteria = answers.meets_criteria?.noul;
-
-  if (
-    rawMeetsCriteria !== undefined &&
-    (typeof rawMeetsCriteria !== "number" || !Number.isFinite(rawMeetsCriteria) || rawMeetsCriteria < 0 || rawMeetsCriteria > 1)
-  ) {
-    return {
-      approved: false,
-      reasons: ["TypeSafe evaluation unavailable: meets_criteria must be a finite probability in [0,1]."],
-      escalateToUser: true,
-      error: "unavailable",
-    };
+  const deliverablesVerdict = choiceValue(answers.deliverables_verdict, ["APPROVE", "REJECT", "NEXT_ACTION_REQUIRED"] as const);
+  const meetsCriteriaNoul = noulValue(answers.meets_criteria);
+  const driftChoice = choiceValue(answers.architectural_drift, ["no_drift", "unapproved_deviation", "scope_creep"] as const);
+  const scopeChoice = choiceValue(answers.scope_mode, ["HOLD", "EXPANSION", "REDUCTION"] as const);
+  if (!deliverablesVerdict || meetsCriteriaNoul === undefined || !driftChoice || !scopeChoice) {
+    return unavailable("Required judgment dimensions are missing or malformed: deliverables_verdict, actual finite meets_criteria probability in [0,1], architectural_drift, scope_mode. No categorical confidence substitutes for probability.");
   }
-
-  const threshold = resolveAutoApprovalThreshold();
-  const passesThreshold = (p: number) => (threshold === 0.50 ? p > 0.50 : p >= threshold);
-  let deliverablesVerdict: DeliverablesVerdict | undefined;
-  if (rawDeliverablesVerdict && ["APPROVE", "REJECT", "NEXT_ACTION_REQUIRED"].includes(rawDeliverablesVerdict)) {
-    deliverablesVerdict = rawDeliverablesVerdict;
-    if (deliverablesVerdict === "APPROVE" && rawMeetsCriteria !== undefined && !passesThreshold(rawMeetsCriteria)) {
-      deliverablesVerdict = rawMeetsCriteria < 0.25 ? "REJECT" : "NEXT_ACTION_REQUIRED";
-    }
-  } else if (rawMeetsCriteria !== undefined) {
-    deliverablesVerdict = passesThreshold(rawMeetsCriteria) ? "APPROVE" : rawMeetsCriteria < 0.25 ? "REJECT" : "NEXT_ACTION_REQUIRED";
-  } else {
-    return {
-      approved: false,
-      reasons: ["TypeSafe evaluation unavailable: deliverables_verdict must be APPROVE, REJECT, or NEXT_ACTION_REQUIRED."],
-      escalateToUser: true,
-      error: "unavailable",
-    };
+  const violated: string[] = [];
+  const missing: string[] = [];
+  for (const { key, criterion } of criterionQuestions) {
+    const status = choiceValue(answers[key], ["satisfied", "violated", "evidence_missing"] as const);
+    if (!status) return unavailable(`Required criterion assessment missing or invalid: ${criterion.id}.`);
+    if (status === "violated") violated.push(criterion.id);
+    if (status === "evidence_missing") missing.push(criterion.id);
   }
-
-  const driftChoice = (answers.architectural_drift?.choice ?? answers.architectural_drift_guard?.choice) as DriftChoice | undefined;
-  const scopeChoice = (answers.scope_mode?.choice ?? answers.scope_arbiter?.choice) as ScopeChoice | undefined;
-  const riskScore = answers.risk_score?.score ?? answers.risk_security_triage?.score;
-  const expertConfidence = answers.deliverables_verdict?.confidence ?? answers.architectural_drift?.confidence ?? answers.scope_mode?.confidence ?? rawMeetsCriteria ?? 0.92;
-  const meetsCriteriaNoul =
-    rawMeetsCriteria ??
-    (deliverablesVerdict === "APPROVE"
-      ? (answers.deliverables_verdict?.confidence ?? 1.0)
-      : deliverablesVerdict === "NEXT_ACTION_REQUIRED"
-        ? 0.5
-        : 0.0);
-
-  if (!driftChoice || !scopeChoice) {
-    return {
-      approved: false,
-      reasons: ["Incomplete TypeSafe evaluation: one or more required judgment dimensions were missing."],
-      escalateToUser: true,
-      error: "unavailable",
-      verdict: deliverablesVerdict,
-      deliverablesVerdict,
-      meetsCriteriaNoul,
-      driftChoice: driftChoice ?? "unapproved_deviation",
-      scopeChoice: scopeChoice ?? "REDUCTION",
-      riskScore,
-      expertConfidence,
-    };
+  // Preserve the existing explicit comparator captured by the trusted policy factory.
+  const passesThreshold = passesSemanticApproval(meetsCriteriaNoul, options.approvalPolicy);
+  if (deliverablesVerdict !== "APPROVE" || !passesThreshold) {
+    reasons.push(`${deliverablesVerdict === "NEXT_ACTION_REQUIRED" ? "Next actions required" : "Deliverable verification rejected"} (${effectiveTaskType}): raw JEV ${deliverablesVerdict}, P=${meetsCriteriaNoul.toFixed(2)}. ${violated.length ? `Violated criteria: ${violated.join(", ")}.` : "Evidence prerequisite: obtain exact criterion-level diagnosis before assigning source edits."}`);
   }
-
-  let approved = true;
-  if (deliverablesVerdict === "REJECT") {
-    approved = false;
-    if (rawMeetsCriteria !== undefined) {
-      reasons.push(
-        `Deliverable verification rejected (${effectiveTaskType}): JEV verdict is REJECT (score P=${rawMeetsCriteria.toFixed(2)}).`
-      );
-    } else {
-      reasons.push(
-        `Deliverable verification rejected (${effectiveTaskType}): deliverables are incomplete, missing required evidence, or fail task criteria.`
-      );
-    }
-  } else if (deliverablesVerdict === "NEXT_ACTION_REQUIRED") {
-    approved = false;
-    if (rawMeetsCriteria !== undefined) {
-      reasons.push(
-        `Next actions required (${effectiveTaskType}): JEV verdict is NEXT_ACTION_REQUIRED (score P=${rawMeetsCriteria.toFixed(2)}).`
-      );
-    } else {
-      reasons.push(
-        `Next actions required (${effectiveTaskType}): deliverables are partial, has missing criteria, or requires plan adaptation.`
-      );
-    }
-  }
-
-  if (driftChoice !== "no_drift") {
-    approved = false;
-    reasons.push(`Architectural drift detected: ${driftChoice}. Must maintain strict adherence to planned boundaries.`);
-  }
-
-  if (scopeChoice === "REDUCTION") {
-    approved = false;
-    reasons.push("Scope reduction detected: implementation omitted planned deliverables.");
-  }
-
-  const reachedMaxAttempts = Boolean(ctx.attemptCount && ctx.attemptCount >= 3);
-  if (!approved && reachedMaxAttempts) {
-    reasons.push("3 consecutive failed revision attempts reached. Halting autonomous loop for user escalation.");
-  }
-
+  if (driftChoice !== "no_drift") reasons.push(`Violated boundary criterion architectural_drift: ${driftChoice}.`);
+  if (scopeChoice === "REDUCTION") reasons.push("Violated scope criterion scope_mode: required task deliverables were omitted.");
+  if (violated.length) reasons.push(`Violated criteria: ${violated.join(", ")}.`);
+  if (missing.length) reasons.push(`Evidence prerequisites missing for criteria: ${missing.join(", ")}.`);
+  const approved = reasons.length === 0;
+  const evidenceRequired = missing.length > 0 || deliverablesVerdict === "NEXT_ACTION_REQUIRED" || (deliverablesVerdict === "APPROVE" && !passesThreshold && meetsCriteriaNoul >= 0.25);
+  const escalated = !approved && !evidenceRequired && (ctx.attemptCount ?? 0) >= 3;
+  if (escalated) reasons.push("3 semantic revision failures reached; require fresh independent diagnosis or exact human resolution, not an unchanged retry.");
+  const outcome: VerificationOutcome | undefined = approved ? undefined
+    : escalated ? { status: "HUMAN_REQUIRED", reasons }
+    : evidenceRequired
+      ? { status: "EVIDENCE_REQUIRED", missingCriterionIds: missing, reasons }
+      : { status: "REJECTED", criterionIds: violated, reasons };
   return {
-    approved,
-    reasons,
-    verdict: deliverablesVerdict,
-    deliverablesVerdict,
-    meetsCriteriaNoul,
-    driftChoice,
-    scopeChoice,
-    riskScore,
-    expertConfidence,
-    escalateToUser: !approved && (ctx.attemptCount ? ctx.attemptCount >= 3 : false),
+    approved, reasons, verdict: deliverablesVerdict, deliverablesVerdict,
+    meetsCriteriaNoul, driftChoice, scopeChoice,
+    expertConfidence: choiceConfidence(answers.deliverables_verdict),
+    metadata: response.metadata, rawAnswers: freezeContractValue(structuredClone(answers)),
+    outcome, escalateToUser: escalated,
   };
 }
 
@@ -468,7 +360,7 @@ export async function evaluateScopeArbiter(
   plan: string,
   prompt: string,
   client: ExpertJudgeClient = defaultJudgeClient
-): Promise<{ approved: boolean; choice: ScopeChoice; reason?: string }> {
+): Promise<{ approved: boolean; choice: ScopeChoice; reason?: string; metadata?: SemanticTransportMetadata }> {
   const state = JSON.stringify({
     plan: encloseUntrusted(plan, "plan_content"),
     prompt: encloseUntrusted(prompt, "user_prompt")
@@ -490,13 +382,14 @@ export async function evaluateScopeArbiter(
   if (response.error) {
     throw new Error(`TypeSafe error during scope evaluation: ${response.error}`);
   }
-  const choice = response.answers?.scope_arbiter?.choice as ScopeChoice;
-  if (!choice) throw new Error("Missing scope_arbiter choice from TypeSafe");
+  const choice = choiceValue(response.answers?.scope_arbiter, ["HOLD", "EXPANSION", "REDUCTION"] as const);
+  if (!choice) throw new Error("Invalid or missing scope_arbiter choice from TypeSafe");
   const approved = choice !== "REDUCTION";
 
   return {
     approved,
     choice,
+    metadata: response.metadata,
     reason: approved ? undefined : "Scope reduction detected: required functionality was dropped.",
   };
 }
@@ -508,7 +401,7 @@ export async function evaluateDriftGuard(
   diff: string,
   criteria: string[],
   client: ExpertJudgeClient = defaultJudgeClient
-): Promise<{ approved: boolean; choice: DriftChoice; reason?: string }> {
+): Promise<{ approved: boolean; choice: DriftChoice; reason?: string; metadata?: SemanticTransportMetadata }> {
   const state = JSON.stringify({
     diff: encloseUntrusted(diff, "unified_diff"),
     criteria: encloseUntrusted(criteria.join("\n"), "criteria")
@@ -530,13 +423,14 @@ export async function evaluateDriftGuard(
   if (response.error) {
     throw new Error(`TypeSafe error during drift evaluation: ${response.error}`);
   }
-  const choice = response.answers?.architectural_drift_guard?.choice as DriftChoice;
-  if (!choice) throw new Error("Missing architectural_drift_guard choice from TypeSafe");
+  const choice = choiceValue(response.answers?.architectural_drift_guard, ["no_drift", "unapproved_deviation", "scope_creep"] as const);
+  if (!choice) throw new Error("Invalid or missing architectural_drift_guard choice from TypeSafe");
   const approved = choice === "no_drift";
 
   return {
     approved,
     choice,
+    metadata: response.metadata,
     reason: approved ? undefined : `Architectural drift violation: ${choice}`,
   };
 }
@@ -547,7 +441,7 @@ export async function evaluateDriftGuard(
 export async function evaluateRiskSecurityTriage(
   context: string | Record<string, unknown>,
   client: ExpertJudgeClient = defaultJudgeClient
-): Promise<{ score: number; acceptable: boolean }> {
+): Promise<{ score: number; acceptable: boolean; metadata?: SemanticTransportMetadata }> {
   const rawContext = typeof context === "string" ? context : JSON.stringify(context, null, 2);
   const state = JSON.stringify({
     context: encloseUntrusted(rawContext, "triage_context")
@@ -569,12 +463,13 @@ export async function evaluateRiskSecurityTriage(
   if (response.error) {
     throw new Error(`TypeSafe error during risk evaluation: ${response.error}`);
   }
-  const score = response.answers?.risk_security_triage?.score;
-  if (score === undefined) throw new Error("Missing risk_security_triage score from TypeSafe");
+  const score = scoreValue(response.answers?.risk_security_triage, 3);
+  if (score === undefined) throw new Error("Invalid or missing risk_security_triage score in [0,3] from TypeSafe");
 
   return {
     score,
     acceptable: score <= 1.5,
+    metadata: response.metadata,
   };
 }
 
@@ -597,19 +492,16 @@ export function generateVerificationScorecard(results: {
       ? "Justified additions"
       : "Requirements dropped";
 
-  const confidence = (results.expertConfidence ?? results.meetsCriteriaNoul ?? 0.92).toFixed(2);
+  const confidence = results.expertConfidence === undefined ? "not returned" : results.expertConfidence.toFixed(2);
 
   let deliverablesLine: string;
   if (results.deliverablesVerdict) {
     const vLabel = results.deliverablesVerdict === "APPROVE" ? "APPROVED" : results.deliverablesVerdict === "NEXT_ACTION_REQUIRED" ? "NEXT ACTION REQ" : "REJECTED";
     deliverablesLine = `│ Meets Plan Deliverables: VERDICT: ${vLabel} (JEV Confidence ${confidence}) │`;
   } else if (results.meetsCriteriaNoul !== undefined) {
-    const thresh = resolveAutoApprovalThreshold();
-    const isApproved = thresh === 0.50 ? results.meetsCriteriaNoul > 0.50 : results.meetsCriteriaNoul >= thresh;
-    const vLabel = isApproved ? "APPROVED" : "REJECTED";
-    deliverablesLine = `│ Meets Plan Deliverables: P = ${results.meetsCriteriaNoul.toFixed(2)} (VERDICT: ${vLabel})      │`;
+    deliverablesLine = `│ Meets Plan Deliverables: P = ${results.meetsCriteriaNoul.toFixed(2)} (categorical verdict unavailable) │`;
   } else {
-    deliverablesLine = `│ Meets Plan Deliverables: VERDICT: APPROVED (JEV Confidence ${confidence}) │`;
+    deliverablesLine = "│ Meets Plan Deliverables: UNAVAILABLE (no verdict or probability) │";
   }
 
   return [
@@ -619,7 +511,7 @@ export function generateVerificationScorecard(results: {
     deliverablesLine,
     `│ Architectural Drift:     ${driftLabel.padEnd(28)}│`,
     `│ Scope Mode:              ${results.scopeChoice} (${scopeDesc})│`,
-    `│ Expert Evaluator:        Approved (Confidence ${confidence})     │`,
+    `│ Choice Confidence:       ${confidence} (not approval authority) │`,
     "└─────────────────────────────────────────────────────────┘",
   ].join("\n");
 }
@@ -641,11 +533,14 @@ export interface DropCheckResult {
   dropJustifiedNoul?: number;
   reasons: string[];
   error?: string;
+  metadata?: SemanticTransportMetadata;
+  rawAnswers?: Readonly<Record<string, unknown>>;
 }
 
 export async function runDropJustificationCheck(
   ctx: DropCheckContext,
-  client: ExpertJudgeClient = defaultJudgeClient
+  client: ExpertJudgeClient = nativeDropJudgeClient,
+  options: SemanticApprovalOptions = DEFAULT_SEMANTIC_APPROVAL_OPTIONS,
 ): Promise<DropCheckResult> {
   const statePayload: Record<string, string> = {
     tasks_to_drop: encloseUntrusted(clampText(ctx.tasks.join(", "), 2000, "head"), "tasks_to_drop"),
@@ -670,6 +565,11 @@ export async function runDropJustificationCheck(
         ESCALATE: "Conflicting evidence, ambiguous intent, or partial justification requiring sovereign human confirmation",
       },
     },
+    drop_justified: {
+      type: "noul",
+      instructions: "What is the probability that dropping these exact tasks is justified by task-bound cancellation, duplication, obsolescence, or already-satisfied evidence? A negated cancellation is not permission; a clean build alone does not establish obsolescence.",
+      criteria: { true: "Exact tasks may legitimately be removed", false: "Required work or unresolved rejection would be evaded" },
+    },
   };
 
   for (const key of Object.keys(questions)) {
@@ -685,79 +585,24 @@ export async function runDropJustificationCheck(
         decision: "unavailable",
         reasons: [`TypeSafe drop evaluation unavailable: ${response.error ?? "No answers returned"}`],
         error: response.error ?? "Unknown error",
+        metadata: response.metadata,
+        rawAnswers: response.answers ? freezeContractValue(structuredClone(response.answers)) : undefined,
       };
     }
 
-    const rawDropVerdict = response.answers.drop_verdict?.choice;
-    const rawDropNoul = response.answers.drop_justified?.noul;
-
-    if (
-      rawDropNoul !== undefined &&
-      (typeof rawDropNoul !== "number" || !Number.isFinite(rawDropNoul) || rawDropNoul < 0 || rawDropNoul > 1)
-    ) {
-      return {
-        decision: "unavailable",
-        reasons: [`TypeSafe drop evaluation unavailable: invalid or malformed drop_justified noul probability (${String(rawDropNoul)})`],
-      };
+    const dropVerdict = choiceValue(response.answers.drop_verdict, ["APPROVE", "REJECT", "ESCALATE"] as const);
+    const dropJustifiedNoul = noulValue(response.answers.drop_justified);
+    if (!dropVerdict || dropJustifiedNoul === undefined) {
+      return { decision: "unavailable", verdict: dropVerdict, dropJustifiedNoul, reasons: ["Required drop_verdict and actual finite drop_justified probability in [0,1] are absent or invalid."], error: "bad_response", metadata: response.metadata, rawAnswers: freezeContractValue(structuredClone(response.answers)) };
     }
-
-    let dropVerdict: DropVerdict | undefined;
-    if (rawDropVerdict && ["APPROVE", "REJECT", "ESCALATE"].includes(rawDropVerdict)) {
-      dropVerdict = rawDropVerdict;
-    } else if (rawDropNoul !== undefined) {
-      const threshold = resolveAutoApprovalThreshold();
-      const passesDrop = threshold === 0.50 ? rawDropNoul > 0.50 : rawDropNoul >= threshold;
-      if (passesDrop) dropVerdict = "APPROVE";
-      else if (rawDropNoul < DROP_REJECT_FLOOR) dropVerdict = "REJECT";
-      else dropVerdict = "ESCALATE";
-    } else {
-      return {
-        decision: "unavailable",
-        reasons: ["TypeSafe drop evaluation unavailable: missing drop_verdict answer (or missing drop_justified answer)"],
-      };
-    }
-
-    const dropConf = response.answers.drop_verdict?.confidence;
-    const dropJustifiedNoul =
-      rawDropNoul ??
-      (dropVerdict === "APPROVE"
-        ? (dropConf ?? 1.0)
-        : dropVerdict === "REJECT"
-          ? (dropConf !== undefined ? Number(Math.max(0, 1 - dropConf).toFixed(2)) : 0.0)
-          : (dropConf ?? 0.5));
-
-    if (dropVerdict === "APPROVE") {
-      const reasonMsg = rawDropNoul !== undefined
-        ? `Drop justified (noul P=${rawDropNoul.toFixed(2)})`
-        : "Drop verdict: APPROVE (tasks verified obsolete or user authorized)";
-      return {
-        decision: "approve",
-        verdict: "APPROVE",
-        dropJustifiedNoul,
-        reasons: [reasonMsg],
-      };
-    }
-
-    if (dropVerdict === "REJECT") {
-      const reasonMsg = rawDropNoul !== undefined
-        ? `Drop rejected (noul P=${rawDropNoul.toFixed(2)})`
-        : "Drop verdict: REJECT (evading work or required planned tasks)";
-      return {
-        decision: "reject",
-        verdict: "REJECT",
-        dropJustifiedNoul,
-        reasons: [reasonMsg],
-      };
-    }
-
-    const reasonMsg = rawDropNoul !== undefined
-      ? `Drop requires sovereign human confirmation (noul P=${rawDropNoul.toFixed(2)})`
-      : "Drop verdict: ESCALATE (conflicting evidence, requires sovereign human confirmation)";
+    const passesDrop = passesSemanticApproval(dropJustifiedNoul, options.approvalPolicy);
+    const decision = dropVerdict === "REJECT" ? "reject"
+      : dropVerdict === "APPROVE" && passesDrop ? "approve"
+      : dropJustifiedNoul < DROP_REJECT_FLOOR ? "reject" : "undecided";
     return {
-      decision: "undecided",
-      verdict: "ESCALATE",
-      dropJustifiedNoul,
-      reasons: [reasonMsg],
+      decision, verdict: dropVerdict, dropJustifiedNoul,
+      reasons: [`Drop ${decision}: raw verdict ${dropVerdict}, actual Noul P=${dropJustifiedNoul.toFixed(2)}. ${decision === "approve" ? "Requires independent bound reasoning before native removal." : "Resolve exact task justification or evidence prerequisite; do not infer permission from a negated request."}`],
+      metadata: response.metadata, rawAnswers: freezeContractValue(structuredClone(response.answers)),
     };
   } catch (err) {
     return {
@@ -767,26 +612,4 @@ export async function runDropJustificationCheck(
     };
   }
 }
-
-export {
-  evaluateAdvisorIntent,
-  arbitrateConsensus,
-  formatConsensusEscalation,
-  formatCkAdvisorReport,
-  runBicameralDropCheck,
-  runBicameralMacroCheck,
-  runBicameralDecisionCheck,
-  evaluateBicameralDoneConsensus,
-  type AdvisorContext,
-  type AdvisorIntentResult,
-  type AdvisorIntentVerdict,
-  type CkAdvisorVerdict,
-  type AdvisorDecisionKind,
-  type AdvisorOptionCandidate,
-  type DecisionCheckContext,
-  type BicameralDecisionResult,
-  type BicameralConsensusDecision,
-  type ConsensusVerdict,
-  type JevResult,
-} from "./bicameral-consensus";
 

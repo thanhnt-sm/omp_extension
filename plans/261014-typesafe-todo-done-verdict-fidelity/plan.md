@@ -6,7 +6,7 @@ priority: P1
 effort: "4h"
 branch: master
 tags: [typesafe, jev-latest, bicameral-consensus, todo-done, calibration, stub-filter, tdd]
-blockedBy: [261012-todo-drop-judge-fidelity, 261012-judge-threshold-lifecycle-alignment]
+blockedBy: []
 blocks: []
 created: 2026-10-14
 ---
@@ -103,3 +103,8 @@ flowchart LR
 ```bash
 /ck:cook D:/100.Software/Github/omp_extension/plans/261014-typesafe-todo-done-verdict-fidelity/plan.md --tdd
 ```
+
+## Execution reconciliation — 2026-10-19
+
+Residual C04/C06/C07/C09/C18 ownership: [consolidated master](../261019-research-to-cook-execution/plan.md), with [source-evidenced dispositions](../reports/261019-research-to-cook-coverage.json). Preserve scaffold/phase-boundary/F16 regressions. Remove stale completed-index whole-plan dependencies: remaining evidence/report outputs are owned by master phases1–3/9, not by replaying the two older backlogs. Do not fabricate missing primitive probabilities.
+

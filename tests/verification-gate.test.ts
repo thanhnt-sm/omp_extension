@@ -13,6 +13,7 @@ describe("Phase 3: Execution Compliance & Dual Verification Gate", () => {
   test.each([NaN, Infinity, -1, 1.1, undefined])("rejects invalid required probability %s after Gate 1", async (score) => {
     const result = await verifyTaskCompletion({ taskId: "invalid-response" }, {
       evaluateGate: async () => ({ answers: {
+        deliverables_verdict: { choice: "APPROVE" },
         meets_criteria: { noul: score as number },
         plan_drift: { choice: "no_drift" },
         claude_account_untouched: { noul: 1 },
@@ -20,14 +21,14 @@ describe("Phase 3: Execution Compliance & Dual Verification Gate", () => {
     });
     expect(result.gate1.passed).toBe(true);
     expect(result.approved).toBe(false);
-    expect(result.gate2?.escalateToUser).toBe(true);
+    expect(result.disposition?.status).toBe("UNAVAILABLE");
   });
   test("escalates thrown requests and missing required dimensions", async () => {
     for (const evaluateGate of [async () => { throw new Error("transport"); }, async () => ({ answers: {} })]) {
       const result = await verifyTaskCompletion({ taskId: "unavailable" }, { evaluateGate });
       expect(result.gate1.passed).toBe(true);
       expect(result.approved).toBe(false);
-      expect(result.escalateToUser).toBe(true);
+      expect(result.disposition?.status).toBe("UNAVAILABLE");
     }
   });
   test("constructGateQuestions creates criteria, drift, and isolation questions", () => {
@@ -116,6 +117,7 @@ describe("Phase 3: Execution Compliance & Dual Verification Gate", () => {
     const mockJudge: GateJudgeClient = {
       evaluateGate: async () => ({
         answers: {
+          deliverables_verdict: { choice: "APPROVE" },
           meets_criteria: { noul: 0.45 },
           plan_drift: { choice: "no_drift" },
           claude_account_untouched: { noul: 1.0 },
@@ -140,6 +142,7 @@ describe("Phase 3: Execution Compliance & Dual Verification Gate", () => {
     const mockJudge: GateJudgeClient = {
       evaluateGate: async () => ({
         answers: {
+          deliverables_verdict: { choice: "APPROVE" },
           meets_criteria: { noul: 0.95 },
           plan_drift: { choice: "unapproved_deviation" },
           claude_account_untouched: { noul: 1.0 },
@@ -162,6 +165,7 @@ describe("Phase 3: Execution Compliance & Dual Verification Gate", () => {
     const mockJudge: GateJudgeClient = {
       evaluateGate: async () => ({
         answers: {
+          deliverables_verdict: { choice: "APPROVE" },
           meets_criteria: { noul: 0.94 },
           plan_drift: { choice: "no_drift" },
           claude_account_untouched: { noul: 1.0 },
@@ -195,7 +199,7 @@ describe("Phase 3: Execution Compliance & Dual Verification Gate", () => {
 
     const result = await verifyTaskCompletion(context, mockJudge);
     expect(result.approved).toBe(false);
-    expect(result.escalateToUser).toBe(true);
+    expect(result.disposition?.status).toBe("UNAVAILABLE");
   });
 
   describe("Dumb Model Fallback Protocol (XML Remediation Injection)", () => {
@@ -223,6 +227,7 @@ describe("Phase 3: Execution Compliance & Dual Verification Gate", () => {
       const mockJudge: GateJudgeClient = {
         evaluateGate: async () => ({
           answers: {
+            deliverables_verdict: { choice: "REJECT" },
             meets_criteria: { noul: 0.3 },
             plan_drift: { choice: "no_drift" },
             claude_account_untouched: { noul: 1.0 },
@@ -247,6 +252,7 @@ describe("Phase 3: Execution Compliance & Dual Verification Gate", () => {
       const mockJudge: GateJudgeClient = {
         evaluateGate: async () => ({
           answers: {
+            deliverables_verdict: { choice: "APPROVE" },
             meets_criteria: { noul: 0.95 },
             plan_drift: { choice: "no_drift" },
             claude_account_untouched: { noul: 1.0 },
@@ -283,6 +289,7 @@ describe("Phase 3: Execution Compliance & Dual Verification Gate", () => {
           judgeCalled = true;
           return {
             answers: {
+              deliverables_verdict: { choice: "APPROVE" },
               meets_criteria: { noul: 0.99 },
               plan_drift: { choice: "no_drift" },
               claude_account_untouched: { noul: 1.0 },
@@ -311,6 +318,7 @@ describe("Phase 3: Execution Compliance & Dual Verification Gate", () => {
       const mockJudge: GateJudgeClient = {
         evaluateGate: async () => ({
           answers: {
+            deliverables_verdict: { choice: "APPROVE" },
             meets_criteria: { noul: 0.75 },
             plan_drift: { choice: "no_drift" },
             claude_account_untouched: { noul: 1.0 },
@@ -336,6 +344,7 @@ describe("Phase 3: Execution Compliance & Dual Verification Gate", () => {
         const mockJudge: GateJudgeClient = {
           evaluateGate: async () => ({
             answers: {
+              deliverables_verdict: { choice: "APPROVE" },
               meets_criteria: { noul: 0.75 },
               plan_drift: { choice: "no_drift" },
               claude_account_untouched: { noul: 1.0 },
@@ -366,6 +375,7 @@ describe("Phase 3: Execution Compliance & Dual Verification Gate", () => {
         evaluateGate: async () => ({
           answers: {
             deliverables_verdict: { choice: "APPROVE" },
+            meets_criteria: { noul: 0.95 },
             plan_drift: { choice: "no_drift" },
             claude_account_untouched: { noul: 1.0 },
           },
@@ -392,6 +402,7 @@ describe("Phase 3: Execution Compliance & Dual Verification Gate", () => {
         evaluateGate: async () => ({
           answers: {
             deliverables_verdict: { choice: "REJECT" },
+            meets_criteria: { noul: 0.2 },
             plan_drift: { choice: "no_drift" },
             claude_account_untouched: { noul: 1.0 },
           },
@@ -417,6 +428,7 @@ describe("Phase 3: Execution Compliance & Dual Verification Gate", () => {
         evaluateGate: async () => ({
           answers: {
             deliverables_verdict: { choice: "NEXT_ACTION_REQUIRED" },
+            meets_criteria: { noul: 0.4 },
             plan_drift: { choice: "no_drift" },
             claude_account_untouched: { noul: 1.0 },
           },
@@ -436,5 +448,52 @@ describe("Phase 3: Execution Compliance & Dual Verification Gate", () => {
       expect(result.gate2?.deliverablesVerdict).toBe("NEXT_ACTION_REQUIRED");
       expect(result.reasons.some((r) => r.includes("next actions") || r.includes("Next actions"))).toBe(true);
     });
+  });
+});
+
+describe("Strict gate response and recovery regressions", () => {
+  test("categorical approval/confidence cannot replace required actual probability", async () => {
+    const result = await verifyTaskCompletion({ taskId: "choice-only" }, { evaluateGate: async () => ({ answers: {
+      deliverables_verdict: { choice: "APPROVE", confidence: 1 }, plan_drift: { choice: "no_drift" }, claude_account_untouched: { noul: 1 },
+    } }) });
+    expect(result.approved).toBe(false);
+    expect(result.disposition?.status).toBe("UNAVAILABLE");
+    expect(result.gate2?.meetsCriteriaNoul).toBeUndefined();
+    expect(result.remediation).toContain("do not edit code");
+  });
+  test.each(["0.9", null, NaN, Infinity, -0.1, 1.1])("invalid actual probability %s fails closed even with APPROVE", async probability => {
+    const result = await verifyTaskCompletion({ taskId: "invalid-noul" }, { evaluateGate: async () => ({ answers: {
+      deliverables_verdict: { choice: "APPROVE", confidence: 1 }, meets_criteria: { noul: probability },
+      plan_drift: { choice: "no_drift" }, claude_account_untouched: { noul: 1 },
+    } }) });
+    expect(result.disposition?.status).toBe("UNAVAILABLE");
+    expect(result.approved).toBe(false);
+  });
+  test("outage remediation never demands unrelated implementation or treats transport as failed code", () => {
+    const xml = generateFallbackRemediation(["Service unavailable"], { outcome: { status: "UNAVAILABLE", component: "provider", reasons: ["Service unavailable"] } });
+    expect(xml).toContain("<result_kind>UNAVAILABLE</result_kind>");
+    expect(xml).toContain("successful availability observation");
+    expect(xml).not.toContain("Run full test suite");
+    expect(xml).not.toContain("Scoped executor");
+  });
+  test("research questions evaluate findings, not unrelated source implementation", () => {
+    const questions = constructGateQuestions(["Report the exact root cause"], "research");
+    expect(questions.deliverables_verdict.instructions).toContain("concrete findings");
+    expect(questions.deliverables_verdict.instructions).toContain("not unrelated implementation");
+  });
+  test("required evidence omissions fail Gate 1 as evidence-required rather than fabricated implementation rejection", () => {
+    const evidence: TaskEvidenceResult = {
+      gitStatus: "", gitDiff: "", testExitCode: null, testOutput: "", changedFiles: [],
+      criteria: [], criteriaSource: "none", cleanWorkingTree: true, timestamp: "synthetic fixture",
+      diffScope: "full-working-tree", evidenceStatus: "EVIDENCE_REQUIRED",
+      omissions: [{ reason: "BASELINE_CONTRACT_BINDING_REQUIRED", kind: "binding", required: true }],
+    };
+    const gate = checkDeterministicPreconditions(evidence);
+    expect(gate.passed).toBe(false);
+    expect(gate.outcome?.status).toBe("EVIDENCE_REQUIRED");
+    expect(gate.reasons.join(" ")).toContain("BASELINE_CONTRACT_BINDING_REQUIRED");
+    const unsafe = checkDeterministicPreconditions({ ...evidence, gitStatus: " M .claude/settings.json", changedFiles: [".claude/settings.json"] });
+    expect(unsafe.passed).toBe(false);
+    expect(unsafe.outcome?.status).toBe("REJECTED");
   });
 });

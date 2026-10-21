@@ -165,6 +165,42 @@ diff --git a/tests/added.test.ts b/tests/added.test.ts
     expect(result.issues).toContain("Detected commented-out test assertion in additions.");
   });
 
+  test.each([
+    "process.exit(1);",
+    'const params = { testCommand: "bun -e \\"process.exit(1)\\"" };',
+    'mytest.skip("not a runner");',
+    'préxit("not a runner");',
+    '$xit("not a runner");',
+  ])("does not mistake an identifier suffix for a disabled suite: %s", (source) => {
+    const result = analyzeDiffForTestEvasion(`--- a/tests/fixture.test.ts\n+++ b/tests/fixture.test.ts\n+${source}`);
+    expect(result.isSafe).toBe(true);
+    expect(result.modifiedSuites).toEqual([]);
+  });
+
+  test.each(["test.skip", "it.todo", "describe.skip", "xit", "xtest", "xdescribe"])(
+    "still rejects the disabled-suite identifier %s in executable contexts", (runner) => {
+      const call = `${runner}("disabled", () => {});`;
+      for (const prefix of ["", "let n = 1; n++ / ", `if (true) /'/.test(""); `]) {
+        const result = analyzeDiffForTestEvasion(
+          `--- a/tests/fixture.test.ts\n+++ b/tests/fixture.test.ts\n+${prefix}${call}`
+        );
+        expect(result.isSafe).toBe(false);
+        expect(result.modifiedSuites).toHaveLength(1);
+        expect(result.issues).toContain("Detected skipped or todo test suite in additions.");
+      }
+    }
+  );
+
+  test("keeps executable disabled suites visible after partial template context", () => {
+    const runner = "test.skip";
+    const result = analyzeDiffForTestEvasion(
+      `--- a/tests/fixture.test.ts\n+++ b/tests/fixture.test.ts\n@@ -20,2 +20,3 @@\n template tail\n \`;\n+${runner}("disabled", () => {});`
+    );
+    expect(result.isSafe).toBe(false);
+    expect(result.modifiedSuites).toHaveLength(1);
+    expect(result.issues).toContain("Detected skipped or todo test suite in additions.");
+  });
+
   test("Modified assertion and renamed test block with equal additions pass", () => {
     const diff = `
 @@ -15,4 +15,4 @@

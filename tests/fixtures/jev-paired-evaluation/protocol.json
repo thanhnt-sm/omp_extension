@@ -1,0 +1,304 @@
+{
+  "schemaVersion": 1,
+  "kind": "deterministic_fixture",
+  "state": "ready",
+  "pendingInputs": [],
+  "seed": "fixture-custodian-seed-v1",
+  "decisionRule": "strict-corpus-dominance-v1",
+  "targetScope": "Synthetic reader/writer compatibility fixtures only, not human-labeled observations.",
+  "minimumGroups": 2,
+  "strata": [
+    {
+      "id": "challenge-integration",
+      "population": "challenge",
+      "minimumGroups": 2,
+      "language": "TypeScript",
+      "taskType": "integration",
+      "risk": "high",
+      "integrationRequired": true
+    }
+  ],
+  "metricGates": [
+    {
+      "metric": "unsafe_approvals",
+      "population": "challenge",
+      "stratum": "challenge-integration",
+      "numerator": "unsafe_approvals",
+      "denominator": "scheduled_independent_pairs",
+      "direction": "lower",
+      "comparator": "zero",
+      "allowEquality": true,
+      "requiredSupport": true,
+      "unknown": "retain"
+    },
+    {
+      "metric": "h_only_wrong",
+      "population": "challenge",
+      "stratum": "challenge-integration",
+      "numerator": "h_only_wrong",
+      "denominator": "scheduled_independent_pairs",
+      "direction": "lower",
+      "comparator": "zero",
+      "allowEquality": true,
+      "requiredSupport": true,
+      "unknown": "retain"
+    },
+    {
+      "metric": "integration_misses",
+      "population": "challenge",
+      "stratum": "challenge-integration",
+      "numerator": "integration_misses",
+      "denominator": "scheduled_independent_pairs",
+      "direction": "lower",
+      "comparator": "zero",
+      "allowEquality": true,
+      "requiredSupport": true,
+      "unknown": "retain"
+    },
+    {
+      "metric": "correctness_lower",
+      "population": "challenge",
+      "stratum": "population",
+      "numerator": "correctness_lower",
+      "denominator": "scheduled_independent_pairs",
+      "direction": "higher",
+      "comparator": "zero",
+      "allowEquality": false,
+      "requiredSupport": true,
+      "unknown": "retain"
+    },
+    {
+      "metric": "errors",
+      "population": "challenge",
+      "stratum": "challenge-integration",
+      "numerator": "errors",
+      "denominator": "scheduled_independent_pairs",
+      "direction": "lower",
+      "comparator": "M",
+      "allowEquality": true,
+      "requiredSupport": true,
+      "unknown": "retain"
+    },
+    {
+      "metric": "unnecessary_deferrals",
+      "population": "challenge",
+      "stratum": "challenge-integration",
+      "numerator": "unnecessary_deferrals",
+      "denominator": "scheduled_independent_pairs",
+      "direction": "lower",
+      "comparator": "M",
+      "allowEquality": true,
+      "requiredSupport": true,
+      "unknown": "retain"
+    },
+    {
+      "metric": "priced_cost",
+      "population": "challenge",
+      "stratum": "challenge-integration",
+      "numerator": "priced_cost",
+      "denominator": "scheduled_independent_pairs",
+      "direction": "lower",
+      "comparator": "M",
+      "allowEquality": true,
+      "requiredSupport": true,
+      "unknown": "retain"
+    },
+    {
+      "metric": "p95_latency",
+      "population": "challenge",
+      "stratum": "challenge-integration",
+      "numerator": "p95_latency",
+      "denominator": "scheduled_independent_pairs",
+      "direction": "lower",
+      "comparator": "M",
+      "allowEquality": true,
+      "requiredSupport": true,
+      "unknown": "retain"
+    },
+    {
+      "metric": "reviewer_actions",
+      "population": "challenge",
+      "stratum": "challenge-integration",
+      "numerator": "reviewer_actions",
+      "denominator": "scheduled_independent_pairs",
+      "direction": "lower",
+      "comparator": "M",
+      "allowEquality": true,
+      "requiredSupport": true,
+      "unknown": "retain"
+    }
+  ],
+  "files": {
+    "corpus": "corpus.jsonl",
+    "labels": "labels.jsonl",
+    "splits": "splits.json",
+    "prices": "prices.json"
+  },
+  "models": {
+    "jev": "fixture-jev-exact",
+    "advisorProvider": "fixture-provider",
+    "advisorModel": "fixture-advisor-exact"
+  },
+  "frozenConfiguration": {
+    "policy": {
+      "path": "configuration.txt",
+      "sha256": "24d8e08ac2349ae2a08fe92538830cc9d78164b36218fdf03ece360dde97bb33"
+    },
+    "prompts": {
+      "path": "configuration.txt",
+      "sha256": "24d8e08ac2349ae2a08fe92538830cc9d78164b36218fdf03ece360dde97bb33"
+    },
+    "packetSelection": {
+      "path": "configuration.txt",
+      "sha256": "24d8e08ac2349ae2a08fe92538830cc9d78164b36218fdf03ece360dde97bb33"
+    },
+    "implementation": {
+      "path": "configuration.txt",
+      "sha256": "24d8e08ac2349ae2a08fe92538830cc9d78164b36218fdf03ece360dde97bb33"
+    }
+  },
+  "predicateDecisionPolicy": {
+    "schemaVersion": 1,
+    "categorical": "declared_relations",
+    "noul": {"semanticMode":"support_only","orientation":"support_probability","supportsAbove":0.5,"uncertainty":"strict_boundary_or_missing_evidence_insufficient"}
+  },
+  "nativeHost": null,
+  "approvalPolicy": {"threshold":0.5,"comparator":"gt"},
+  "controlRule": "matched_repaired_M_frozen_approval_policy_not_claimed_optimal",
+  "limits": {
+    "concurrency": 1,
+    "maxQuestions": 128,
+    "maxBodyBytes": 32768,
+    "maxEpisodes": 128,
+    "maxRunMs": 300000,
+    "deadlineAt": "2100-01-01T00:00:00.000Z"
+  },
+  "accounting": {
+    "ownership": "independent_arms",
+    "latency": "admission_to_terminal_including_queue",
+    "admission": "in_process_driver",
+    "quantile": "nearest_rank",
+    "cacheConditions": "Must be frozen by custodian before inference; no shared cross-arm outcome cache.",
+    "cooldownConditions": "Canonical transport owns retries and cooldown; runner adds no retries."
+  },
+  "canonicalSelection": "declared_before_outputs",
+  "splitRatio": [
+    60,
+    20,
+    20
+  ],
+  "holdoutUnit": "provenance_group",
+  "spend": null,
+  "implementationInvariants": null,
+  "scenarioCoverage": {
+    "U1": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#U1"
+    },
+    "U2": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#U2"
+    },
+    "U3": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#U3"
+    },
+    "I1": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#I1"
+    },
+    "I2": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#I2"
+    },
+    "I3": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#I3"
+    },
+    "T1": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#T1"
+    },
+    "T2": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#T2"
+    },
+    "T3": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#T3"
+    },
+    "S1": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#S1"
+    },
+    "S2": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#S2"
+    },
+    "S3": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#S3"
+    },
+    "ST1": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#ST1"
+    },
+    "ST2": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#ST2"
+    },
+    "ST3": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#ST3"
+    },
+    "E1": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#E1"
+    },
+    "E2": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#E2"
+    },
+    "E3": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#E3"
+    },
+    "ER1": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#ER1"
+    },
+    "ER2": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#ER2"
+    },
+    "ER3": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#ER3"
+    },
+    "A1": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#A1"
+    },
+    "A2": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#A2"
+    },
+    "A3": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#A3"
+    },
+    "D1": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#D1"
+    },
+    "D2": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#D2"
+    },
+    "D3": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#D3"
+    },
+    "IT1": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#IT1"
+    },
+    "IT2": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#IT2"
+    },
+    "IT3": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#IT3"
+    },
+    "C1": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#C1"
+    },
+    "C2": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#C2"
+    },
+    "C3": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#C3"
+    },
+    "B1": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#B1"
+    },
+    "B2": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#B2"
+    },
+    "B3": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#B3"
+    }
+  },
+  "ablations": []
+}

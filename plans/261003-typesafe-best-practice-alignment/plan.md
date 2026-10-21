@@ -49,3 +49,7 @@ The user requested an evaluation of `omp`'s `judge` / `typesafe` integration aga
    - **Decision:** Tool Initialization Arguments (Passed as an initialization argument when the MCP tool is registered).
 2. **Lattice Definition:** Should the escalation lattice be a global constant or configurable per tool?
    - **Decision:** Per-Tool Configuration (Pass the valid lattice array alongside the baseline during tool initialization).
+
+## Execution reconciliation — 2026-10-19
+
+Residual C29 ownership: [master phase6/9](../261019-research-to-cook-execution/plan.md), with [source-evidenced dispositions](../reports/261019-research-to-cook-coverage.json). Finish the selected trusted per-tool initialization policy; retain deterministic lattice enforcement. No agent-controlled policy, global consent provisioning or completion inferred from documentation.

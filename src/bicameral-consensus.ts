@@ -9,6 +9,11 @@ import {
   runDropJustificationCheck,
   runPhaseMacroCheck,
 } from "./cook-expert-judge";
+import { validateAdvisorReceipt, type AdvisorReceipt, type ReviewSnapshot } from "./advisor-protocol";
+import { canonicalDigest, freezeContractValue } from "./task-contract-source";
+import type { ReviewBinding, VerificationOutcome } from "./types/verification";
+import { createSemanticJudgeClient, noulValue, scoreValue, choiceValue, type SemanticTransportMetadata } from "./semantic-judge-client";
+import { DEFAULT_SEMANTIC_APPROVAL_OPTIONS, passesSemanticApproval, type SemanticApprovalOptions } from "./semantic-approval-policy";
 
 export type AdvisorIntentVerdict = "ALLOW" | "DISALLOW" | "UNCERTAIN";
 export type CkAdvisorVerdict = "proceed" | "revise" | "block";
@@ -71,18 +76,24 @@ export interface AdvisorIntentResult {
   findings?: AdvisorFinding[];
   openQuestions?: string[];
   userIntentDetected?: boolean;
+  authority?: "none";
+  source?: "heuristic";
 }
 
 export type JevConsensusVerdict =
   | "APPROVE"
   | "REJECT"
   | "NEXT_ACTION_REQUIRED"
-  | "ESCALATE";
+  | "ESCALATE"
+  | "UNAVAILABLE";
 
 export interface JevResult {
   verdict: JevConsensusVerdict;
   confidence?: number;
   reasons: string[];
+  probability?: number;
+  outcome?: VerificationOutcome;
+  metadata?: SemanticTransportMetadata;
 }
 
 export type ConsensusVerdict =
@@ -98,6 +109,9 @@ export interface BicameralConsensusDecision {
   reasons: string[];
   escalationMessage?: string;
   reconciliationDirectives?: string[];
+  /** Sole native staging decision; legacy verdict labels are presentation only. */
+  disposition: VerificationOutcome;
+  reasoning?: AdvisorReceipt;
 }
 
 const CANCELLATION_PATTERNS = [
@@ -412,9 +426,9 @@ function evaluateAdvisorDecision(ctx: AdvisorContext): AdvisorIntentResult {
 }
 
 /**
- * Lobe 1: Evaluates user intent, conversation context, agent claims, and decision options.
+ * Non-authoritative local intent signal. Heuristic confidence is not JEV probability or real Advisor provenance.
  */
-export function evaluateAdvisorIntent(ctx: AdvisorContext): AdvisorIntentResult {
+function evaluateIntentHeuristic(ctx: AdvisorContext): AdvisorIntentResult {
   const userReq = (ctx.userRequest || "").trim();
   const workLog = (ctx.agentWorkLog || "").trim();
   const taskText = Array.isArray(ctx.task) ? ctx.task.join(", ") : (ctx.task || "");
@@ -433,6 +447,8 @@ export function evaluateAdvisorIntent(ctx: AdvisorContext): AdvisorIntentResult 
     const userWantsCancel = userReq
       .split(/[.!?;\n]+/)
       .some((clause) => {
+        // Negated cancellation never supplies permission, including "don't skip" and "not obsolete".
+        if (/\b(?:do\s+not|don't|dont|must\s+not|never|not|cannot|can't)\s+(?:(?:ever|just|simply|currently)\s+)*(?:cancel|drop|skip|remove|delete|omit|ignore|deprecate|supersede|obsolete)\b/i.test(clause) || /\bkhông\s+(?:được\s+)?(?:hủy|bỏ qua|xóa)\b/i.test(clause)) return false;
         const clauseOverlap = computeTokenOverlap(taskText, clause);
         const cancellationTargetsTask =
           clauseOverlap > 0 ||
@@ -485,24 +501,15 @@ export function evaluateAdvisorIntent(ctx: AdvisorContext): AdvisorIntentResult 
       }
     }
 
-    // 3. Clean build or verified test success can establish obsolescence only
-    // after task-scoped cancellation and explicit user conflict are ruled out.
+    // A clean build alone cannot prove that a task is obsolete or already satisfied.
     const hasBuildEvidence =
       ctx.hasCleanBuildEvidence === true ||
       CLEAN_BUILD_PATTERNS.some((p) => p.test(combinedContext));
     if (hasBuildEvidence) {
-      const reason = "Clean build or verified test success confirms task is obsolete or already satisfied";
-      const buildOverlap = computeTokenOverlap(taskText, combinedContext);
-      const buildConf = Number(
-        Math.min(0.95, Math.max(0.86, 0.86 + buildOverlap * 0.08)).toFixed(2)
-      );
+      const reason = "Clean build is only a local signal; task-scoped obsolescence or satisfaction evidence is still required";
       return {
-        verdict: "ALLOW",
-        ckVerdict: "proceed",
-        confidence: buildConf,
-        reason,
-        recommendation: reason,
-        userIntentDetected: false,
+        verdict: "UNCERTAIN", ckVerdict: "revise", confidence: 0.50,
+        reason, recommendation: reason, userIntentDetected: false,
       };
     }
 
@@ -675,82 +682,74 @@ export function evaluateAdvisorIntent(ctx: AdvisorContext): AdvisorIntentResult 
   };
 }
 
-/**
- * Arbitrates between Lobe 1 (Advisor Intent) and Lobe 2 (TypeSafe JEV Judge).
- */
+export function evaluateAdvisorIntent(ctx: AdvisorContext): AdvisorIntentResult {
+  return freezeContractValue({ ...evaluateIntentHeuristic(ctx), authority: "none", source: "heuristic" });
+}
+
+export interface ConsensusReasoningInput {
+  receipt: AdvisorReceipt;
+  binding: ReviewBinding;
+  snapshot: ReviewSnapshot;
+  criterionIds: readonly string[];
+  requireParentIntegration?: boolean;
+}
+
+/** Preserve independent raw assessments; only real, exactly bound reasoning can authorize staging. */
 export function arbitrateConsensus(
   advisor: AdvisorIntentResult,
-  jev: JevResult
+  jev: JevResult,
+  reasoning?: ConsensusReasoningInput,
+  options: SemanticApprovalOptions = DEFAULT_SEMANTIC_APPROVAL_OPTIONS,
 ): BicameralConsensusDecision {
-  const reasons: string[] = [];
-
-  // 1. Next Action Required -> Adaptive Plan Reconciliation (never a fatal throw)
-  if (jev.verdict === "NEXT_ACTION_REQUIRED") {
-    const directives = jev.reasons.length > 0
-      ? jev.reasons
-      : ["Review missing acceptance criteria and adapt plan deliverables"];
-    return {
-      verdict: "RECONCILE_PLAN",
-      advisor,
-      jev,
-      reasons: [
-        "Lobe 2 (JEV) identified incomplete deliverables or failing criteria requiring plan adaptation.",
-        ...jev.reasons,
-      ],
-      reconciliationDirectives: directives,
-    };
+  const rawAdvisor = freezeContractValue(structuredClone(advisor));
+  const rawJev = freezeContractValue(structuredClone(jev));
+  const reasons = [...jev.reasons];
+  let disposition: VerificationOutcome;
+  let receipt: AdvisorReceipt | undefined;
+  if (reasoning && validateAdvisorReceipt(reasoning.receipt, reasoning).valid) {
+    receipt = freezeContractValue(structuredClone(reasoning.receipt));
   }
-
-  // 2. Both Lobes Agree: Consensus
-  if (advisor.verdict === "ALLOW" && jev.verdict === "APPROVE") {
-    return {
-      verdict: "AUTO_APPROVE",
-      advisor,
-      jev,
-      reasons: [
-        "Bicameral consensus achieved: Advisor Intent (ALLOW) and JEV Judge (APPROVE) both agree.",
-        advisor.reason,
-        ...jev.reasons,
-      ],
-    };
-  }
-
-  if (advisor.verdict === "DISALLOW" && jev.verdict === "REJECT") {
-    return {
-      verdict: "AUTO_REJECT",
-      advisor,
-      jev,
-      reasons: [
-        "Bicameral consensus achieved: Advisor Intent (DISALLOW) and JEV Judge (REJECT) both reject action.",
-        advisor.reason,
-        ...jev.reasons,
-      ],
-    };
-  }
-
-  // 3. Conflict or Uncertainty -> Sovereign Human Escalation
-  let escalationMessage: string;
-  if (advisor.verdict === "ALLOW" && jev.verdict === "REJECT") {
-    escalationMessage = `Conflict detected: Advisor permits action (${advisor.reason}), but JEV Judge rejected (${jev.reasons.join("; ")}).`;
-    reasons.push(escalationMessage);
-  } else if (advisor.verdict === "DISALLOW" && jev.verdict === "APPROVE") {
-    escalationMessage = `Conflict detected: JEV Judge approved code evidence, but Advisor identified user intent conflict (${advisor.reason}).`;
-    reasons.push(escalationMessage);
-  } else if (advisor.verdict === "UNCERTAIN" || jev.verdict === "ESCALATE") {
-    escalationMessage = `Escalation: Advisor (${advisor.verdict}: ${advisor.reason}) or JEV (${jev.verdict}) requires sovereign human confirmation.`;
-    reasons.push(escalationMessage);
+  const verdict = receipt?.assessment.verdict;
+  const rawProbabilityValid = typeof jev.probability === "number" && Number.isFinite(jev.probability) && jev.probability >= 0 && jev.probability <= 1;
+  const thresholdSatisfied = rawProbabilityValid && passesSemanticApproval(jev.probability!, options.approvalPolicy);
+  const primitivesValid = ["APPROVE", "REJECT", "NEXT_ACTION_REQUIRED", "ESCALATE", "UNAVAILABLE"].includes(jev.verdict) &&
+    (jev.confidence === undefined || (typeof jev.confidence === "number" && Number.isFinite(jev.confidence) && jev.confidence >= 0 && jev.confidence <= 1));
+  if (jev.verdict === "UNAVAILABLE" || jev.outcome?.status === "UNAVAILABLE" || !rawProbabilityValid || !primitivesValid) {
+    disposition = { status: "UNAVAILABLE", component: "semantic_judge", reasons: reasons.length ? reasons : ["Actual finite JEV probability and complete required answers are prerequisites."] };
+  } else if (reasoning && !receipt) {
+    disposition = { status: "EVIDENCE_REQUIRED", missingCriterionIds: [...reasoning.criterionIds], reasons: ["Real Advisor receipt is stale, invalid, or noncovering; obtain a fresh exact-binding review."] };
+  } else if (verdict === "unavailable") {
+    disposition = { status: "UNAVAILABLE", component: "advisor", reasons: [receipt!.assessment.recommendation] };
+  } else if (verdict === "human_required" || jev.verdict === "ESCALATE" || jev.outcome?.status === "HUMAN_REQUIRED") {
+    disposition = { status: "HUMAN_REQUIRED", reasons: [...reasons, receipt?.assessment.recommendation ?? "Resolve the exact bound task conflict through trusted host context."] };
+  } else if ((verdict === "proceed" && jev.verdict === "REJECT") || (verdict === "block" && jev.verdict === "APPROVE")) {
+    disposition = { status: "HUMAN_REQUIRED", reasons: ["Independent real Advisor and raw JEV disagree; neither assessment has been rewritten.", ...reasons, receipt!.assessment.recommendation] };
+  } else if (jev.outcome?.status === "REJECTED" || jev.verdict === "REJECT" || verdict === "block") {
+    disposition = { status: "REJECTED", criterionIds: jev.outcome?.status === "REJECTED" ? [...jev.outcome.criterionIds] : receipt?.assessment.criterionCoverage.filter(c => c.status === "contradicted").map(c => c.criterionId) ?? [], reasons: [...reasons, ...(receipt ? [receipt.assessment.recommendation] : [])] };
+  } else if (jev.outcome?.status === "EVIDENCE_REQUIRED" || jev.verdict === "NEXT_ACTION_REQUIRED" || verdict === "revise") {
+    disposition = { status: "EVIDENCE_REQUIRED", missingCriterionIds: jev.outcome?.status === "EVIDENCE_REQUIRED" ? [...jev.outcome.missingCriterionIds] : receipt?.assessment.criterionCoverage.filter(c => c.status === "uncovered").map(c => c.criterionId) ?? [], reasons: reasons.length ? reasons : ["Provide exact criterion-level evidence and fresh independent review."] };
+  } else if (jev.verdict === "APPROVE" && !thresholdSatisfied) {
+    disposition = { status: "EVIDENCE_REQUIRED", missingCriterionIds: [...(reasoning?.criterionIds ?? [])], reasons: ["Actual JEV probability does not satisfy the existing approval policy; obtain criterion-level diagnosis and relevant evidence changes."] };
+  } else if (!receipt || receipt.authority !== "task_bound" || !reasoning || !["task_review", "parent_review"].includes(reasoning.binding.purpose)) {
+    disposition = { status: "EVIDENCE_REQUIRED", missingCriterionIds: [...(reasoning?.criterionIds ?? [])], reasons: ["A real, task-bound Advisor receipt is required. Local intent labels and standalone consultations have no native authority."] };
+  } else if (receipt.assessment.criterionCoverage.some(c => c.status !== "covered") || (reasoning.requireParentIntegration && receipt.assessment.parentIntegration.status !== "supported")) {
+    disposition = { status: "HUMAN_REQUIRED", reasons: ["Unresolved real reasoning criterion coverage or parent integration conflict forbids approval."] };
+  } else if (jev.verdict === "APPROVE" && verdict === "proceed") {
+    const bindingDigest = canonicalDigest(reasoning.binding);
+    disposition = { status: "APPROVED_PENDING_COMMIT", bindingDigest, receiptId: `consensus:${canonicalDigest({ advisorReceipt: receipt.receiptId, jev: rawJev, bindingDigest })}` };
   } else {
-    escalationMessage = "Bicameral evaluation unresolved; escalating to human authority.";
-    reasons.push(escalationMessage);
+    disposition = { status: "UNAVAILABLE", component: "composition", reasons: ["Unrecognized or unresolved verification outcome; no native approval."] };
   }
-
-  return {
-    verdict: "HUMAN_ESCALATION",
-    advisor,
-    jev,
-    reasons,
-    escalationMessage,
-  };
+  const resultReasons = "reasons" in disposition ? [...disposition.reasons] : ["Independent bound assessments support staging only; matching native success is still required."];
+  const legacyVerdict: ConsensusVerdict = disposition.status === "APPROVED_PENDING_COMMIT" ? "AUTO_APPROVE"
+    : disposition.status === "REJECTED" ? "AUTO_REJECT"
+    : disposition.status === "EVIDENCE_REQUIRED" ? "RECONCILE_PLAN" : "HUMAN_ESCALATION";
+  return freezeContractValue({
+    verdict: legacyVerdict, advisor: rawAdvisor, jev: rawJev, disposition, reasoning: receipt,
+    reasons: resultReasons,
+    escalationMessage: disposition.status === "HUMAN_REQUIRED" ? resultReasons.join("; ") : undefined,
+    reconciliationDirectives: disposition.status === "EVIDENCE_REQUIRED" ? resultReasons : undefined,
+  });
 }
 
 /**
@@ -761,9 +760,11 @@ export function formatConsensusEscalation(decision: BicameralConsensusDecision):
   return [
     "Bicameral Consensus Escalation (Sovereign Human Review)",
     "─────────────────────────────────────────────────────────────",
-    `Lobe 1 (Advisor Intent): ${decision.advisor.verdict} (Confidence ${decision.advisor.confidence.toFixed(2)})`,
+    `Local intent signal (not real Advisor): ${decision.advisor.verdict} (Heuristic confidence ${decision.advisor.confidence.toFixed(2)})`,
     `Intent Rationale:        ${decision.advisor.reason.slice(0, 500)}`,
     `Lobe 2 (TypeSafe JEV Judge): ${decision.jev.verdict}`,
+    `Composed result: ${decision.disposition.status}`,
+    `Real Advisor receipt: ${decision.reasoning?.receiptId ?? "missing (no reasoning authority)"}`,
     `Evidence Findings:       ${jevReasons.slice(0, 500)}`,
     "─────────────────────────────────────────────────────────────",
     "Sovereign human confirmation needed: Approve or reject.",
@@ -774,168 +775,55 @@ export function formatConsensusEscalation(decision: BicameralConsensusDecision):
  * Evaluates a drop request through the Bicameral Consensus Engine.
  */
 export async function runBicameralDropCheck(
-  ctx: DropCheckContext,
-  client?: ExpertJudgeClient
+  ctx: DropCheckContext, client?: ExpertJudgeClient, reasoning?: ConsensusReasoningInput,
+  options: SemanticApprovalOptions = DEFAULT_SEMANTIC_APPROVAL_OPTIONS,
 ): Promise<BicameralConsensusDecision> {
-  const advisor = evaluateAdvisorIntent({
-    operation: "drop",
-    task: ctx.tasks,
-    userRequest: ctx.userRequest,
-    agentWorkLog: ctx.agentWorkLog,
-    reason: ctx.reason,
-    conversationHistory: (ctx.planContext || []).join("\n"),
-  });
-
-  const jevDrop = await runDropJustificationCheck(ctx, client);
-  let jevVerdict: JevConsensusVerdict;
-  if (jevDrop.decision === "approve") {
-    jevVerdict = "APPROVE";
-  } else if (jevDrop.decision === "reject") {
-    jevVerdict = "REJECT";
-  } else {
-    jevVerdict = "ESCALATE";
-  }
-
-  const jev: JevResult = {
-    verdict: jevVerdict,
-    confidence: jevDrop.dropJustifiedNoul,
-    reasons: jevDrop.reasons,
-  };
-
-  return arbitrateConsensus(advisor, jev);
+  const intent = evaluateAdvisorIntent({ operation: "drop", task: ctx.tasks, userRequest: ctx.userRequest,
+    agentWorkLog: ctx.agentWorkLog, reason: ctx.reason, conversationHistory: (ctx.planContext || []).join("\n") });
+  const result = await runDropJustificationCheck(ctx, client, options);
+  return arbitrateConsensus(intent, {
+    verdict: result.decision === "unavailable" ? "UNAVAILABLE" : result.verdict ?? "UNAVAILABLE",
+    probability: result.dropJustifiedNoul, reasons: result.reasons, metadata: result.metadata,
+    outcome: result.decision === "reject" ? { status: "REJECTED", criterionIds: [], reasons: result.reasons }
+      : result.decision === "undecided" ? { status: "HUMAN_REQUIRED", reasons: result.reasons } : undefined,
+  }, reasoning, options);
 }
 
-/**
- * Evaluates a phase/task macro completion through the Bicameral Consensus Engine.
- */
 export async function runBicameralMacroCheck(
-  ctx: MacroCheckContext,
-  client?: ExpertJudgeClient
+  ctx: MacroCheckContext, client?: ExpertJudgeClient, reasoning?: ConsensusReasoningInput,
+  options: SemanticApprovalOptions = DEFAULT_SEMANTIC_APPROVAL_OPTIONS,
 ): Promise<BicameralConsensusDecision & { macroResult: PhaseMacroCheckResult }> {
-  let advisor = evaluateAdvisorIntent({
-    operation: "done",
-    task: ctx.todoTask || ctx.phaseTitle || "",
-    userRequest: ctx.userRequest,
-    agentWorkLog: ctx.agentWorkLog,
-    conversationHistory: (ctx.planContext || []).join("\n"),
-    testSummary: ctx.testSummary,
-    diffSummary: ctx.diffSummary,
-    deliverableArtifacts: ctx.deliverableArtifacts,
-    taskType: ctx.taskType,
-  });
-
-  const jevMacro = await runPhaseMacroCheck(ctx, client);
-  if (jevMacro.approved && jevMacro.meetsCriteriaNoul !== undefined) {
-    advisor = {
-      ...advisor,
-      confidence: Number(
-        ((advisor.confidence * 0.45) + (jevMacro.meetsCriteriaNoul * 0.55)).toFixed(2)
-      ),
-    };
-  } else if (!jevMacro.approved && jevMacro.verdict === "REJECT" && !jevMacro.escalateToUser) {
-    const rejectConf =
-      jevMacro.expertConfidence ??
-      (jevMacro.meetsCriteriaNoul !== undefined
-        ? Math.max(0.75, 1 - jevMacro.meetsCriteriaNoul)
-        : advisor.confidence);
-    advisor = {
-      ...advisor,
-      verdict: "DISALLOW",
-      ckVerdict: "block",
-      confidence: Number(rejectConf.toFixed(2)),
-      reason: "Deliverable verification rejected by JEV; agent remediation required before human escalation",
-    };
-  }
-  let jevVerdict: JevConsensusVerdict;
-  if (jevMacro.approved) {
-    jevVerdict = "APPROVE";
-  } else if (jevMacro.verdict === "NEXT_ACTION_REQUIRED") {
-    jevVerdict = "NEXT_ACTION_REQUIRED";
-  } else if (jevMacro.verdict === "REJECT") {
-    jevVerdict = "REJECT";
-  } else if (!jevMacro.escalateToUser && (jevMacro.driftChoice !== "no_drift" || jevMacro.scopeChoice === "REDUCTION")) {
-    jevVerdict = "NEXT_ACTION_REQUIRED";
-  } else {
-    jevVerdict = "ESCALATE";
-  }
-
-  const jev: JevResult = {
-    verdict: jevVerdict,
-    confidence: jevMacro.expertConfidence ?? jevMacro.meetsCriteriaNoul,
-    reasons: jevMacro.reasons,
-  };
-
-  const decision = arbitrateConsensus(advisor, jev);
-  return { ...decision, macroResult: jevMacro };
+  const macroResult = freezeContractValue(await runPhaseMacroCheck(ctx, client, options));
+  const decision = await evaluateBicameralDoneConsensus({
+    todoTask: ctx.todoTask, phaseTitle: ctx.phaseTitle, userRequest: ctx.userRequest,
+    agentWorkLog: ctx.agentWorkLog, evidence: { testOutput: ctx.testSummary, gitStatus: ctx.diffSummary },
+    macroResult, reasoning,
+  }, options);
+  return freezeContractValue({ ...decision, macroResult });
 }
 
-/**
- * Evaluates bicameral consensus for task completion given an existing PhaseMacroCheckResult.
- */
 export async function evaluateBicameralDoneConsensus(ctx: {
-  todoTask: string;
-  phaseTitle?: string;
-  userRequest?: string;
-  agentWorkLog?: string;
-  evidence?: unknown;
-  macroResult: PhaseMacroCheckResult;
-}): Promise<BicameralConsensusDecision> {
-  const evObj =
-    ctx.evidence && typeof ctx.evidence === "object"
-      ? (ctx.evidence as Record<string, unknown>)
-      : undefined;
-  const testSummary = typeof evObj?.testOutput === "string" ? evObj.testOutput : undefined;
-  let advisor = evaluateAdvisorIntent({
-    operation: "done",
-    task: ctx.todoTask || ctx.phaseTitle || "",
-    userRequest: ctx.userRequest,
+  todoTask: string; phaseTitle?: string; userRequest?: string; agentWorkLog?: string;
+  evidence?: unknown; macroResult: PhaseMacroCheckResult; reasoning?: ConsensusReasoningInput;
+}, options: SemanticApprovalOptions = DEFAULT_SEMANTIC_APPROVAL_OPTIONS): Promise<BicameralConsensusDecision> {
+  const evidence = ctx.evidence && typeof ctx.evidence === "object" ? ctx.evidence as Record<string, unknown> : undefined;
+  const intent = evaluateAdvisorIntent({
+    operation: "done", task: ctx.todoTask || ctx.phaseTitle || "", userRequest: ctx.userRequest,
     agentWorkLog: ctx.agentWorkLog,
-    testSummary,
-    diffSummary: typeof evObj?.gitStatus === "string" ? evObj.gitStatus : undefined,
+    testSummary: typeof evidence?.testOutput === "string" ? evidence.testOutput : undefined,
+    diffSummary: typeof evidence?.gitStatus === "string" ? evidence.gitStatus : undefined,
   });
-
-  let jevVerdict: JevConsensusVerdict;
-  const jevMacro = ctx.macroResult;
-  if (jevMacro.approved && jevMacro.meetsCriteriaNoul !== undefined) {
-    advisor = {
-      ...advisor,
-      confidence: Number(
-        ((advisor.confidence * 0.45) + (jevMacro.meetsCriteriaNoul * 0.55)).toFixed(2)
-      ),
-    };
-  } else if (!jevMacro.approved && jevMacro.verdict === "REJECT" && !jevMacro.escalateToUser) {
-    const rejectConf =
-      jevMacro.expertConfidence ??
-      (jevMacro.meetsCriteriaNoul !== undefined
-        ? Math.max(0.75, 1 - jevMacro.meetsCriteriaNoul)
-        : advisor.confidence);
-    advisor = {
-      ...advisor,
-      verdict: "DISALLOW",
-      ckVerdict: "block",
-      confidence: Number(rejectConf.toFixed(2)),
-      reason: "Deliverable verification rejected by JEV; agent remediation required before human escalation",
-    };
-  }
-  if (jevMacro.approved) {
-    jevVerdict = "APPROVE";
-  } else if (jevMacro.verdict === "NEXT_ACTION_REQUIRED") {
-    jevVerdict = "NEXT_ACTION_REQUIRED";
-  } else if (jevMacro.verdict === "REJECT") {
-    jevVerdict = "REJECT";
-  } else if (!jevMacro.escalateToUser && (jevMacro.driftChoice !== "no_drift" || jevMacro.scopeChoice === "REDUCTION")) {
-    jevVerdict = "NEXT_ACTION_REQUIRED";
-  } else {
-    jevVerdict = "ESCALATE";
-  }
-
-  const jev: JevResult = {
-    verdict: jevVerdict,
-    confidence: jevMacro.expertConfidence ?? jevMacro.meetsCriteriaNoul,
-    reasons: jevMacro.reasons,
-  };
-
-  return arbitrateConsensus(advisor, jev);
+  const macro = ctx.macroResult;
+  const validDimensions = ["APPROVE", "REJECT", "NEXT_ACTION_REQUIRED"].includes(macro.verdict ?? "") &&
+    ["no_drift", "unapproved_deviation", "scope_creep"].includes(macro.driftChoice ?? "") &&
+    ["HOLD", "EXPANSION", "REDUCTION"].includes(macro.scopeChoice ?? "");
+  const outcome = macro.outcome ?? (validDimensions && (macro.driftChoice !== "no_drift" || macro.scopeChoice === "REDUCTION")
+    ? { status: "REJECTED" as const, criterionIds: [], reasons: ["Actual architectural_drift/scope_mode boundary criterion violated."] } : undefined);
+  return arbitrateConsensus(intent, {
+    verdict: macro.error || !validDimensions ? "UNAVAILABLE" : macro.verdict!,
+    confidence: macro.expertConfidence, probability: macro.meetsCriteriaNoul,
+    reasons: macro.reasons, outcome, metadata: macro.metadata,
+  }, ctx.reasoning, options);
 }
 
 export interface DecisionCheckContext {
@@ -1027,6 +915,8 @@ export function formatCkAdvisorReport(
     ``,
     `## Open questions`,
     openQuestions,
+    ``,
+    `Authority: local heuristic signal only; not a real Advisor receipt, calibrated JEV probability, native approval, or debt release.`,
   ].join("\n");
 }
 
@@ -1037,187 +927,52 @@ export function formatCkAdvisorReport(
  */
 export async function runBicameralDecisionCheck(
   ctx: DecisionCheckContext,
-  client?: ExpertJudgeClient
+  client: ExpertJudgeClient = createSemanticJudgeClient({ purpose: "decision" }),
 ): Promise<BicameralDecisionResult> {
-  const contextStr =
-    typeof ctx.context === "string"
-      ? ctx.context
-      : ctx.context
-      ? JSON.stringify(ctx.context)
-      : "";
-
-  const advisor = evaluateAdvisorIntent({
-    operation: "decision",
-    task: ctx.question,
-    decisionKind: ctx.decision || "general",
-    question: ctx.question,
-    options: ctx.options,
-    recommendedIndex: ctx.recommendedIndex,
-    constraints: ctx.constraints,
-    evidencePaths: ctx.evidencePaths,
-    userRequest: ctx.userRequest,
-    agentWorkLog: [ctx.agentWorkLog, contextStr].filter(Boolean).join("\n"),
-  });
-
-  const normalizedOpts = normalizeOptions(ctx.options, ctx.recommendedIndex);
-  let jev: JevResult = {
-    verdict: advisor.verdict === "DISALLOW" ? "REJECT" : "APPROVE",
-    confidence: advisor.confidence,
-    reasons: [advisor.reason],
+  const advisor = freezeContractValue(evaluateAdvisorIntent({
+    operation: "decision", task: ctx.question, decisionKind: ctx.decision || "general",
+    question: ctx.question, options: ctx.options, recommendedIndex: ctx.recommendedIndex,
+    constraints: ctx.constraints, evidencePaths: ctx.evidencePaths, userRequest: ctx.userRequest,
+    agentWorkLog: [ctx.agentWorkLog, typeof ctx.context === "string" ? ctx.context : JSON.stringify(ctx.context)].filter(Boolean).join("\n"),
+  }));
+  const options = normalizeOptions(ctx.options, ctx.recommendedIndex);
+  const questions: Record<string, ExpertJudgeQuestion> = {
+    risk_posture: { type: "score", instructions: "Rate technical/security risk on the declared 0..3 scale.",
+      criteria: ["Zero Risk", "Low Risk", "Moderate Risk", "Critical Risk"] },
+    decision_clarity: { type: "noul", instructions: "Is this decision well-scoped and supported by sufficient evidence?",
+      criteria: { true: "Clear, bounded and supported", false: "Ambiguous or missing context" } },
   };
-
-  if (client) {
-    try {
-      const questions: Record<string, ExpertJudgeQuestion> = {
-        risk_posture: {
-          type: "score",
-          instructions:
-            "Rate the technical risk and security implications of this decision:",
-          criteria: [
-            "Zero Risk — routine inquiry, safe tradeoffs, fully bounded options",
-            "Low Risk — minor architectural choice with manageable side effects",
-            "Moderate Risk — tradeoffs involving data, architecture, or credentials",
-            "Critical Risk — dangerous action, security sensitive choice, or potential data loss",
-          ],
-        },
-        decision_clarity: {
-          type: "noul",
-          instructions:
-            "Is this decision well-scoped with sufficient evidence to proceed safely?",
-          criteria: {
-            true: "Decision is clear, well-bounded, and supported by context",
-            false: "Decision is ambiguous, risky, or lacks required context",
-          },
-        },
-      };
-
-      if (normalizedOpts.length >= 2) {
-        const choiceCriteria: Record<string, string> = {};
-        for (const opt of normalizedOpts) {
-          choiceCriteria[opt.label] = opt.description || opt.label;
-        }
-        choiceCriteria["insufficient_evidence"] =
-          "Evidence is insufficient to prefer any candidate option";
-        questions.recommended_option = {
-          type: "choice",
-          instructions:
-            "Judging from the context and constraints, which option is best supported?",
-          criteria: choiceCriteria,
-        };
-      }
-
-      const state = JSON.stringify({
-        decision: ctx.decision || "general",
-        question: ctx.question,
-        options: normalizedOpts,
-        constraints: ctx.constraints,
-        user_request: ctx.userRequest,
-        agent_work_log: ctx.agentWorkLog,
-        context: ctx.context,
-      });
-
-      const response = await client.evaluate({ state, questions });
-      if (!response.error && response.answers) {
-        const riskScore = response.answers.risk_posture?.score;
-        const clarity = response.answers.decision_clarity?.noul;
-        const recChoice = response.answers.recommended_option?.choice;
-        const recConf = response.answers.recommended_option?.confidence;
-
-        const jevReasons: string[] = [];
-        if (riskScore !== undefined) {
-          const riskLabel =
-            riskScore <= 1.0 ? "Low" : riskScore <= 2.0 ? "Moderate" : "High/Critical";
-          jevReasons.push(`Risk: ${riskLabel} (${riskScore.toFixed(1)}/3)`);
-        }
-        if (clarity !== undefined) {
-          jevReasons.push(`Decision Clarity: ${Math.round(clarity * 100)}%`);
-        }
-        if (recChoice && recChoice !== "insufficient_evidence") {
-          jevReasons.push(`JEV recommended option: "${recChoice}"`);
-          const matchedIdx = normalizedOpts.findIndex((o) => o.label === recChoice);
-          if (matchedIdx >= 0) {
-            const matchedRationale =
-              advisor.rankedOptions?.find((r) => r.option === recChoice)?.rationale ||
-              "Recommended by TypeSafe JEV & Advisor";
-            const calibratedOptionConf = Number(
-              (recConf ?? clarity ?? advisor.confidence).toFixed(2)
-            );
-            if (advisor.rankedOptions && advisor.rankedOptions.length > 0) {
-              const topExisting = advisor.rankedOptions[0]?.score ?? calibratedOptionConf;
-              const promotedScore = Math.max(topExisting, calibratedOptionConf);
-              advisor.rankedOptions = advisor.rankedOptions
-                .map((r) => (r.option === recChoice ? { ...r, score: promotedScore } : r))
-                .sort((a, b) => {
-                  if (a.option === recChoice) return -1;
-                  if (b.option === recChoice) return 1;
-                  return b.score - a.score;
-                });
-            }
-            advisor.recommendedOption = recChoice;
-            advisor.recommendedIndex = matchedIdx;
-            advisor.recommendation = `Select "${recChoice}" — ${matchedRationale}.`;
-            advisor.reason = advisor.recommendation;
-            advisor.confidence = calibratedOptionConf;
-            advisor.verdict = "ALLOW";
-            advisor.ckVerdict = "proceed";
-          }
-        } else if (clarity !== undefined) {
-          advisor.confidence = Number(
-            ((advisor.confidence * 0.4) + (clarity * 0.6)).toFixed(2)
-          );
-        }
-
-        const calibratedJevConf = Number(
-          (recConf ?? clarity ?? advisor.confidence).toFixed(2)
-        );
-        if (riskScore !== undefined && riskScore > 2.0) {
-          jev = {
-            verdict: "REJECT",
-            confidence: calibratedJevConf,
-            reasons:
-              jevReasons.length > 0
-                ? jevReasons
-                : ["High/Critical risk detected by TypeSafe JEV"],
-          };
-        } else {
-          jev = {
-            verdict: "APPROVE",
-            confidence: calibratedJevConf,
-            reasons:
-              jevReasons.length > 0
-                ? jevReasons
-                : ["Decision verified by TypeSafe JEV"],
-          };
-        }
-      }
-    } catch {
-      // Fallback to Lobe 1 (Advisor / ck:advisor) when JEV is unreachable
+  if (options.length >= 2) questions.recommended_option = {
+    type: "choice", instructions: "Which candidate is best supported by evidence and constraints?",
+    criteria: Object.fromEntries([...options.map(option => [option.label, option.description || option.label]),
+      ["insufficient_evidence", "Evidence does not justify preferring a candidate"]]),
+  };
+  let jev: JevResult;
+  try {
+    const response = await client.evaluate({ state: JSON.stringify({
+      decision: ctx.decision || "general", question: ctx.question, options, constraints: ctx.constraints,
+      user_request: ctx.userRequest, agent_work_log: ctx.agentWorkLog, context: ctx.context,
+    }), questions });
+    const risk = scoreValue(response.answers?.risk_posture, 3);
+    const clarity = noulValue(response.answers?.decision_clarity);
+    const recommendation = options.length >= 2 ? choiceValue(response.answers?.recommended_option,
+      [...options.map(option => option.label), "insufficient_evidence"]) : undefined;
+    if (response.error || risk === undefined || clarity === undefined || (options.length >= 2 && !recommendation)) {
+      jev = { verdict: "UNAVAILABLE", reasons: ["Decision consultation unavailable: required real risk score, Noul probability, or choice is missing/invalid."], metadata: response.metadata };
+    } else {
+      jev = { verdict: risk > 2 ? "REJECT" : recommendation === "insufficient_evidence" ? "NEXT_ACTION_REQUIRED" : "APPROVE",
+        probability: clarity, metadata: response.metadata,
+        reasons: [`Risk ${risk}/3; actual decision_clarity P=${clarity}.`, ...(recommendation ? [`Independent JEV recommendation: ${recommendation}.`] : [])] };
     }
-  }
-
+  } catch { jev = { verdict: "UNAVAILABLE", reasons: ["Decision consultation service unavailable; local intent remains a non-authoritative signal."] }; }
   const consensus = arbitrateConsensus(advisor, jev);
-  const ckVerdict: CkAdvisorVerdict =
-    consensus.verdict === "AUTO_APPROVE"
-      ? "proceed"
-      : consensus.verdict === "AUTO_REJECT"
-      ? "block"
-      : advisor.ckVerdict || "revise";
-  const recommendation =
-    advisor.recommendation ||
-    (advisor.recommendedOption
-      ? `Select "${advisor.recommendedOption}" — ${advisor.reason}`
-      : advisor.reason);
-  const report = formatCkAdvisorReport({ ...advisor, ckVerdict, recommendation }, jev);
-
-  return {
-    ...consensus,
-    ckVerdict,
-    recommendation,
-    recommendedOption: advisor.recommendedOption,
-    recommendedIndex: advisor.recommendedIndex,
-    rankedOptions: advisor.rankedOptions || [],
-    findings: advisor.findings || [],
+  const ckVerdict: CkAdvisorVerdict = consensus.disposition.status === "REJECTED" ? "block" : "revise";
+  const recommendation = advisor.recommendation || advisor.reason;
+  return freezeContractValue({
+    ...consensus, ckVerdict, recommendation,
+    recommendedOption: advisor.recommendedOption, recommendedIndex: advisor.recommendedIndex,
+    rankedOptions: advisor.rankedOptions || [], findings: advisor.findings || [],
     openQuestions: advisor.openQuestions || [],
-    report,
-  };
+    report: `${formatCkAdvisorReport({ ...advisor, ckVerdict, recommendation }, jev)}\n\nAuthority: standalone consultation only; no native approval or debt release.`,
+  });
 }

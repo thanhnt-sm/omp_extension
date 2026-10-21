@@ -16,7 +16,8 @@ describe("TypeSafe bounded prepared-body transport", () => {
         calls++;
         return calls === 1
           ? new Response("", { status: 529, headers: { "retry-after": "1" } })
-          : new Response(JSON.stringify({ answers: {} }), { status: 200 });
+          : new Response(JSON.stringify({ answers: {}, model: "jev-observed",
+            usage: { input_tokens: 12 }, billing: { credits: 1 } }), { status: 200 });
       },
       nowImpl: () => 0,
       wallNowImpl: () => 0,
@@ -26,6 +27,18 @@ describe("TypeSafe bounded prepared-body transport", () => {
     expect(outcome.kind).toBe("ok");
     expect(bodies).toEqual(['{"prepared":true}', '{"prepared":true}']);
     expect(delays).toEqual([1000]);
+    expect(outcome.attempts).toBe(2);
+    expect(outcome.attemptReceipts).toHaveLength(2);
+    expect(new Set(outcome.attemptReceipts.map((receipt: { receiptId: string }) => receipt.receiptId)).size).toBe(2);
+    expect(outcome.attemptReceipts[0]).toMatchObject({
+      attempt: 1, status: 529, usage: null, usageUnavailableReason: "error_response_not_parsed",
+      questionIds: null, questionCount: null,
+    });
+    expect(outcome.attemptReceipts[1]).toMatchObject({
+      attempt: 2, status: 200, resolvedModel: "jev-observed", usage: { input_tokens: 12 }, billing: { credits: 1 },
+    });
+    expect(outcome.attemptReceipts[0].bodyDigest).toBe(outcome.attemptReceipts[1].bodyDigest);
+    expect(outcome.attemptReceipts[0].bodyBytes).toBe(Buffer.byteLength(bodies[0], "utf8"));
   });
 
   test("caller abort prevents fetch and does not arm cooldown", async () => {
@@ -152,5 +165,65 @@ describe("TypeSafe bounded prepared-body transport", () => {
     });
     expect(result.approved).toBe(false);
     expect(result.reasons.join(" ")).toContain("unavailable");
+  });
+
+  test("rejects oversized low-level bodies before dispatch and accepts the exact UTF-8 boundary", async () => {
+    let calls = 0;
+    const fetchImpl = async () => {
+      calls++;
+      return new Response(JSON.stringify({ answers: {} }), { status: 200 });
+    };
+    expect(await client.requestWithRetry({
+      apiKey: "boundary", body: "x".repeat(32769), fetchImpl,
+    })).toMatchObject({ kind: "local_error", attempts: 0 });
+    expect(calls).toBe(0);
+    expect(await client.requestWithRetry({
+      apiKey: "boundary", body: "x".repeat(32768), fetchImpl,
+    })).toMatchObject({ kind: "ok", attempts: 1 });
+    expect(calls).toBe(1);
+  });
+
+  test("trusted retry overrides cannot exceed three attempts or fifteen seconds", async () => {
+    let now = 0;
+    let calls = 0;
+    const bodies: string[] = [];
+    const result = await client.requestWithRetry({
+      apiKey: "bounded-overrides", body: '{"identical":true}', maxAttempts: 100, totalBudgetMs: 999999,
+      rateLimitState: {}, nowImpl: () => now, randomImpl: () => 0,
+      sleepImpl: async (delay: number) => { now += delay; },
+      fetchImpl: async (_url: string, init: RequestInit) => {
+        calls++;
+        bodies.push(String(init.body));
+        now += 5000;
+        return new Response("", { status: 529 });
+      },
+    });
+    expect(calls).toBeLessThanOrEqual(3);
+    expect(now).toBeLessThanOrEqual(15000);
+    expect(new Set(bodies).size).toBe(1);
+    expect(result.attempts).toBe(calls);
+  });
+
+  test("a network failure is not retried", async () => {
+    let calls = 0;
+    await expect(client.requestWithRetry({
+      apiKey: "network-once", body: "{}", rateLimitState: {},
+      fetchImpl: async () => { calls++; throw new Error("offline"); },
+    })).rejects.toThrow();
+    expect(calls).toBe(1);
+  });
+
+  test("network exceptions retain a real dispatch receipt without invented paid usage", async () => {
+    let failure: unknown;
+    try {
+      await client.requestWithRetry({
+        apiKey: "receipt-network", body: "{}", rateLimitState: {},
+        fetchImpl: async () => { throw new Error("private network detail"); },
+      });
+    } catch (error) { failure = error; }
+    expect(failure).toMatchObject({ attempts: 1, attemptReceipts: [{
+      attempt: 1, kind: "request_error", status: null, error: "network_error",
+      usage: null, usageUnavailableReason: "request_failed", resolvedModel: null, billing: null,
+    }] });
   });
 });

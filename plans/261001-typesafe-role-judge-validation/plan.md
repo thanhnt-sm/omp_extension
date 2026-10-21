@@ -644,3 +644,8 @@ All executable phases closed:
 - **Unit Suite:** `node --test typesafe-adversarial.test.cjs` → **23/23 pass** across 4 suites (0 failures).
 - **Adversarial Matrix:** 7/7 passed.
 - **Overall Status:** Promoted to **COMPLETE**.
+
+## Execution reconciliation — 2026-10-19
+
+Residual C25/C29/C35 ownership: [consolidated master](../261019-research-to-cook-execution/plan.md), with [source-evidenced dispositions](../reports/261019-research-to-cook-coverage.json). Preserve implemented behavior; do not replay historical recipes or infer completion from this link. Close each remaining objective only from its own required source/test/runtime proof, without a false whole-master blocker.
+

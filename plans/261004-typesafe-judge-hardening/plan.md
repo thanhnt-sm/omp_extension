@@ -28,3 +28,7 @@ The current TypeSafe judge needs to robustly evaluate and repair step-by-step pl
 - [x] Execute a mock plan evaluation using a deliberately incomplete plan (missing file paths, skipped steps) and verify that `PreEvaluationTriage` and the multi-persona debate reject it with explicit XML-wrapped remediation instructions from the fast-model tier.
 # Assumptions & contingencies
 - Assumption: Relevant open-source repos for auto-eval judges exist and can be analyzed. Contingency: If none are directly applicable, base enhancements on generalized adversarial testing patterns and known LLM red-teaming best practices.
+
+## Execution reconciliation — 2026-10-19
+
+Residual C20/C21/C27/C35 ownership: [consolidated master](../261019-research-to-cook-execution/plan.md), with [source-evidenced dispositions](../reports/261019-research-to-cook-coverage.json). Preserve implemented behavior; finish structural triage/boundary/debate residuals. XML is not authentication or absolute prompt isolation; no production dummy approval.

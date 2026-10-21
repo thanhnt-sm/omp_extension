@@ -1,0 +1,131 @@
+{
+  "schemaVersion": 1,
+  "captureScope": "Allowlisted observations from native host events and a separate passive startup observer; not an evaluator wire payload or a full transcript.",
+  "nativeScenario": {
+    "sessionId": "01a14f3a-7000-75da-8b89-912d4556f58b",
+    "resolverReason": "global-allowlist",
+    "originCapturedInThisScenario": false,
+    "docsArtifactReportedBytes": 1428,
+    "doneAttempts": 1,
+    "rejectedDoneRetried": false,
+    "observations": [
+      {
+        "eventType": "tool_execution_end",
+        "toolName": "todo",
+        "operation": "done",
+        "task": "Scratch docs artifact: document native verification limits",
+        "toolCallId": "call_f4476c4ef94846419f4f69989e9b18a9|fc_02f9f0680849ad03016ad4cbad838c8191b44547d4eaa3321a",
+        "isError": true,
+        "reportedGate": "Gate 2 Macro-Check",
+        "reportedTaskType": "doc_specification",
+        "reportedVerdict": "NEXT_ACTION_REQUIRED",
+        "reportedScoreP": 0.51
+      },
+      {
+        "eventType": "tool_execution_end",
+        "toolName": "todo",
+        "operation": "rm",
+        "task": "Scratch obsolete rm probe",
+        "toolCallId": "call_f3a3aeb985c5494596fef9e2633a6746|fc_02f9f0680849ad03016ad4cbba07e08191a766435764553e3e",
+        "isError": false,
+        "targetAbsentAfterResult": true
+      },
+      {
+        "type": "message_start",
+        "message": {
+          "role": "custom",
+          "customType": "typesafe-task-report",
+          "content": "📋 TypeSafe task report — DROP \"Scratch obsolete rm probe\"\nDecision: APPROVED (by: judge)",
+          "display": true,
+          "attribution": "agent",
+          "timestamp": 1792330675798
+        }
+      },
+      {
+        "eventType": "tool_execution_end",
+        "toolName": "todo",
+        "operation": "drop",
+        "task": "Scratch obsolete drop probe",
+        "toolCallId": "call_0fcee13af32d49498b003571898767f4|fc_02f9f0680849ad03016ad4cbbfd3288191ae48d40acace28b7",
+        "isError": false,
+        "targetStatusAfterResult": "abandoned"
+      },
+      {
+        "type": "message_start",
+        "message": {
+          "role": "custom",
+          "customType": "typesafe-task-report",
+          "content": "📋 TypeSafe task report — DROP \"Scratch obsolete drop probe\"\nDecision: APPROVED (by: judge)",
+          "display": true,
+          "attribution": "agent",
+          "timestamp": 1792330682013
+        }
+      }
+    ],
+    "finalNativeView": {
+      "op": "view",
+      "phases": [
+        {
+          "name": "Tasks",
+          "tasks": [
+            { "content": "Scratch docs artifact: document native verification limits", "status": "in_progress" },
+            { "content": "Scratch obsolete drop probe", "status": "abandoned" },
+            { "content": "Scratch unrelated control", "status": "pending" }
+          ]
+        }
+      ],
+      "storage": "memory"
+    },
+    "scenarioDeviations": {
+      "appendWithoutPhaseFailedWithoutAddingTasks": true,
+      "initialCaseSensitiveSmoke": "FAIL: lowercase headless not found in capitalized Headless",
+      "subsequentCaseInsensitiveSmoke": "PASS",
+      "artifactChangedForSecondSmoke": false
+    },
+    "rawDeletionJudgeVerdictEnum": null,
+    "trustedHumanUIExercised": false
+  },
+  "separateOriginObservation": {
+    "sessionId": "01a14f3f-6675-7428-a42d-0d65fe303610",
+    "captureMethod": "Passive before_agent_start read of existing sessionManager branch custom messages; no gate or task mutation.",
+    "branchEntryCount": 4,
+    "policyObserved": true,
+    "proofs": [
+      {
+        "kind": "runtime-origin",
+        "algorithm": "sha256",
+        "entrypoint": {
+          "origin": "file:///C:/Users/thant/Projects/omp_extension/typesafe-planner.ts",
+          "sha256": "163948ed4602a3e17c14bf79adf2f2f2e6b35fffe749df5fb621f3cad76194b4"
+        },
+        "bundledModules": [
+          { "origin": "file:///C:/Users/thant/Projects/omp_extension/src/typesafe-enabled-resolver.cjs", "sha256": "a60066690a72ff39e96d530540fc9564355dc06da95fe7963e17b1db01377374" },
+          { "origin": "file:///C:/Users/thant/Projects/omp_extension/src/typesafe-redact.cjs", "sha256": "7895ca45141e29869ff1802ae7bca045cbcefc624c6cb14af60e2eecda87d548" },
+          { "origin": "file:///C:/Users/thant/Projects/omp_extension/src/typesafe-api-client.cjs", "sha256": "3a1a082b40f394ec7e31cecd30b264c83350f4e58bf5daa11fee0315f42cafa0" },
+          { "origin": "file:///C:/Users/thant/Projects/omp_extension/src/typesafe-policy-client.cjs", "sha256": "bf7454619f78b3e43b311cb65320dd85288fc63ca89256608f965df9c7d927e8" }
+        ]
+      }
+    ],
+    "allFiveReportedDigestsMatchedCurrentDisk": true,
+    "attestsAnalyzerModule": false
+  },
+  "review": {
+    "nativeEvidenceReview": "Verified host-attributed deletion approvals and separate origin scope; successful docs completion and human UI remain unproven.",
+    "advisorTriage": "No concrete missing document deliverable or causal source defect established. Preserve semantic non-approval; no retry or speculative implementation assignment."
+  },
+  "cleanup": {
+    "ownedTemporaryProjectRemoved": true,
+    "observerInstalledGlobally": false,
+    "parentHostReloaded": false
+  },
+  "parentAdministrativeTracking": {
+    "droppedCount": 2,
+    "blockedCount": 7,
+    "openCount": 0,
+    "completedCount": 0,
+    "lastTwoNativeBlockRequestsCommitted": true,
+    "trustedUIConfirmationEventCaptured": false,
+    "usedAsPhase5UIRecoveryProof": false
+  },
+  "phase5Status": "in-progress"
+}

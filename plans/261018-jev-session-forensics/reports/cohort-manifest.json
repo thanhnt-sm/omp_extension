@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "cutoffUtc": "2026-10-18T08:12:11.928658Z",
+  "archiveOrdering": "archive.sessions newest-first (per xd://eval/archive)",
+  "discovery": {
+    "projectsLimit": 500,
+    "sessionsLimitPerWorkspace": 500,
+    "workspaceCount": 14,
+    "listingReachedLimit": false,
+    "coverage": "archive API returned fewer than 500 sessions for every workspace; API reports zero-message sessions as present despite documentation warning that it may skip them. No backing-store inspection was needed."
+  },
+  "selectionPolicy": "At most 15 sessions per workspace, created/modified no later than cutoff. Exclude zero-message entries and the current investigation session when identifiable. Titles and prompt text are never retained.",
+  "schemaSampling": {
+    "selectedSessionRecordTypes": ["title", "session", "thinking_level_change", "service_tier_change", "message", "custom"],
+    "observedCustomToolShape": "custom.tool_execution_start with data.toolCallId and data.toolName",
+    "parentRelationship": "records expose parentId where applicable; parent content is not exported",
+    "branchRelationship": "no explicit branch field was observed in sampled records; branch remains unknown rather than inferred"
+  },
+  "workspaces": [
+    {"alias":"workspace-01","path":"D:\\100.Software\\Github\\omp_extension","apiReportedSessions":41,"apiReturnedSessions":37,"selected":[],"excluded":{"zeroMessage":37,"current":0},"shortage":"No non-empty archived session returned by archive API."},
+    {"alias":"workspace-02","path":"D:\\100.Software\\Github\\msProject_Excel","apiReportedSessions":6,"apiReturnedSessions":6,"selected":[],"excluded":{"zeroMessage":6,"current":0},"shortage":"No non-empty archived session returned by archive API."},
+    {"alias":"workspace-03","path":"D:\\100.Software\\Github\\cloud-harness-windows","apiReportedSessions":1,"apiReturnedSessions":1,"selected":[],"excluded":{"zeroMessage":1,"current":0},"shortage":"No non-empty archived session returned by archive API."},
+    {"alias":"workspace-04","path":"D:\\100.Software\\Github\\zuey-pi-setup","apiReportedSessions":1,"apiReturnedSessions":1,"selected":[],"excluded":{"zeroMessage":1,"current":0},"shortage":"No non-empty archived session returned by archive API."},
+    {"alias":"workspace-05","path":"D:\\200_GDrive\\101.AI\\GoCaiDat_Codex_GPT","apiReportedSessions":4,"apiReturnedSessions":4,"selected":[],"excluded":{"zeroMessage":4,"current":0},"shortage":"No non-empty archived session returned by archive API."},
+    {"alias":"workspace-06","path":"D:\\100.Software\\Github\\eco_support_net_oracle","apiReportedSessions":13,"apiReturnedSessions":12,"selected":[],"excluded":{"zeroMessage":12,"current":0},"shortage":"No non-empty archived session returned by archive API; one API-reported session was not returned."},
+    {"alias":"workspace-07","path":"D:\\200_GDrive\\101.AI\\CleanPC","apiReportedSessions":7,"apiReturnedSessions":5,"selected":[],"excluded":{"zeroMessage":5,"current":0},"shortage":"No non-empty archived session returned by archive API; two API-reported sessions were not returned."},
+    {"alias":"workspace-08","path":"C:\\Users\\thant\\tmp","apiReportedSessions":2,"apiReturnedSessions":2,"selected":[],"excluded":{"zeroMessage":2,"current":0},"shortage":"No non-empty archived session returned by archive API."},
+    {"alias":"workspace-09","path":"D:\\01.Project\\36.PVC\\08.FlexCollateral\\05.Development\\99999_Mobile","apiReportedSessions":1,"apiReturnedSessions":1,"selected":[],"excluded":{"zeroMessage":1,"current":0},"shortage":"No non-empty archived session returned by archive API."},
+    {"alias":"workspace-10","path":"D:\\01.Project\\36.PVC\\08.FlexCollateral\\05.Development\\SourceCode\\01.SourceCode_DEV\\SM.FlexCollateral.App.Mobile","apiReportedSessions":3,"apiReturnedSessions":3,"selected":[],"excluded":{"zeroMessage":3,"current":0},"shortage":"No non-empty archived session returned by archive API."},
+    {"alias":"workspace-11","path":"D:\\100.Software\\Emulator_Data","apiReportedSessions":1,"apiReturnedSessions":1,"selected":[],"excluded":{"zeroMessage":1,"current":0},"shortage":"No non-empty archived session returned by archive API."},
+    {"alias":"workspace-12","path":"D:\\01.Project\\36.PVC\\08.FlexCollateral\\05.Development\\SourceCode\\01.SourceCode_DEV","apiReportedSessions":1,"apiReturnedSessions":1,"selected":[],"excluded":{"zeroMessage":1,"current":0},"shortage":"No non-empty archived session returned by archive API."},
+    {"alias":"workspace-13","path":"C:\\Users\\thant\\mcp_1","apiReportedSessions":7,"apiReturnedSessions":7,"excluded":{"zeroMessage":6,"current":0},"shortage":"One eligible session; below cap.","selected":[{"sessionId":"01a12b03-a472-75cc-bdf6-c7f81b1f4c20","file":"C:\\Users\\thant\\.omp\\agent\\sessions\\-mcp_1\\2026-10-11T12-50-21-426Z_01a12b03-a472-75cc-bdf6-c7f81b1f4c20.jsonl","created":"2026-10-11T12:50:21.426Z","modified":"2026-10-11T15:08:52.214Z","messages":1,"status":"complete","bytes":936702,"sha256":"32eb94188ee7954cf0afee3958ef5287699228131009d1b580b206b66ca327b0"}]},
+    {"alias":"workspace-14","path":"D:\\100.Software\\TMP_Source\\05_DEV\\08_AK_MCP_HTML","apiReportedSessions":1,"apiReturnedSessions":1,"excluded":{"zeroMessage":0,"current":0},"shortage":"One eligible session; below cap.","selected":[{"sessionId":"01a120cd-56e1-75e9-8a83-c715bc2d7c2d","file":"C:\\Users\\thant\\.omp\\agent\\sessions\\--D--100.Software-TMP_Source-05_DEV-08_AK_MCP_HTML--\\2026-10-09T13-14-50-465Z_01a120cd-56e1-75e9-8a83-c715bc2d7c2d.jsonl","created":"2026-10-09T13:14:50.465Z","modified":"2026-10-11T17:25:10.703Z","messages":1,"status":"complete","bytes":2022475,"sha256":"55a69e2b2df59f5172573e110d036032e7b4fa60cca0c5c366bff9fb92a7c421"}]}
+  ],
+  "totals":{"apiReportedSessions":89,"apiReturnedSessions":82,"eligibleSelected":2,"excludedZeroMessage":80,"excludedCurrent":0,"apiReportedButNotReturned":7}
+}

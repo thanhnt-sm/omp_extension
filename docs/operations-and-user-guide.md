@@ -115,23 +115,13 @@ This is an external operator-owned blocker, not a successful deployment or promo
 
 ## 5. Emergency Troubleshooting Runbook
 
-### 5.1 Invariant Violation: "Dropping or resetting contracted tasks requires human authorization"
-- **Cause:** An agent tried to call `todo(op="init")` or drop an existing task without authorization.
-- **Solution:** Set `TYPESAFE_ALLOW_MODIFICATION=1` in your host shell:
-  - PowerShell: `$env:TYPESAFE_ALLOW_MODIFICATION="1"`
-  - Bash: `export TYPESAFE_ALLOW_MODIFICATION=1`
-  - CMD: `set TYPESAFE_ALLOW_MODIFICATION=1`
+### 5.1 Rejected destructive todo operation
+- **Cause:** A `drop`, `rm`, or replacing `init` did not receive a verified `AUTO_APPROVE`, or its native result did not apply the exact staged target effect.
+- **Recovery:** Do not pass `authorized`, `isHuman`, or `resetFailures` in the todo payload. `AUTO_REJECT` and `RECONCILE_PLAN` remain rejected. For `HUMAN_ESCALATION`, use the trusted host UI for fresh exact-target confirmation; no UI, denial, throw, stale state, or mismatched result does not mutate or clear debt.
 
-### 5.2 Consecutive Failure Ratchet Lockout
-- **Cause:** Task verification failed 3 consecutive times, locking execution to prevent looping.
-- **Solution:** Inspect test errors, resolve the code bug, and execute `todo` with `"resetFailures": true`:
-  ```json
-  {
-    "op": "done",
-    "task": "Target Task Name",
-    "resetFailures": true
-  }
-  ```
+### 5.2 Rejected task needs to be blocked
+- **Cause:** Gate 1 or Gate 2 rejected `done`; failure/remediation debt remains attached to the task.
+- **Recovery:** Use the host UI to confirm blocking the exact task/phase target set. `block` records an obstacle but preserves the unfinished task and its debt. Later `unblock` or `start` does not authorize `done`; provide task-scoped evidence and obtain a valid matching native completion result.
 
 ### 5.3 Key Rotation & Dynamic 401 Recovery
 - If the TypeSafe API key expires or is rotated:

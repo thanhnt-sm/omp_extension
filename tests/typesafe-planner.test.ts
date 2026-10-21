@@ -1,12 +1,10 @@
 import { describe, expect, test, beforeEach } from "bun:test";
-import registerExtension, {
+import registerExtension, { normalizeQuestionForTypeSafe, inferTaskType } from "../typesafe-planner";
+import {
   runMultiPersonaDebate,
   constructMultiPersonaQuestions,
-  normalizeQuestionForTypeSafe,
-  inferTaskType,
-  type MultiPersonaDebateResult,
   type DebateJudgeClient,
-} from "../typesafe-planner";
+} from "../src/debate-evaluator";
 
 describe("Phase 5: Multi-Persona Pre-Analysis (ck:predict Integration)", () => {
   test("constructMultiPersonaQuestions defines 5 personas (Architect, Security, Performance, UX, Devil's Advocate)", () => {
@@ -29,7 +27,7 @@ describe("Phase 5: Multi-Persona Pre-Analysis (ck:predict Integration)", () => {
 
     const mockClient: DebateJudgeClient = {
       evaluateDebate: async (params) => {
-        capturedModel = params.model;
+        capturedModel = params.model ?? "";
         capturedQuestions = params.questions;
         return {
           modelUsed: params.model,
@@ -56,7 +54,8 @@ describe("Phase 5: Multi-Persona Pre-Analysis (ck:predict Integration)", () => {
       "devils_advocate",
     ]);
     expect(result.approved).toBe(true);
-    expect(result.modelTier).toBe("fast");
+    expect(result.requestedModel).toBe(capturedModel);
+    expect(result.resolvedModel).toBe(capturedModel);
     expect(result.consensusScore).toBeGreaterThanOrEqual(2.0);
   });
 
@@ -78,7 +77,7 @@ describe("Phase 5: Multi-Persona Pre-Analysis (ck:predict Integration)", () => {
     const result = await runMultiPersonaDebate(plan, mockClient);
 
     expect(result.approved).toBe(false);
-    expect(result.modelTier).toBe("fast");
+    expect(result.requestedModel).toBe(result.modelTier);
     expect(result.consensusScore).toBeLessThan(1.5);
     expect(result.reasons.some((r) => r.toLowerCase().includes("security") || r.toLowerCase().includes("advocate"))).toBe(true);
   });
@@ -114,7 +113,8 @@ describe("Phase 5: Multi-Persona Pre-Analysis (ck:predict Integration)", () => {
 
     const parsed = JSON.parse(res.content[0].text);
     expect(parsed.debate).toBeDefined();
-    expect(parsed.debate.modelTier).toBe("fast");
+    expect(parsed.debate.advisoryOnly).toBe(true);
+    expect(parsed.debate.requestedModel).toBe(parsed.debate.modelTier);
   });
 });
 

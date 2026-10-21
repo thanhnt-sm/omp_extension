@@ -36,3 +36,8 @@ Isolate the `fetch("https://api.typesafe.ai/v1/systemone")` call within its own 
 - Execute throwaway integration script simulating `pi.sendMessage` rejection on `nextTurn` to prove false-positive warning suppression.
 - Execute throwaway integration script simulating `Failed to fetch` to prove true-positive warning retention.
 - Run full regression suite `bun test tests/`.
+
+## Execution reconciliation — 2026-10-19
+
+Residual C11/C15/C31 ownership: [consolidated master](../261019-research-to-cook-execution/plan.md), with [source-evidenced dispositions](../reports/261019-research-to-cook-coverage.json). Preserve bounded health/auth behavior; isolate notify/send failures from transport. Retire agent-controlled authorization/reset flags, not trusted native confirmation or unfinished obligations.
+

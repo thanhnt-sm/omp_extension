@@ -39,3 +39,8 @@ This plan gates on expert consultation (Phase 1) to determine whether API-level 
 | 2 | [Case 2 Enforced Call-Site Lattice](./phase-02-case-2-enforced-call-site-lattice.md) | Complete |
 | 3 | [Case 6 Confidence Handling](./phase-03-case-6-confidence-handling.md) | Complete |
 | 4 | [Test Suite Update to COMPLETE](./phase-04-test-suite-update-to-complete.md) | Complete |
+
+## Execution reconciliation — 2026-10-19
+
+Residual C29/C35 ownership: [consolidated master](../261019-research-to-cook-execution/plan.md), with [source-evidenced dispositions](../reports/261019-research-to-cook-coverage.json). Preserve implemented behavior; do not replay historical recipes or infer completion from this link. Close each remaining objective only from its own required source/test/runtime proof, without a false whole-master blocker.
+

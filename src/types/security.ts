@@ -1,3 +1,5 @@
+import type { VerificationOutcome } from "./verification";
+
 export interface ASTAnalysisResult {
   isSafe: boolean;
   issues: string[];
@@ -27,4 +29,5 @@ export interface RemediationDirective {
   taskId?: string;
   criteria?: string[];
   testEvasion?: boolean;
+  outcome?: VerificationOutcome;
 }

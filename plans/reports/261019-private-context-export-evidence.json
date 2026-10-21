@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-19",
+  "finding": "F17",
+  "severity": "High",
+  "mechanism": "Deployed conversation projection explicitly admits assistant thinking blocks; native macro includes projected worklog in prepared outbound state.",
+  "sources": [
+    "C:/Users/thant/Projects/omp_extension/typesafe-planner.ts:763-764,1749,1808",
+    "C:/Users/thant/Projects/omp_extension/src/cook-expert-judge.ts:224",
+    "D:/100.Software/Github/omp_extension/typesafe-planner.ts:787-788"
+  ],
+  "probe": {
+    "exitCode": 0,
+    "fixture": "synthetic thinking block only; no real private content read or persisted",
+    "projectionRetainsSyntheticThinking": true,
+    "preparedStateRetainsSyntheticThinking": true,
+    "observedClientInvocations": 1,
+    "networkCalls": 0,
+    "nativeOperations": 0,
+    "scope": "Actual deployed helpers/production preparation with injected observation-only client, NOT captured Main wire"
+  },
+  "unsafeExistingTestReportedByAdvisor": "tests/bicameral-consensus.test.ts:416-458 expects thinking inclusion; inspect before authorized repair and replace unsafe incidental expectation with final-egress privacy regression plus positive public-evidence preservation",
+  "limitations": [
+    "No actual private thinking read/copied into the probe or persisted in this evidence",
+    "No API/network/native operation in the probe",
+    "This proves a prepared-state construction defect, not captured historical transmission or causality for gate scores"
+  ],
+  "safety": "Suspend further native remote completion checks using this path until a verified privacy-safe implementation is actually active; do not disable or bypass the native gate.",
+  "ownerAction": "Separate source authorization for typed public-context projection and tested final-egress exclusion; safe activation additionally preserves native obligations/debt and release security."
+}

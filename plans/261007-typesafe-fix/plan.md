@@ -50,3 +50,8 @@ The TypeSafe extension baseline deployment introduced regressions across four te
 ## Assumptions & contingencies
 - Assumption: The test suites strictly mock `fetch` or the API client; the fixes rely on conforming to the expected mocked payload shapes.
 - Contingency: If fixing the source breaks downstream gates, we will inspect the exact AST diff and apply minimal safe typecasting.
+
+## Execution reconciliation — 2026-10-19
+
+Residual C09/C11/C13/C26/C27/C31/C35 ownership: [consolidated master](../261019-research-to-cook-execution/plan.md), with [source-evidenced dispositions](../reports/261019-research-to-cook-coverage.json). Historical default-passing production mocks and always-human drop recipes are superseded by strict unavailable/results, exact operation authority and verified cancellation. Preserve real implemented behavior, not fake approvals.
+

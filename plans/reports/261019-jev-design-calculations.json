@@ -1,0 +1,84 @@
+{
+  "assumptions": {
+    "N": 20,
+    "k": 4,
+    "packetStateTokens": 1500,
+    "questionTokens": 120,
+    "requestOverheadTokens": 100,
+    "globalStateTokens": 12000,
+    "usdPerMillionInputTokens": 0.042,
+    "outputTokensFree": true,
+    "excludes": "Advisor/human/evidence collection,retries,tokenization variation; no live accuracy/latency measurements"
+  },
+  "costs": [
+    {
+      "name": "80 atomic, full context separately",
+      "requests": 80,
+      "questions": 80,
+      "tokens": 977600,
+      "usd": 0.041059200000000004,
+      "idealWavesAtConcurrency4": 20
+    },
+    {
+      "name": "80 atomic, one global batch",
+      "requests": 1,
+      "questions": 80,
+      "tokens": 21700,
+      "usd": 0.0009114,
+      "idealWavesAtConcurrency4": 1
+    },
+    {
+      "name": "80 atomic, small packets separately",
+      "requests": 80,
+      "questions": 80,
+      "tokens": 137600,
+      "usd": 0.0057792,
+      "idealWavesAtConcurrency4": 20
+    },
+    {
+      "name": "H: 20 coherent packets, 4 questions each",
+      "requests": 20,
+      "questions": 80,
+      "tokens": 41600,
+      "usd": 0.0017472,
+      "idealWavesAtConcurrency4": 5
+    }
+  ],
+  "riskMath": {
+    "assumptions": "Illustration only: clean plan, independent per-check false rejection; model question independence does NOT imply statistical error independence",
+    "falseBlockAt1Percent": 0.5524767862361897,
+    "falseBlockAtPoint1Percent": 0.07692060216266317,
+    "falseAcceptAtLeastOnceThreeIndependentRetriesIfSingle5Percent": 0.1426250000000001,
+    "batchSavingsVsSmallSingles": 0.6976744186046512,
+    "hybridVsOneGlobalTokenRatio": 1.9170506912442395
+  },
+  "scenarioCounts": {
+    "Critical": 13,
+    "High": 17,
+    "Medium": 6,
+    "Low": 0
+  },
+  "scenarioTotal": 36,
+  "dimensions": 12,
+  "toyIntegration": {
+    "writerUnitPassed": true,
+    "readerUnitPassed": true,
+    "integrationRejected": true,
+    "actualRepositoryBug": false
+  },
+  "truthTable": {
+    "conditions": [
+      "children_supported",
+      "parent_integration_passed",
+      "evidence_fresh",
+      "contract_covered",
+      "local_checks_passed",
+      "advisor_review_clear",
+      "authority_satisfied",
+      "native_commit_matched"
+    ],
+    "enumeratedStates": 256,
+    "naiveChildrenOnlyUnsafeAdmissions": 127,
+    "productionErrorRate": false
+  }
+}

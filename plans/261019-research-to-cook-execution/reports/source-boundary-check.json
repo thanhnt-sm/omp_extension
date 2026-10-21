@@ -1,0 +1,54 @@
+{
+  "recordedAt": "2026-10-20T08:57:22.542Z",
+  "scope": "Workspace source verification only; not deployment, live model accuracy or native approval",
+  "hostVersion": {
+    "command": "omp --version",
+    "exitCode": 0,
+    "observed": "omp/18.12.3",
+    "environment": "Central verification allowlist; no credential inheritance"
+  },
+  "integratedBoundaryModules": {
+    "command": [
+      "bun",
+      "test",
+      "tests/task-contract.test.ts",
+      "tests/public-evidence-egress.test.ts",
+      "tests/typesafe-transport-retry.test.ts",
+      "tests/payload-safety.test.ts",
+      "tests/trusted-tool-policy.test.ts"
+    ],
+    "exitCode": 0,
+    "summary": "77 pass\n 0 fail\n 380 expect() calls\nRan 77 tests across 5 files. [531.00ms]",
+    "limits": "Executed before subsequent canonical native-transition and root history integration changes; affected modules must be rerun at final integrated gate"
+  },
+  "changedPathSmoke": {
+    "command": "bun --eval <public-only collector to real macro/canonical prepared transport smoke>",
+    "exitCode": 0,
+    "observed": {
+      "capturedRequests": 1,
+      "privateExcluded": true,
+      "publicTask": true,
+      "publicWork": true,
+      "publicToolIntent": true,
+      "publicResult": true,
+      "realNetworkCalls": 0,
+      "nativeMutations": 0
+    },
+    "transport": "Injected final fetch capture; no network request; synthetic thinking marker and public facts only"
+  },
+  "nativeState": {
+    "completed": 3,
+    "total": 31,
+    "open": 28,
+    "blocked": 0,
+    "authority": "Actual native append result; original three completions preserved",
+    "remoteCompletionPaused": true
+  },
+  "remaining": "Complete root contract/evidence/Advisor/receipt integration, canonical lifecycle migration, affected full modules, actual supported-host smoke, full suite and fresh independent review before conditional release",
+  "release": {
+    "deployed": false,
+    "restarted": false,
+    "proxyModified": false,
+    "globalConfigModified": false
+  }
+}

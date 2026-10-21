@@ -1,15 +1,17 @@
 'use strict';
 /**
  * typesafe-api-client.cjs
- * Validates typesafe_judge tool-call arguments, redacts/caps them, calls the
+ * Validates typesafe_judge arguments, redacts without trimming proof, calls the
  * TypeSafe System One API, and sanitizes the response down to only the
  * parsed numeric/enum fields the caller is allowed to see. Zero deps.
  *
- * Every failure path returns `{ ok: false, code, authError }` instead of
+ * Judgment failures return `{ ok: false, code, authError }` instead of
  * throwing — `code` is always a short string (never a response body, error
  * message, or the API key) so the MCP server can build an isError tool
  * result directly from it.
  */
+/** @typedef {import('./payload-safety').TypeSafePreparationResult} TypeSafePreparationResult */
+/** @typedef {import('./payload-safety').TypeSafeJudgeResult} TypeSafeJudgeResult */
 
 const crypto = require('node:crypto');
 let preparePayload;
@@ -46,9 +48,7 @@ const MAX_BODY_BYTES = 32768;
 // for COOLDOWN_MS afterwards the same fail-closed result is returned
 // immediately with no network call, so a rate-limited key is not hammered by
 // every subsequent tool call.
-// (Kept inline, not a sibling module: omp-install.cjs and the OMP parity
-// tests deploy/load this file on its own. omp/typesafe-planner.ts carries its
-// own copy of this policy; RETRY_POLICY below is what the parity test pins.)
+// This shared runner owns retry policy for every bundled consumer.
 const RETRYABLE_STATUS = new Set([429, 529]);
 const DEFAULT_MAX_ATTEMPTS = 3;
 const DEFAULT_TOTAL_BUDGET_MS = 15000;
@@ -146,18 +146,23 @@ function getChoiceOptions(criteria) {
  * (skills/shared/typesafe-integration.md section 3). Returns `{ ok: true }`
  * or `{ ok: false, message }` with a short, specific reason.
  */
-function validateInput(args) {
+function validateInput(args, trustedLimits) {
   if (!isPlainObject(args)) return { ok: false, message: 'invalid_input: arguments must be an object' };
   const { state, questions } = args;
   if (!(isNonEmptyString(state) || isPlainObject(state))) {
     return { ok: false, message: 'invalid_input: state is required' };
   }
-  if (!isPlainObject(questions) || Object.keys(questions).length === 0) {
+  if (!isPlainObject(questions)) {
     return { ok: false, message: 'invalid_input: questions must be a non-empty object' };
   }
+  const countValidation = validateQuestionCount(Object.keys(questions).length, trustedLimits);
+  if (!countValidation.ok) return { ...countValidation, message: countValidation.code };
   for (const key of Object.keys(questions)) {
     const q = questions[key];
     if (!isPlainObject(q)) return { ok: false, message: `invalid_input: questions.${key} must be an object` };
+    if (Object.keys(q).some((field) => field !== 'type' && field !== 'instructions' && field !== 'criteria')) {
+      return { ok: false, message: 'invalid_input: unsupported question field' };
+    }
     if (!VALID_TYPES.has(q.type)) {
       return { ok: false, message: `invalid_input: questions.${key}.type must be noul|choice|score` };
     }
@@ -198,6 +203,126 @@ function validateInput(args) {
     }
   }
   return { ok: true };
+}
+
+function validateQuestionCount(count, trustedLimits) {
+  if (trustedLimits && trustedLimits.ok === false) return { ok: false, code: 'policy_invalid' };
+  const cap = trustedLimits?.maxQuestionsPerRequest ?? 128;
+  if (!Number.isSafeInteger(cap) || cap < 1 || cap > 128) return { ok: false, code: 'policy_invalid' };
+  if (!Number.isSafeInteger(count) || count < 1) return { ok: false, code: 'invalid_input' };
+  return count <= cap ? { ok: true } : { ok: false, code: 'question_limit_exceeded' };
+}
+
+// Only typed host messages are projected. Opaque public strings and business
+// objects are not parsed or searched for words resembling private channels.
+function projectPublicMessages(state) {
+  if (!isPlainObject(state) || !Array.isArray(state.messages)) return state;
+  const project = (entry) => {
+    if (!isPlainObject(entry)) return entry;
+    const message = isPlainObject(entry.message) ? entry.message : entry;
+    if (!['assistant', 'tool', 'toolResult'].includes(message.role)) return entry;
+    const content = typeof message.content === 'string' ? message.content
+      : Array.isArray(message.content) ? message.content.flatMap((block) => {
+      if (!isPlainObject(block)) return [];
+      if (block.type === 'text' && typeof block.text === 'string') return [{ type: 'text', text: block.text }];
+      if (block.type === 'toolCall') {
+        return [{
+          type: 'toolCall', id: block.id, name: block.name,
+          arguments: typeof block.arguments?.i === 'string' ? { i: block.arguments.i } : {},
+        }];
+      }
+      if (block.type === 'tool_use') return [{ type: 'tool_use', id: block.id, name: block.name }];
+      if (block.type === 'tool_result' && typeof block.content === 'string') {
+        return [{ type: 'tool_result', tool_use_id: block.tool_use_id, content: block.content }];
+      }
+      return [];
+    }) : [];
+    const publicMessage = {
+      role: message.role, content,
+      ...(typeof message.toolName === 'string' ? { toolName: message.toolName } : {}),
+      ...(typeof message.toolCallId === 'string' ? { toolCallId: message.toolCallId } : {}),
+      ...(typeof message.isError === 'boolean' ? { isError: message.isError } : {}),
+    };
+    return message === entry ? publicMessage : {
+      type: entry.type, id: entry.id, parentId: entry.parentId, message: publicMessage,
+    };
+  };
+  return { ...state, messages: state.messages.map(project) };
+}
+
+function redactEvidenceState(state, options = {}) {
+  return loadPreparePayload()(
+    { state: projectPublicMessages(state) }, { ...options, maxBytes: Infinity },
+  ).state;
+}
+
+/** @returns {TypeSafePreparationResult} */
+function prepareRequest(args, trustedLimits, redactionOptions = {}) {
+  const validation = validateInput(args, trustedLimits);
+  if (!validation.ok) return { ok: false, code: validation.code || 'invalid_input' };
+  if (trustedLimits === undefined) {
+    try {
+      trustedLimits = require('./typesafe-policy-client.cjs').resolveTrustedToolPolicy('judge');
+      if (!trustedLimits?.ok) return { ok: false, code: 'policy_client_missing' };
+    } catch (_) {
+      return { ok: false, code: 'policy_client_missing' };
+    }
+  }
+  const model = isNonEmptyString(args.model) ? args.model.trim() : MODEL;
+  const allowed = trustedLimits?.provider?.allowedModels ?? [MODEL];
+  if (!Array.isArray(allowed) || !allowed.includes(model)) return { ok: false, code: 'model_not_allowed' };
+  try {
+    // Infinity disables the legacy water-filling truncator, not the final hard
+    // bound. Redaction may change secrets, never discard evidence or criteria.
+    const payload = loadPreparePayload()({
+      state: projectPublicMessages(args.state), model, questions: args.questions,
+    }, { ...redactionOptions, maxBytes: Infinity });
+    const preparedValidation = validateInput(payload, trustedLimits);
+    if (payload.model !== model) return { ok: false, code: 'model_not_allowed' };
+    if (!preparedValidation.ok) return { ok: false, code: preparedValidation.code || 'invalid_input' };
+    if (JSON.stringify(Object.keys(payload.questions)) !== JSON.stringify(Object.keys(args.questions))) {
+      return { ok: false, code: 'question_identity_changed' };
+    }
+    const body = JSON.stringify(payload);
+    const bodyBytes = Buffer.byteLength(body, 'utf8');
+    if (bodyBytes > MAX_BODY_BYTES) return { ok: false, code: 'payload too large' };
+    const questionIds = Object.keys(payload.questions);
+    const bodyDigest = crypto.createHash('sha256').update(body).digest('hex');
+    const metadata = {
+      policyIdentity: trustedLimits?.policyIdentity,
+      purpose: trustedLimits?.purpose,
+      maxQuestionsPerRequest: trustedLimits?.maxQuestionsPerRequest ?? 128,
+      questionIds, questionCount: questionIds.length, bodyBytes, bodyDigest,
+    };
+    return { ok: true, body, questions: payload.questions, bodyBytes, bodyDigest,
+      questionCount: questionIds.length, policyIdentity: metadata.policyIdentity, metadata };
+  } catch (error) {
+    return { ok: false, code: error?.message === 'payload rejected: secret in key'
+      ? error.message : 'redact_failed' };
+  }
+}
+
+function freezePrepared(value) {
+  if (!value || typeof value !== 'object' || Object.isFrozen(value)) return;
+  Object.freeze(value);
+  for (const key in value) {
+    if (Object.hasOwn(value, key)) freezePrepared(value[key]);
+  }
+}
+
+async function runPreparedValidation(prepared, validator) {
+  if (validator === undefined) return { ok: true };
+  if (typeof validator !== 'function') return { ok: false, code: 'prepared_validation_failed' };
+  freezePrepared(prepared);
+  try {
+    const result = await validator(prepared);
+    if (result?.ok === true) return { ok: true };
+    const code = typeof result?.code === 'string' && /^[A-Za-z0-9_]{1,64}$/.test(result.code)
+      ? result.code : 'prepared_validation_failed';
+    return { ok: false, code };
+  } catch (_) {
+    return { ok: false, code: 'prepared_validation_failed' };
+  }
 }
 
 /**
@@ -337,14 +462,45 @@ function nextRetryDelayMs(attemptsMade, retryAfterMs, randomImpl) {
   return Math.floor(randomImpl() * ceiling);
 }
 
+function createAttemptReceipt(context, outcome, error) {
+  const data = outcome?.data;
+  const reason = error ? 'request_failed' : outcome?.kind === 'http_error' || outcome?.kind === 'auth'
+    ? 'error_response_not_parsed' : 'not_returned';
+  const usage = isPlainObject(data?.usage) ? data.usage : null;
+  const resolvedModel = isNonEmptyString(data?.model) ? data.model : null;
+  const billing = isPlainObject(data?.billing) || (typeof data?.billing === 'number' && Number.isFinite(data.billing))
+    ? data.billing : null;
+  return Object.freeze({
+    ...context, receiptId: crypto.randomUUID(), clock: 'monotonic_ms',
+    provider: 'typesafe', endpoint: API_URL,
+    kind: error ? 'request_error' : outcome.kind,
+    status: outcome?.status ?? null,
+    error: error ? error.name === 'TimeoutError' ? 'timeout' : error.name === 'AbortError' ? 'cancelled' : 'network_error' : null,
+    resolvedModel, modelUnavailableReason: resolvedModel === null ? reason : null,
+    usage, usageUnavailableReason: usage === null ? reason : null,
+    billing, billingUnavailableReason: billing === null ? reason : null,
+  });
+}
+
 async function requestWithRetry(options) {
   const o = options || {};
+  const signals = [o.signal, o.reviewJob?.signal].filter(Boolean);
+  const signal = signals.length > 1 ? AbortSignal.any(signals) : signals[0];
   const fetchImpl = o.fetchImpl || globalThis.fetch;
   const apiKey = o.apiKey;
   const body = o.body;
+  if (typeof body !== 'string') return { kind: 'local_error', code: 'invalid_body', attempts: 0, attemptReceipts: [] };
+  const bodyBytes = Buffer.byteLength(body, 'utf8');
+  if (bodyBytes > MAX_BODY_BYTES) return { kind: 'local_error', code: 'payload too large', attempts: 0, attemptReceipts: [] };
+  const bodyDigest = crypto.createHash('sha256').update(body).digest('hex');
+  const attemptReceipts = [];
+  const identity = { bodyBytes, bodyDigest,
+    questionIds: o.preparedMetadata?.questionIds ?? null,
+    questionCount: o.preparedMetadata?.questionCount ?? null,
+    policyIdentity: o.preparedMetadata?.policyIdentity ?? null };
   const timeoutMs = Number.isFinite(o.timeoutMs) && o.timeoutMs > 0 ? o.timeoutMs : 10000;
-  const maxAttempts = Number.isInteger(o.maxAttempts) && o.maxAttempts > 0 ? o.maxAttempts : DEFAULT_MAX_ATTEMPTS;
-  const totalBudgetMs = Number.isFinite(o.totalBudgetMs) && o.totalBudgetMs > 0 ? o.totalBudgetMs : DEFAULT_TOTAL_BUDGET_MS;
+  const maxAttempts = Math.min(DEFAULT_MAX_ATTEMPTS, Number.isInteger(o.maxAttempts) && o.maxAttempts > 0 ? o.maxAttempts : DEFAULT_MAX_ATTEMPTS);
+  const totalBudgetMs = Math.min(DEFAULT_TOTAL_BUDGET_MS, Number.isFinite(o.totalBudgetMs) && o.totalBudgetMs > 0 ? o.totalBudgetMs : DEFAULT_TOTAL_BUDGET_MS);
   const now = typeof o.nowImpl === 'function' ? o.nowImpl : monotonicNow;
   const wallNow = typeof o.wallNowImpl === 'function' ? o.wallNowImpl : Date.now;
   const sleep = typeof o.sleepImpl === 'function' ? o.sleepImpl : defaultSleep;
@@ -356,14 +512,14 @@ async function requestWithRetry(options) {
     if (typeof o.debugLog !== 'function') return;
     try { o.debugLog(`typesafe: attempts=${attempts} last=${last}`); } catch (_) {}
   };
-  if (o.signal && o.signal.aborted) throw abortError();
+  if (signal?.aborted) throw abortError();
   if (entry.authFailed) {
     debug(0, entry.status || 401);
-    return { kind: 'auth', status: entry.status || 401, authFailed: true };
+    return { kind: 'auth', status: entry.status || 401, authFailed: true, attempts: 0, attemptReceipts };
   }
   if (entry.until > now()) {
     debug(0, entry.status);
-    return { kind: 'http_error', status: entry.status, cooldown: true };
+    return { kind: 'http_error', status: entry.status, cooldown: true, attempts: 0, attemptReceipts };
   }
 
   const deadline = now() + totalBudgetMs;
@@ -374,26 +530,38 @@ async function requestWithRetry(options) {
     while (attempts < maxAttempts) {
       const remaining = deadline - now();
       if (remaining < MIN_USEFUL_ATTEMPT_MS) throw abortError('TimeoutError');
-      if (o.signal && o.signal.aborted) throw abortError();
+      if (signal?.aborted) throw abortError();
       const current = checkCredentialCooldown(apiKey, { rateLimitState: store, nowImpl: now });
       if (attempts > 0 && current) {
         outcome = { kind: 'http_error', status: current.status, cooldown: true };
         break;
       }
+      if (o.reviewJob) {
+        const admission = o.reviewJob.beforeDispatch();
+        if (!admission.ok) return { kind: 'local_error', code: admission.code, attempts, attemptReceipts };
+      }
       attempts += 1;
+      const startedAtMs = now();
       const controller = new AbortController();
-      outcome = await withTimeout(
-        performRequest(fetchImpl, apiKey, body, controller.signal, wallNow, {
-          timeoutMs: Math.min(250, Math.max(0, remaining)),
-          setTimeoutImpl: setTimer,
-          clearTimeoutImpl: clearTimer,
-        }),
-        controller,
-        Math.min(timeoutMs, remaining),
-        { signal: o.signal, setTimeoutImpl: setTimer, clearTimeoutImpl: clearTimer },
-      );
+      try {
+        outcome = await withTimeout(
+          performRequest(fetchImpl, apiKey, body, controller.signal, wallNow, {
+            timeoutMs: Math.min(250, Math.max(0, remaining)),
+            setTimeoutImpl: setTimer,
+            clearTimeoutImpl: clearTimer,
+          }),
+          controller,
+          Math.min(timeoutMs, remaining),
+          { signal, setTimeoutImpl: setTimer, clearTimeoutImpl: clearTimer },
+        );
+      } catch (error) {
+        attemptReceipts.push(createAttemptReceipt({ ...identity, attempt: attempts, startedAtMs, endedAtMs: now() }, null, error));
+        throw error;
+      }
+      attemptReceipts.push(createAttemptReceipt({ ...identity, attempt: attempts, startedAtMs, endedAtMs: now() }, outcome));
       last = outcome.status === undefined ? 200 : outcome.status;
       if (outcome.kind !== 'http_error' || !RETRYABLE_STATUS.has(outcome.status)) break;
+      if (attempts >= maxAttempts) break;
       const delay = nextRetryDelayMs(attempts, outcome.retryAfterMs, random);
       if (delay === null || now() + delay + MIN_USEFUL_ATTEMPT_MS > deadline) break;
       const sleepController = new AbortController();
@@ -401,9 +569,14 @@ async function requestWithRetry(options) {
         Promise.resolve(sleep(delay, sleepController.signal)),
         sleepController,
         Math.max(1, deadline - now()),
-        { signal: o.signal, setTimeoutImpl: setTimer, clearTimeoutImpl: clearTimer },
+        { signal, setTimeoutImpl: setTimer, clearTimeoutImpl: clearTimer },
       );
     }
+  } catch (error) {
+    const failure = error instanceof Error ? error : new Error('request_failed');
+    failure.attempts = attempts;
+    failure.attemptReceipts = attemptReceipts;
+    throw failure;
   } finally {
     debug(attempts, last);
   }
@@ -422,7 +595,8 @@ async function requestWithRetry(options) {
       entry.status = outcome.status;
     }
   }
-  return outcome;
+  return { ...outcome, attempts, attemptReceipts,
+    ...(entry.until > now() ? { cooldownUntil: entry.until } : {}) };
 }
 
 async function performRequest(fetchImpl, apiKey, body, signal, wallNowImpl, cleanupOptions) {
@@ -453,10 +627,10 @@ async function performRequest(fetchImpl, apiKey, body, signal, wallNowImpl, clea
       return { kind: 'http_error', status: response.status, retryAfterMs };
     }
     try {
-      return { kind: 'ok', data: await response.json() };
+      return { kind: 'ok', status: response.status, data: await response.json() };
     } catch (_) {
       await cancelBodyBounded(response, cleanupOptions);
-      return { kind: 'bad_response' };
+      return { kind: 'bad_response', status: response.status };
     }
   } finally {
     signal.removeEventListener('abort', cancelOnAbort);
@@ -467,85 +641,72 @@ async function performRequest(fetchImpl, apiKey, body, signal, wallNowImpl, clea
  * Validate, redact+cap, POST to TypeSafe System One, and sanitize the
  * response. Never throws. `homeDir` is injected (not read from os.homedir())
  * so callers/tests control what gets redacted to `~`.
+ * @returns {Promise<TypeSafeJudgeResult>}
  */
-async function judgeTypeSafe({
-  fetchImpl, apiKey, args, homeDir, timeoutMs = 10000,
-  maxAttempts = DEFAULT_MAX_ATTEMPTS, totalBudgetMs = DEFAULT_TOTAL_BUDGET_MS,
-  nowImpl = monotonicNow, wallNowImpl = Date.now,
-  sleepImpl, randomImpl = Math.random, rateLimitState, debugLog, signal,
-  setTimeoutImpl, clearTimeoutImpl,
-}) {
-  const validation = validateInput(args);
-  if (!validation.ok) return { ok: false, code: validation.message, authError: false };
-  const cooldown = checkCredentialCooldown(apiKey, { rateLimitState, nowImpl });
-  if (cooldown) return { ok: false, code: `http_${cooldown.status}`, authError: cooldown.authFailed === true };
-
-  // `model` must be part of the SAME object preparePayload sees, so its bytes
-  // are accounted for by the cap pass rather than added after the fact.
-  // `apiKey` is threaded through so a literal occurrence of the actual key
-  // value anywhere in state/instructions/criteria is always redacted, even
-  // if it doesn't match any known token pattern (H2).
-  let payload;
+async function judgeTypeSafe(options = {}) {
+  const {
+    fetchImpl = globalThis.fetch, apiKey, args, homeDir, signal,
+    trustedPolicy, trustedLimits, purpose = 'judge',
+  } = options;
+  let policy;
+  let policyClient;
   try {
-    payload = loadPreparePayload()(
-      {
-        state: args.state,
-        model: isNonEmptyString(args.model) ? args.model.trim() : MODEL,
-        questions: args.questions,
-      },
-      { maxBytes: MAX_BODY_BYTES, homeDirs: homeDir ? [homeDir] : undefined, apiKey },
-    );
-  } catch (err) {
-    // preparePayload throws only for the round-trip-key-secret rejection
-    // (question name / choice option identifier contains a detected
-    // secret) — surfaced verbatim, never as a request (no fetch below).
-    const code = err && err.message === 'payload rejected: secret in key' ? err.message : 'redact_failed';
-    return { ok: false, code, authError: false };
+    policyClient = require('./typesafe-policy-client.cjs');
+    if (['resolveTrustedToolPolicy', 'validateRoutingQuestions', 'validateRoutingAnswers']
+      .some((name) => typeof policyClient[name] !== 'function')) {
+      return { ok: false, code: 'policy_client_missing', authError: false };
+    }
+    policy = policyClient.resolveTrustedToolPolicy(purpose, trustedPolicy !== undefined ? trustedPolicy : trustedLimits);
+    if (!policy || typeof policy.ok !== 'boolean') {
+      return { ok: false, code: 'policy_client_missing', authError: false };
+    }
+  } catch (_) {
+    return { ok: false, code: 'policy_client_missing', authError: false };
   }
-  const body = JSON.stringify(payload);
-
-  // Hard final check: preparePayload caps state/instructions/criteria
-  // STRING VALUES (dict values for noul/choice, array items for score), but
-  // never option IDENTIFIERS — dict keys — since those are matched against
-  // the response and must survive byte-for-byte. A criteria set dominated
-  // by large identifiers (not values) can still push the assembled body
-  // over budget. Reject rather than send an oversized/uncapped body.
-  if (Buffer.byteLength(body, 'utf8') > MAX_BODY_BYTES) {
-    return { ok: false, code: 'payload too large', authError: false };
-  }
-
-  if (typeof fetchImpl !== 'function') {
-    return { ok: false, code: 'no_fetch', authError: false };
-  }
-
-  const attempts = Number.isInteger(maxAttempts) && maxAttempts >= 1 ? maxAttempts : DEFAULT_MAX_ATTEMPTS;
-  const budget = Number.isFinite(totalBudgetMs) && totalBudgetMs > 0 ? totalBudgetMs : DEFAULT_TOTAL_BUDGET_MS;
+  if (!policy.ok) return { ok: false, code: 'policy_invalid', authError: false };
+  const prepared = prepareRequest(args, policy, { homeDirs: homeDir ? [homeDir] : undefined, apiKey });
+  if (!prepared.ok) return { ...prepared, authError: false };
+  const routing = policyClient.validateRoutingQuestions(prepared.questions, policy);
+  if (!routing.ok) return { ...routing, authError: false };
+  const coverage = await runPreparedValidation(prepared, options.validatePrepared);
+  if (!coverage.ok) return { ...coverage, authError: false, metadata: prepared.metadata };
+  if (!isNonEmptyString(apiKey)) return { ok: false, code: 'no_api_key', authError: false };
+  if (typeof fetchImpl !== 'function') return { ok: false, code: 'no_fetch', authError: false };
   let outcome;
   try {
-    outcome = await requestWithRetry({
-      fetchImpl, apiKey, body, signal, timeoutMs, maxAttempts: attempts, totalBudgetMs: budget,
-      nowImpl, wallNowImpl, sleepImpl, randomImpl, rateLimitState, debugLog,
-      setTimeoutImpl, clearTimeoutImpl,
-    });
-  } catch (err) {
-    const isAbort = err && (err.name === 'AbortError' || err.name === 'TimeoutError');
-    return { ok: false, code: isAbort ? 'timeout' : 'network_error', authError: false };
+    outcome = await requestWithRetry({ ...options, fetchImpl, apiKey, body: prepared.body, signal, preparedMetadata: prepared.metadata });
+  } catch (error) {
+    return { ok: false, code: signal?.aborted || options.reviewJob?.signal.aborted ? 'cancelled'
+      : error?.name === 'TimeoutError' ? 'timeout' : error?.name === 'AbortError' ? 'cancelled' : 'network_error',
+      authError: false, metadata: { ...prepared.metadata, attempts: error?.attempts ?? 0,
+        attemptReceipts: error?.attemptReceipts ?? [] } };
   }
-
-  if (outcome.kind === 'auth') return { ok: false, code: `http_${outcome.status}`, authError: true };
-  if (outcome.kind === 'http_error') return { ok: false, code: `http_${outcome.status}`, authError: false };
-  if (outcome.kind === 'bad_response') return { ok: false, code: 'bad_response', authError: false };
-
-  // Validate `choice` against the options actually SENT — dict keys are
-  // never redacted, so this always matches the raw input's option set.
-  const answers = sanitizeAnswers(payload.questions, outcome.data && outcome.data.answers);
-  if (!answers) return { ok: false, code: 'bad_response', authError: false };
-
-  return { ok: true, answers };
+  const metadata = { ...prepared.metadata, attempts: outcome.attempts, attemptReceipts: outcome.attemptReceipts };
+  if (outcome.cooldown === true) metadata.cooldown = true;
+  if (outcome.cooldownUntil !== undefined) metadata.cooldownUntil = outcome.cooldownUntil;
+  if (outcome.kind === 'local_error') return { ok: false, code: outcome.code, authError: false, metadata };
+  if (outcome.kind === 'auth' || outcome.kind === 'http_error') {
+    return { ok: false, code: `http_${outcome.status}`, authError: outcome.kind === 'auth', metadata };
+  }
+  if (outcome.kind !== 'ok') return { ok: false, code: 'bad_response', authError: false, metadata };
+  if (isNonEmptyString(outcome.data?.model)) metadata.resolvedModel = outcome.data.model;
+  if (isPlainObject(outcome.data?.usage)) metadata.usage = outcome.data.usage;
+  if (isPlainObject(outcome.data?.billing) || (typeof outcome.data?.billing === 'number' && Number.isFinite(outcome.data.billing))) {
+    metadata.billing = outcome.data.billing;
+  }
+  const answers = sanitizeAnswers(prepared.questions, outcome.data?.answers);
+  if (!answers) return { ok: false, code: 'bad_response', authError: false, metadata };
+  const compliance = policyClient.validateRoutingAnswers(prepared.questions, answers, policy);
+  if (!compliance.ok) return { ...compliance, authError: false, metadata };
+  return { ok: true, answers, metadata };
 }
 
 module.exports = {
   validateInput,
+  validateQuestionCount,
+  prepareRequest,
+  redactEvidenceState,
+  runPreparedValidation,
   sanitizeAnswers,
   getChoiceOptions,
   judgeTypeSafe,

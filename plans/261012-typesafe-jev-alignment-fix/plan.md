@@ -46,3 +46,8 @@ TBD.
   - `runPhaseMacroCheck` exists in `src/cook-expert-judge.ts`.
   - `collectTaskEvidence` in `src/evidence-collector.ts` correctly accepts `planPath`.
   - Dual Verification Gate structure remains intact.
+
+## Execution reconciliation — 2026-10-19
+
+Residual C04/C06/C08/C09 ownership: [consolidated master](../261019-research-to-cook-execution/plan.md), with [source-evidenced dispositions](../reports/261019-research-to-cook-coverage.json). Preserve task-aware F16 routing and advisory non-authority; replace fabricated probability compatibility and missing contract/evidence semantics. Historical complete is not proof these later residuals are solved.
+

@@ -98,3 +98,8 @@ This plan establishes a **definitive, zero-conflict fix** that brings 100% compl
 | **Upstream OMP Update Conflicts** | High | All changes are strictly restricted to local extension files (`typesafe-planner.ts`, `src/*`, `tests/*`). Core OMP remains 100% clean. |
 | **Token Overflow on Large Git Diffs** | Medium | Implement smart AST/hunk truncation in `src/evidence-collector.ts`, keeping state below 8KB. |
 | **Auth Latch Lockout** | Medium | Maintain the 401/403 auth error flag with clear out-of-band notification so the user knows when a key needs rotation. |
+
+## Execution reconciliation — 2026-10-19
+
+Residual C08/C09/C25/C26/C28/C35 ownership: [consolidated master](../261019-research-to-cook-execution/plan.md), with [source-evidenced dispositions](../reports/261019-research-to-cook-coverage.json). Preserve implemented behavior; do not replay historical recipes or infer completion from this link. Close each remaining objective only from its own required source/test/runtime proof, without a false whole-master blocker.
+

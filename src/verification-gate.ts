@@ -1,30 +1,10 @@
-import { createRequire } from "node:module";
-import {
-  collectTaskEvidence,
-  type TaskEvidenceResult,
-} from "./evidence-collector";
-import { clampText, preparePayloadSafe, type TypeSafePayload } from "./payload-safety";
+import { collectTaskEvidence, touchesClaudeBoundary, type TaskEvidenceResult, type TaskEvidenceOptions } from "./evidence-collector";
 import { analyzeDiffForTestEvasion } from "./ast-analyzer";
 import { generateRemediationBlock } from "./remediation-generator";
-import { AuthManager } from "./auth-manager";
-
-type ApiClient = {
-  requestWithRetry: (options: { fetchImpl: typeof fetch; apiKey: string; body: string }) => Promise<
-    { kind: "ok"; data: unknown } | { kind: "auth" | "http_error"; status: number } | { kind: "bad_response" }
-  >;
-  checkCredentialCooldown: (apiKey: string) => { status: number } | null;
-  sanitizeAnswers: (questions: Record<string, unknown>, rawAnswers: unknown) => Record<string, unknown> | null;
-};
-function loadApiClient(): ApiClient | null {
-  try {
-    const client = createRequire(import.meta.url)("./typesafe-api-client.cjs") as ApiClient;
-    return typeof client.requestWithRetry === "function" && typeof client.sanitizeAnswers === "function" ? client : null;
-  } catch {
-    return null;
-  }
-}
-
-const globalAuthManager = new AuthManager();
+import { createSemanticJudgeClient, noulValue, choiceValue, type SemanticResponse, type SemanticTransportMetadata } from "./semantic-judge-client";
+import type { TaskContract, VerificationOutcome } from "./types/verification";
+import { DEFAULT_SEMANTIC_APPROVAL_OPTIONS, passesSemanticApproval, type SemanticApprovalOptions } from "./semantic-approval-policy";
+import { semanticFailureDisposition } from "./semantic-failure";
 
 export interface Gate1Result {
   passed: boolean;
@@ -33,8 +13,8 @@ export interface Gate1Result {
   testPassed: boolean;
   claudeSafe: boolean;
   testEvasion?: boolean;
+  outcome?: VerificationOutcome;
 }
-
 export interface Gate2Result {
   passed: boolean;
   reasons: string[];
@@ -43,8 +23,9 @@ export interface Gate2Result {
   planDriftChoice?: "no_drift" | "unapproved_deviation" | "scope_creep";
   claudeUntouchedNoul?: number;
   escalateToUser?: boolean;
+  outcome?: VerificationOutcome;
+  metadata?: SemanticTransportMetadata;
 }
-
 export interface DualGateVerificationResult {
   approved: boolean;
   gate1: Gate1Result;
@@ -52,30 +33,18 @@ export interface DualGateVerificationResult {
   reasons: string[];
   remediation?: string;
   escalateToUser?: boolean;
+  disposition?: VerificationOutcome;
 }
-
 export interface GateQuestion {
   type: "choice" | "score" | "noul";
   instructions: string;
   criteria?: string[] | Record<string, string>;
 }
-
+export interface GateJudgeResponse extends SemanticResponse {}
 export interface GateJudgeClient {
-  evaluateGate: (params: {
-    state: string;
-    questions: Record<string, GateQuestion>;
-  }) => Promise<{
-    answers?: {
-      deliverables_verdict?: { choice: string; confidence?: number };
-      meets_criteria?: { noul: number };
-      plan_drift?: { choice: string };
-      claude_account_untouched?: { noul: number };
-    };
-    error?: string;
-  }>;
+  evaluateGate(params: { state: string; questions: Record<string, GateQuestion> }): Promise<GateJudgeResponse>;
 }
-
-export interface TaskVerificationContext {
+export interface TaskVerificationContext extends Pick<TaskEvidenceOptions, "baseline" | "afterSnapshot" | "verificationReceipt" | "authorizedMutationReceipts" | "signal"> {
   cwd?: string;
   taskId: string;
   planPath?: string;
@@ -84,118 +53,57 @@ export interface TaskVerificationContext {
   untrustedAgentClaim?: string;
   taskDoneProven?: boolean;
   todoCompleted?: boolean;
-}
-
-/**
- * Resolves the configurable auto-approval threshold for TypeSafe evaluation.
- * Defaults to 0.50 (natural Bayes boundary) and can be customized via TYPESAFE_AUTO_APPROVAL_THRESHOLD.
- */
-export function resolveAutoApprovalThreshold(): number {
-  const raw = process.env.TYPESAFE_AUTO_APPROVAL_THRESHOLD;
-  if (!raw || raw.trim() === "") return 0.50;
-  const parsed = parseFloat(raw.trim());
-  if (isNaN(parsed)) return 0.50;
-  const normalized = parsed > 1.0 ? parsed / 100 : parsed;
-  return Math.min(Math.max(normalized, 0), 1.0);
+  contract?: TaskContract;
 }
 
 
-/**
- * Gate 1: Fast deterministic verification (zero-token, local execution).
- */
 export function checkDeterministicPreconditions(evidence: TaskEvidenceResult): Gate1Result {
   const reasons: string[] = [];
-
-  // 1. Claude boundary check
-  const claudeHeaderRegex = new RegExp("(?:^|\\n)(?:diff --git\\s+[ab]\\/|--- [ab]\\/|\\+\\+\\+ [ab]\\/)[^\\n]*" + "\\.cl" + "aude[\\/\\\\]", "i");
-  const touchesClaude =
-    /(?:^|[\s/\\])\.claude[/\\]/i.test(evidence.gitStatus) ||
-    /\.claude\.json/i.test(evidence.gitStatus) ||
-    claudeHeaderRegex.test(evidence.gitDiff) ||
-    Boolean(evidence.changedFiles?.some((f) => new RegExp("(?:^|[\\/\\\\])\\.cl" + "aude(?:[\\/\\\\]|\\.json)", "i").test(f)));
-
-  const claudeSafe = !touchesClaude;
-  if (!claudeSafe) {
-    reasons.push("Claude boundary violation: task modified files under .claude or Claude configuration.");
-  }
-
-  // 2. Test execution check
+  const claudeSafe = !touchesClaudeBoundary(evidence.gitStatus, evidence.gitDiff, evidence.changedFiles);
+  if (!claudeSafe) reasons.push("Claude boundary violation: task modified files under .claude or Claude configuration.");
   const testPassed = evidence.testExitCode === null || evidence.testExitCode === 0;
-  if (!testPassed) {
-    reasons.push(`Test suite failed with exit code ${evidence.testExitCode}. Test failure must be resolved before completing task.`);
-  }
-
-  // 3. Assertion deletion / test evasion check
+  if (!testPassed) reasons.push(`Test suite failed with exit code ${evidence.testExitCode}. Resolve the failing applicable verification before completion.`);
   const astResult = analyzeDiffForTestEvasion(evidence.gitDiff);
-  if (!astResult.isSafe) {
-    reasons.push(...astResult.issues);
-  }
-  // 4. Task & Todo completion proof check
+  if (!astResult.isSafe) reasons.push(...astResult.issues);
   if (evidence.taskDoneProven === false || evidence.todoCompleted === false) {
-    reasons.push(
-      "Task completion precondition failed: agent must prove task and todo items are completed before invoking TypeSafe judge."
-    );
+    reasons.push("Task completion precondition failed: actual task and todo completion evidence is required.");
   }
-
-  const passed = claudeSafe && testPassed && astResult.isSafe && evidence.taskDoneProven !== false && evidence.todoCompleted !== false;
+  let outcome: VerificationOutcome | undefined = reasons.length
+    ? { status: "REJECTED", criterionIds: [], reasons: [...reasons] } : undefined;
+  const omissions = evidence.omissions?.filter(item => item.required) ?? [];
+  if (evidence.evidenceStatus === "EVIDENCE_REQUIRED" || omissions.length) {
+    const missing = omissions.map(item => `Evidence prerequisite: ${item.reason}${item.path ? ` (${item.path})` : ""}.`);
+    if (!missing.length) missing.push("Required task-bound evidence is incomplete.");
+    reasons.push(...missing);
+    if (!outcome) outcome = { status: "EVIDENCE_REQUIRED", missingCriterionIds: evidence.contract?.criteria.map(c => c.id) ?? [], reasons: missing };
+  }
   return {
-    passed,
-    reasons,
-    cleanTree: evidence.cleanWorkingTree,
-    testPassed,
-    claudeSafe,
-    testEvasion: astResult.testEvasion,
+    passed: reasons.length === 0, reasons, cleanTree: evidence.cleanWorkingTree,
+    testPassed, claudeSafe, testEvasion: astResult.testEvasion, outcome,
   };
 }
 
-/**
- * Constructs the semantic verification questions for Gate 2.
- */
-export function constructGateQuestions(criteria: string[]): Record<string, GateQuestion> {
-  const criteriaList =
-    criteria.length > 0
-      ? criteria
-      : ["Code correctly satisfies task deliverables and requirements."];
-  const joinedCriteria = criteriaList.join(", ");
-
+export function constructGateQuestions(criteria: string[], taskKind?: TaskContract["taskKind"]): Record<string, GateQuestion> {
+  const joined = criteria.join("; ") || "Concrete evidence satisfies this task's actual deliverables";
+  const applicability = taskKind === "research" || taskKind === "review"
+    ? "Investigation/review/report work requires concrete findings and task-bound artifacts, not unrelated implementation or automated tests."
+    : "Judge task-relevant deliverables and applicable verification commands, not unrelated missing implementation.";
   return {
     deliverables_verdict: {
-      type: "choice",
-      instructions:
-        "Rate whether the real Git diff and test execution output satisfy the current task's stated deliverables.",
-      criteria: {
-        APPROVE: `Satisfies criteria: ${joinedCriteria}`,
-        REJECT: "Fails to satisfy criteria or stubs out required functionality",
-        NEXT_ACTION_REQUIRED: "Work is partial, missing tests, or needs plan revision",
-      },
+      type: "choice", instructions: `Assess the current task against its exact criteria. ${applicability}`,
+      criteria: { APPROVE: `Satisfies criteria: ${joined}`, REJECT: "Evidence violates an actual task criterion", NEXT_ACTION_REQUIRED: "A named criterion or evidence prerequisite needs action" },
     },
     meets_criteria: {
-      type: "noul",
-      instructions:
-        "Rate the probability that the real Git diff and test execution output satisfy the current task's stated deliverables.",
-      criteria: {
-        true: `Satisfies criteria: ${joinedCriteria}`,
-        false: "Fails to satisfy criteria or is incomplete",
-      },
+      type: "noul", instructions: `Rate the probability that the task-bound evidence satisfies its exact criteria. ${applicability}`,
+      criteria: { true: `Satisfies criteria: ${joined}`, false: "An actual criterion is incomplete or unsupported" },
     },
     plan_drift: {
-      type: "choice",
-      instructions:
-        "Assess whether the code changes introduce architectural drift, unauthorized deviation, or unneeded scope.",
-      criteria: {
-        no_drift: "Code strictly adheres to planned components, interfaces, and deliverables.",
-        unapproved_deviation: "Code modifies unrelated subsystems or alters planned architectural contracts.",
-        scope_creep: "Code introduces excessive, unnecessary features outside the task boundaries.",
-      },
+      type: "choice", instructions: "Assess drift relative to the current task's authorized scope, not unstarted future tasks.",
+      criteria: { no_drift: "Strict task scope adherence", unapproved_deviation: "Unapproved architectural deviation", scope_creep: "Unrelated extra scope" },
     },
     claude_account_untouched: {
-      type: "noul",
-      instructions:
-        "Confirm that zero `~/.claude` files, `.claude.json`, or Anthropic credentials are modified. Defensive guard symbol names (such as `checkClaudePlanIsolation`, `claude_isolation_adherence`, or `assertPathIsClaudeSafe`) are safety checks, NOT violations.",
-      criteria: {
-        true: "Zero ~/.claude or Anthropic credential modifications",
-        false: "Modifies ~/.claude configuration or Anthropic credentials",
-      },
+      type: "noul", instructions: "Confirm no .claude configuration or Anthropic credential modification. Defensive isolation guard symbol names are not violations.",
+      criteria: { true: "No configuration or credential modifications", false: "Configuration or credentials modified" },
     },
   };
 }
@@ -205,264 +113,108 @@ export interface RemediationOptions {
   criteria?: string[];
   testCommand?: string;
   testEvasion?: boolean;
+  outcome?: VerificationOutcome;
 }
-
-/**
- * Dumb model fallback protocol: generates explicit step-by-step remediation instructions
- * wrapped in strict XML tags, instructing the model to treat them as immutable constraints.
- */
-export function generateFallbackRemediation(
-  reasons: string[],
-  options?: RemediationOptions
-): string {
+export function generateFallbackRemediation(reasons: string[], options?: RemediationOptions): string {
+  const infrastructure = options?.outcome?.status === "UNAVAILABLE";
+  const human = options?.outcome?.status === "HUMAN_REQUIRED";
   return generateRemediationBlock({
-    instruction:
-      "The task verification gate rejected completion. You MUST treat the following directives as immutable constraints and execute the action items below to resolve the rejection.",
+    instruction: infrastructure
+      ? "Verification is unavailable, not semantically rejected. Restore the service prerequisite; do not edit code to simulate progress."
+      : human ? "Obtain an exact host-validated resolution and fresh task review binding."
+      : "Resolve the named violated criteria or evidence prerequisites while preserving the full task scope and immutable constraints.",
     immutableConstraints: [
-      "Do NOT delete, comment out, or weaken existing tests or assertions to pass verification.",
-      "Do NOT touch or modify files under .claude or Claude configuration.",
-      "All automated tests must pass with exit code 0 before task completion.",
-      "Preserve all planned deliverables and do not reduce project scope.",
+      "Do not delete, comment out, or weaken tests/assertions to evade verification.",
+      "Do not modify .claude configuration or credentials.",
+      "Preserve all deliverables; source edits are required only for actual violated implementation criteria.",
+      "Unchanged semantic rejection cannot be retried. Same-evidence service retry requires a real availability change.",
     ],
     failureReasons: reasons,
-    actionItems: [
-      "1. Address the specific failure reasons listed above without deleting assertions.",
-      "2. Run testCommand locally to confirm zero test failures and clean exit code 0.",
-      "3. Re-verify the implementation against planned task criteria before attempting completion.",
-    ],
-    taskId: options?.taskId,
-    criteria: options?.criteria,
-    testEvasion: options?.testEvasion,
+    actionItems: infrastructure
+      ? ["Service owner: restore the named service or credential prerequisite and record a successful availability observation; parent then requests one fresh review."]
+      : human ? ["Parent: request exact-target trusted human resolution; bind any validated amendment to a fresh review before native staging."]
+      : [
+        "Advisor: diagnose the exact criterion or missing evidence prerequisite and specify the smallest task-relevant correction.",
+        "Scoped executor: apply the diagnosed correction or collect missing evidence, without unrelated implementation.",
+        `Parent: run affected task-applicable verification${options?.testCommand ? ` (${options.testCommand})` : ""} and collect fresh task-bound evidence.`,
+        "Independent reviewer: review the fresh evidence; parent reevaluates the same bound target only after relevant progress.",
+      ],
+    taskId: options?.taskId, criteria: options?.criteria, outcome: options?.outcome,
+    testEvasion: infrastructure || human ? false : options?.testEvasion,
   });
 }
 
-/**
- * Default network client for Gate 2 semantic evaluation.
- */
-async function defaultGateJudgeClient(
-  state: string,
-  questions: Record<string, GateQuestion>
-): Promise<{
-  answers?: {
-    meets_criteria?: { noul: number };
-    plan_drift?: { choice: string };
-    claude_account_untouched?: { noul: number };
-  };
-  error?: string;
-}> {
-  const apiKey = process.env.TYPESAFE_API_KEY?.trim();
-  if (!apiKey) return { error: "TYPESAFE_API_KEY is missing from environment" };
-  if (!globalAuthManager.canAttempt(apiKey)) {
-    return { error: `Authentication blocked by AuthManager: ${globalAuthManager.getState(apiKey).status}` };
-  }
-  const apiClient = loadApiClient();
-  if (!apiClient) return { error: "typesafe_api_client_unavailable" };
-  const cooldown = apiClient.checkCredentialCooldown(apiKey);
-  if (cooldown) return { error: `http_${cooldown.status}` };
+const defaultGateClient = createSemanticJudgeClient({ purpose: "native_done" });
 
-  const payload: TypeSafePayload = { state, questions, model: "jev-latest" };
-  const safePayload = preparePayloadSafe(payload, { apiKey });
-  try {
-    const outcome = await apiClient.requestWithRetry({
-      fetchImpl: globalThis.fetch,
-      apiKey,
-      body: JSON.stringify(safePayload),
-    });
-    if (outcome.kind !== "ok") {
-      if (outcome.kind === "auth") globalAuthManager.recordFailure(apiKey, outcome.status);
-      return { error: "status" in outcome ? `http_${outcome.status}` : "bad_response" };
-    }
-    globalAuthManager.recordSuccess(apiKey);
-    const rawAnswers = outcome.data && typeof outcome.data === "object" && "answers" in outcome.data
-      ? outcome.data.answers
-      : undefined;
-    const answers = apiClient.sanitizeAnswers(safePayload.questions, rawAnswers);
-    return answers
-      ? { answers: answers as { meets_criteria?: { noul: number }; plan_drift?: { choice: string }; claude_account_untouched?: { noul: number } } }
-      : { error: "bad_response" };
-  } catch (err: unknown) {
-    return { error: err instanceof Error && (err.name === "AbortError" || err.name === "TimeoutError") ? "timeout" : "network_error" };
-  }
-}
-
-/**
- * Executes the dual-verification gate for task completion:
- * Gate 1 (deterministic local) -> Gate 2 (TypeSafe System One semantic).
- */
-export async function verifyTaskCompletion(
-  context: TaskVerificationContext,
-  judgeClient?: GateJudgeClient
-): Promise<DualGateVerificationResult> {
-  // 1. Gather ground truth OS signals
+/** Standalone semantic assessment, not native completion authority or a debt release. */
+export async function verifyTaskCompletion(context: TaskVerificationContext, judgeClient?: GateJudgeClient, options: SemanticApprovalOptions = DEFAULT_SEMANTIC_APPROVAL_OPTIONS): Promise<DualGateVerificationResult> {
   const evidence = await collectTaskEvidence({
-    cwd: context.cwd,
-    taskId: context.taskId,
-    planPath: context.planPath,
-    testCommand: context.testCommand,
-    timeoutMs: context.timeoutMs,
+    cwd: context.cwd, taskId: context.taskId, planPath: context.planPath,
+    testCommand: context.testCommand, timeoutMs: context.timeoutMs,
     untrustedAgentState: context.untrustedAgentClaim,
-    taskDoneProven: context.taskDoneProven,
-    todoCompleted: context.todoCompleted,
+    taskDoneProven: context.taskDoneProven, todoCompleted: context.todoCompleted,
+    contract: context.contract, baseline: context.baseline, afterSnapshot: context.afterSnapshot,
+    verificationReceipt: context.verificationReceipt, authorizedMutationReceipts: context.authorizedMutationReceipts, signal: context.signal,
   });
-  // 2. Execute Gate 1 (deterministic, zero token)
   const gate1 = checkDeterministicPreconditions(evidence);
+  const criteria = context.contract?.criteria.map((c) => `${c.id}: ${c.text}`) ?? evidence.criteria;
   if (!gate1.passed) {
-    return {
-      approved: false,
-      gate1,
-      reasons: gate1.reasons,
-      remediation: generateFallbackRemediation(gate1.reasons, {
-        taskId: context.taskId,
-        criteria: evidence.criteria,
-        testCommand: context.testCommand,
-        testEvasion: gate1.testEvasion,
-      }),
-      escalateToUser: false,
-    };
+    const disposition: VerificationOutcome = gate1.outcome ?? { status: "REJECTED", criterionIds: [], reasons: gate1.reasons };
+    return { approved: false, gate1, reasons: gate1.reasons, disposition, escalateToUser: false,
+      remediation: generateFallbackRemediation(gate1.reasons, { taskId: context.taskId, criteria, testCommand: context.testCommand, testEvasion: gate1.testEvasion, outcome: disposition }) };
   }
-
-  // 3. Execute Gate 2 (semantic verification via TypeSafe System One)
-  const questions = constructGateQuestions(evidence.criteria);
-  const state = JSON.stringify({
-    taskId: context.taskId,
-    criteria: evidence.criteria,
-    testExitCode: evidence.testExitCode,
-    testOutput: clampText(evidence.testOutput || "", 2000, "tail"),
-    changedFiles: evidence.changedFiles,
-    gitDiff: clampText(evidence.gitDiff || "", 14000, "head"),
-  });
-
-  const evaluate = async () => {
-    try {
-      return judgeClient
-        ? await judgeClient.evaluateGate({ state, questions })
-        : await defaultGateJudgeClient(state, questions);
-    } catch {
-      return { error: "unavailable: judge request failed" };
-    }
-  };
-  const response = await evaluate();
-  const validProbability = (value: unknown): value is number =>
-    typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;
-  const rawDeliverablesVerdict = (response.answers as Record<string, unknown> | undefined)?.deliverables_verdict as { choice?: string } | undefined;
-  const rawMeetsCriteria = response.answers?.meets_criteria?.noul;
-  const hasValidDeliverablesVerdict = rawDeliverablesVerdict?.choice &&
-    ["APPROVE", "REJECT", "NEXT_ACTION_REQUIRED"].includes(rawDeliverablesVerdict.choice);
-  const hasValidMeetsCriteria = validProbability(rawMeetsCriteria);
-
-  const answersValid = Boolean(
-    response.answers &&
-    (hasValidDeliverablesVerdict || hasValidMeetsCriteria) &&
-    validProbability(response.answers.claude_account_untouched?.noul) &&
-    ["no_drift", "unapproved_deviation", "scope_creep", "other"].includes(response.answers.plan_drift?.choice ?? "")
-  );
-
-  // Fail-closed handling if TypeSafe is offline, errors, or fails to answer
-  if (response.error || !response.answers || !answersValid) {
-    const errorMsg = "TypeSafe judge unavailable: request failed or required probability/choice answers are missing or invalid. Retry verification with valid evidence.";
-    return {
-      approved: false,
-      gate1,
-      gate2: {
-        passed: false,
-        reasons: [errorMsg],
-        escalateToUser: true,
-      },
-      reasons: [errorMsg],
-      remediation: generateFallbackRemediation([errorMsg], {
-        taskId: context.taskId,
-        criteria: evidence.criteria,
-        testCommand: context.testCommand,
-      }),
-      escalateToUser: true,
-    };
+  const questions = constructGateQuestions(criteria, context.contract?.taskKind);
+  const criterionQuestions = context.contract?.criteria.map((criterion, index) => ({ criterion, key: `criterion_${index}` })) ?? [];
+  for (const { criterion, key } of criterionQuestions) {
+    questions[key] = { type: "choice", instructions: `Assess exact criterion ${criterion.id}: ${criterion.text}. Distinguish contradiction from an absent evidence prerequisite.`,
+      criteria: { satisfied: "Task-bound evidence satisfies criterion", violated: "Evidence contradicts this exact criterion", evidence_missing: "Required criterion evidence is absent" } };
   }
-
-  const threshold = resolveAutoApprovalThreshold();
-  const passesThreshold = (p: number) => (threshold === 0.50 ? p > 0.50 : p >= threshold);
-  let deliverablesVerdict: "APPROVE" | "REJECT" | "NEXT_ACTION_REQUIRED" | undefined;
-  if (hasValidDeliverablesVerdict) {
-    deliverablesVerdict = rawDeliverablesVerdict!.choice as "APPROVE" | "REJECT" | "NEXT_ACTION_REQUIRED";
-    if (deliverablesVerdict === "APPROVE" && hasValidMeetsCriteria && !passesThreshold(rawMeetsCriteria!)) {
-      deliverablesVerdict = rawMeetsCriteria! < 0.25 ? "REJECT" : "NEXT_ACTION_REQUIRED";
-    }
-  } else if (hasValidMeetsCriteria) {
-    deliverablesVerdict = passesThreshold(rawMeetsCriteria!) ? "APPROVE" : rawMeetsCriteria! < 0.25 ? "REJECT" : "NEXT_ACTION_REQUIRED";
+  const state = JSON.stringify({ taskId: context.taskId, contract: context.contract, criteria,
+    testExitCode: evidence.testExitCode, testOutput: evidence.testOutput,
+    changedFiles: evidence.changedFiles, gitDiff: evidence.gitDiff,
+    sourceEvidence: evidence.sourceEvidence, verificationReceipt: evidence.verificationReceipt,
+    commitInterval: evidence.commitInterval, counterevidence: evidence.counterevidence,
+    evaluatedTreeDigest: evidence.evaluatedTreeDigest, omissions: evidence.omissions });
+  let response: SemanticResponse;
+  try {
+    response = judgeClient ? await judgeClient.evaluateGate({ state, questions }) : await defaultGateClient.evaluate({ state, questions });
+  } catch { response = { error: "transport_unavailable" }; }
+  const answers = response.answers;
+  const deliverablesVerdict = choiceValue(answers?.deliverables_verdict, ["APPROVE", "REJECT", "NEXT_ACTION_REQUIRED"] as const);
+  const probability = noulValue(answers?.meets_criteria);
+  const isolation = noulValue(answers?.claude_account_untouched);
+  const drift = choiceValue(answers?.plan_drift, ["no_drift", "unapproved_deviation", "scope_creep"] as const);
+  const missing: string[] = [];
+  const violated: string[] = [];
+  let malformedCriterion = false;
+  for (const { criterion, key } of criterionQuestions) {
+    const status = choiceValue(answers?.[key], ["satisfied", "violated", "evidence_missing"] as const);
+    if (!status) malformedCriterion = true;
+    if (status === "violated") violated.push(criterion.id);
+    if (status === "evidence_missing") missing.push(criterion.id);
   }
-
-  const { answers } = response;
+  if (response.error || !deliverablesVerdict || probability === undefined || isolation === undefined || !drift || malformedCriterion) {
+    const disposition = semanticFailureDisposition(response.error, context.contract?.criteria.map(criterion => criterion.id));
+    const reasons = [...disposition.reasons];
+    return { approved: false, gate1, disposition, reasons, escalateToUser: false,
+      gate2: { passed: false, reasons, outcome: disposition, metadata: response.metadata, deliverablesVerdict, meetsCriteriaNoul: probability, claudeUntouchedNoul: isolation, planDriftChoice: drift },
+      remediation: generateFallbackRemediation(reasons, { taskId: context.taskId, criteria, outcome: disposition }) };
+  }
+  const meets = passesSemanticApproval(probability, options.approvalPolicy);
+  const isolated = passesSemanticApproval(isolation, options.approvalPolicy);
   const reasons: string[] = [];
-
-  if (deliverablesVerdict === "REJECT") {
-    if (rawMeetsCriteria !== undefined) {
-      reasons.push(
-        `Deliverable verification rejected: JEV verdict is REJECT (meets_criteria P=${rawMeetsCriteria.toFixed(2)}).`
-      );
-    } else {
-      reasons.push(
-        "Deliverable verification rejected: implementation is incomplete, evading work, or failing acceptance criteria."
-      );
-    }
-  } else if (deliverablesVerdict === "NEXT_ACTION_REQUIRED") {
-    if (rawMeetsCriteria !== undefined) {
-      reasons.push(
-        `Deliverable verification requires next actions: JEV verdict is NEXT_ACTION_REQUIRED (meets_criteria P=${rawMeetsCriteria.toFixed(2)}).`
-      );
-    } else {
-      reasons.push(
-        "Deliverable verification requires next actions: implementation is partial, missing tests, or requires plan adaptation."
-      );
-    }
-  }
-
-  const rawDriftChoice = answers.plan_drift?.choice?.toLowerCase();
-  const driftChoice:
-    | "no_drift"
-    | "unapproved_deviation"
-    | "scope_creep"
-    | undefined =
-    rawDriftChoice === "other"
-      ? "unapproved_deviation"
-      : (rawDriftChoice as "no_drift" | "unapproved_deviation" | "scope_creep" | undefined);
-  if (driftChoice && driftChoice !== "no_drift") {
-    reasons.push(
-      `Architectural drift detected: plan_drift is "${driftChoice}". Code must not deviate from planned boundaries.`
-    );
-  }
-
-  const claudeThreshold = resolveAutoApprovalThreshold();
-  const claudeUntouchedNoul = answers.claude_account_untouched?.noul;
-  if (
-    claudeUntouchedNoul !== undefined &&
-    (claudeThreshold === 0.50 ? claudeUntouchedNoul <= 0.50 : claudeUntouchedNoul < claudeThreshold)
-  ) {
-    reasons.push(
-      `Claude account isolation concern: claude_account_untouched probability (${claudeUntouchedNoul.toFixed(2)}) indicates potential configuration touchpoints.`
-    );
-  }
-
+  if (deliverablesVerdict !== "APPROVE" || !meets) reasons.push(`${deliverablesVerdict === "NEXT_ACTION_REQUIRED" ? "Next actions required" : "Task deliverable verification rejected"}: raw ${deliverablesVerdict} (meets_criteria P=${probability.toFixed(2)}). ${violated.length ? `Violated criteria: ${violated.join(", ")}.` : "Evidence prerequisite: exact criterion-level diagnosis is required before assigning edits."}`);
+  if (drift !== "no_drift") reasons.push(`Violated boundary criterion plan_drift: ${drift}.`);
+  if (!isolated) reasons.push(`Claude account isolation concern: P=${isolation.toFixed(2)}.`);
+  if (violated.length) reasons.push(`Violated criteria: ${violated.join(", ")}.`);
+  if (missing.length) reasons.push(`Missing evidence prerequisites for criteria: ${missing.join(", ")}.`);
   const approved = reasons.length === 0;
-
-  return {
-    approved,
-    gate1,
-    gate2: {
-      passed: approved,
-      reasons,
-      deliverablesVerdict,
-      meetsCriteriaNoul: rawMeetsCriteria ?? (deliverablesVerdict === "APPROVE" ? 1.0 : deliverablesVerdict === "NEXT_ACTION_REQUIRED" ? 0.5 : 0.0),
-      planDriftChoice: driftChoice,
-      claudeUntouchedNoul,
-      escalateToUser: false,
-    },
-    reasons,
-    remediation: !approved
-      ? generateFallbackRemediation(reasons, {
-          taskId: context.taskId,
-          criteria: evidence.criteria,
-          testCommand: context.testCommand,
-        })
-      : undefined,
-    escalateToUser: false,
-  };
+  const disposition: VerificationOutcome | undefined = approved ? undefined
+    : missing.length || deliverablesVerdict === "NEXT_ACTION_REQUIRED"
+      ? { status: "EVIDENCE_REQUIRED", missingCriterionIds: missing, reasons }
+      : { status: "REJECTED", criterionIds: violated, reasons };
+  return { approved, gate1, disposition, reasons, escalateToUser: false,
+    gate2: { passed: approved, reasons, deliverablesVerdict, meetsCriteriaNoul: probability,
+      planDriftChoice: drift, claudeUntouchedNoul: isolation, outcome: disposition, metadata: response.metadata },
+    remediation: approved ? undefined : generateFallbackRemediation(reasons, { taskId: context.taskId, criteria, testCommand: context.testCommand, outcome: disposition }) };
 }

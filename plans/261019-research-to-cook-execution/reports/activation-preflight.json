@@ -1,0 +1,1333 @@
+{
+  "schemaVersion": 1,
+  "baselineFiles": 311,
+  "exitCode": 0,
+  "wallSeconds": 2.06,
+  "mutation": false,
+  "scope": "Checkpoint after first report handoff and second verification rejection; later new reports require a new final release preflight",
+  "actionCounts": {
+    "NOOP": 239,
+    "CREATE": 40,
+    "OVERWRITE": 39,
+    "PRUNE": 0
+  },
+  "globalActions": [
+    {
+      "action": "NOOP",
+      "path": "global_claude/hooks/lib/typesafe-enabled-resolver.cjs"
+    },
+    {
+      "action": "NOOP",
+      "path": "global_claude/mcp/typesafe/typesafe-api-client.cjs"
+    },
+    {
+      "action": "NOOP",
+      "path": "global_claude/mcp/typesafe/typesafe-policy-client.cjs"
+    },
+    {
+      "action": "NOOP",
+      "path": "global_claude/mcp/typesafe/typesafe-redact-patterns.cjs"
+    },
+    {
+      "action": "NOOP",
+      "path": "global_claude/mcp/typesafe/typesafe-redact.cjs"
+    },
+    {
+      "action": "NOOP",
+      "path": "global_omp_agents/advisor.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "global_omp_agents/ck-advisor.md"
+    }
+  ],
+  "productionOverwrites": [
+    {
+      "action": "OVERWRITE",
+      "path": "target/src/cook-expert-judge.ts"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/src/evidence-collector.ts"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/typesafe-planner.ts"
+    }
+  ],
+  "allActions": [
+    {
+      "action": "NOOP",
+      "path": "global_claude/hooks/lib/typesafe-enabled-resolver.cjs"
+    },
+    {
+      "action": "NOOP",
+      "path": "global_claude/mcp/typesafe/typesafe-api-client.cjs"
+    },
+    {
+      "action": "NOOP",
+      "path": "global_claude/mcp/typesafe/typesafe-policy-client.cjs"
+    },
+    {
+      "action": "NOOP",
+      "path": "global_claude/mcp/typesafe/typesafe-redact-patterns.cjs"
+    },
+    {
+      "action": "NOOP",
+      "path": "global_claude/mcp/typesafe/typesafe-redact.cjs"
+    },
+    {
+      "action": "NOOP",
+      "path": "global_omp_agents/advisor.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "global_omp_agents/ck-advisor.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/.gitignore"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/.omp/agents/advisor.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/.omp/agents/ck-advisor.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/AGENTS.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/agents/advisor.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/agents/ck-advisor.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/docs/codebase-summary.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/docs/data-flow-and-states.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/docs/decisions/ADR-2026-10-05-predict-model-tier.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/docs/decisions/ADR-20261012-typesafe-jev-alignment.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/docs/decisions/ADR-20261013-remediation-ratchet-and-wildcard-resolver.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/docs/decisions/ADR-20261013-typesafe-bicameral-judge-alignment.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/docs/decisions/ADR-20261014-typesafe-jev-advisor-overhaul.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/docs/decisions/ADR-20261015-advisor-judge-jev-true-calibration.md"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/docs/decisions/ADR-20261019-jev-atomic-advisor-direction.md"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/docs/decisions/README.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/docs/journals/2026-10-01-typesafe-role-judge-validation.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/docs/journals/2026-10-02-typesafe-judge-alignment-fix.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/docs/journals/2026-10-02-typesafe-plan-compliance-elevation.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/docs/journals/2026-10-03-source-code-relocation.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/docs/journals/2026-10-03-typesafe-extension-proxy-pattern.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/docs/journals/2026-10-07-health-probe-dual-notification-analysis.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/docs/journals/2026-10-07-typesafe-fix-plan-execution.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/docs/journals/2026-10-07-typesafe-lifecycle-gating-fix.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/docs/journals/2026-10-12-typesafe-jev-alignment-fix.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/docs/journals/2026-10-13-typesafe-bicameral-judge-consensus.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/docs/journals/2026-10-13-typesafe-remediation-ratchet-and-block-guard.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/docs/journals/2026-10-14-fix-advisor-decision-answering.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/docs/journals/2026-10-15-advisor-judge-jev-true-calibration.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/docs/journals/2026-10-15-judge-baseline-audit-p0-p6.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/docs/journals/2026-10-15-session-start-health-notification-fix.md"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/docs/journals/2026-10-19-jev-atomic-direction-and-handoff.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/docs/journals/261014-redteam-5-sessions-typesafe-jev-advisor.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/docs/journals/261014-typesafe-todo-done-verdict-fidelity.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/docs/journals/261018-0838-jev-session-forensics-recovery.md"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/docs/journals/261018-1125-deployment-evidence-phase-five-blocker.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/docs/model-specification.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/docs/operations-and-user-guide.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/docs/SAD.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/docs/SDD.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/docs/solution-explanation.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/docs/source-code-logic-flow.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/docs/source-code-modeling.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/docs/source-code-specification.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/docs/system-architecture.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/docs/typesafe-judge-research.md"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/docs/typesafe-operations.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/docs/typesafe-red-team-report.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/JEV_SESSION_FORENSICS_PLAN_JEV_PLAN.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/JUDGE_BASELINE_AUDIT_PLAN.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/JUDGE_BASELINE_COOK_PLAN.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/package.json"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261001-auth-error-visibility/phase-01-update-interfaces.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261001-auth-error-visibility/phase-02-implement-out-of-band-notification.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261001-auth-error-visibility/phase-03-test-and-verify.md"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/plans/261001-auth-error-visibility/plan.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261001-typesafe-concerns/expert-prompt.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261001-typesafe-concerns/expert-response.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261001-typesafe-concerns/phase-01-expert-consultation-prompt.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261001-typesafe-concerns/phase-02-case-2-enforced-call-site-lattice.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261001-typesafe-concerns/phase-03-case-6-confidence-handling.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261001-typesafe-concerns/phase-04-test-suite-update-to-complete.md"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/plans/261001-typesafe-concerns/plan.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261001-typesafe-role-judge-validation/draft-role-judge-validation.md"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/plans/261001-typesafe-role-judge-validation/plan.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261002-cook-mandatory-typesafe-verification/phase-01-workflow-specification-review-gate-upgrade.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261002-cook-mandatory-typesafe-verification/phase-02-dual-cadence-verification-engine-expert-roles.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261002-cook-mandatory-typesafe-verification/phase-03-omp-extension-interception-bridge-integration.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261002-cook-mandatory-typesafe-verification/phase-04-adversarial-stress-test-matrix-validation.md"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/plans/261002-cook-mandatory-typesafe-verification/plan.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261002-typesafe-compliance-elevation/phase-01-deterministic-state-collection-payload-safety.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261002-typesafe-compliance-elevation/phase-02-plan-time-quality-elevation-engine.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261002-typesafe-compliance-elevation/phase-03-execution-compliance-dual-verification-gate.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261002-typesafe-compliance-elevation/phase-04-adversarial-robustness-e2e-validation.md"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/plans/261002-typesafe-compliance-elevation/plan.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261002-typesafe-judge-alignment-fix/phase-01-audit-and-unify-network-transport.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261002-typesafe-judge-alignment-fix/phase-02-api-contract-and-schema-alignment.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261002-typesafe-judge-alignment-fix/phase-03-context-and-state-de-cluttering-anti-context-rot.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261002-typesafe-judge-alignment-fix/phase-04-fix-compound-tools-rerank-and-multi-label.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261002-typesafe-judge-alignment-fix/phase-05-configuration-hardening-and-zero-conflict-verification.md"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/plans/261002-typesafe-judge-alignment-fix/plan.md"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/plans/261003-planner-import-proxy/plan.md"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/plans/261003-rerank-orchestrator/plan.md"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/plans/261003-typesafe-best-practice-alignment/plan.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261003-typesafe-stability-guardrails/phase-01-file-and-code-integrity-shield.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261003-typesafe-stability-guardrails/phase-02-dynamic-auth-recovery-and-key-watchdog.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261003-typesafe-stability-guardrails/phase-03-session-pre-flight-health-probe.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261003-typesafe-stability-guardrails/phase-04-test-environment-isolation-and-hardening.md"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/plans/261003-typesafe-stability-guardrails/plan.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261004-redteam-egc-hardening/phase-01-tdd-regression-suites.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261004-redteam-egc-hardening/phase-02-todo-batch-and-op-normalization.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261004-redteam-egc-hardening/phase-03-context-and-diff-preservation.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261004-redteam-egc-hardening/phase-04-deconfliction-and-privilege-guard.md"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/plans/261004-redteam-egc-hardening/plan.md"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/plans/261004-typesafe-judge-hardening/plan.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261005-predict-recommendations/phase-01-authorization-and-tests.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261005-predict-recommendations/phase-02-decouple-evaluator.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261005-predict-recommendations/phase-03-documentation.md"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/plans/261005-predict-recommendations/plan.md"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/plans/261005-typesafe-judge-enhancement/plan.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261006-red-team-hardening/phase-01-architecture.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261006-red-team-hardening/phase-02-ast-diffing.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261006-red-team-hardening/phase-03-xml-boundaries.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261006-red-team-hardening/phase-04-remediation.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261006-red-team-hardening/phase-05-auth-rotation.md"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/plans/261006-red-team-hardening/plan.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261006-red-team-hardening/research/community-solutions-plan.md"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/plans/261007-health-probe-analysis/plan.md"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/plans/261007-key-isolation/plan.md"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/plans/261007-typesafe-auto-completion/plan.md"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/plans/261007-typesafe-fix/plan.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261007-typesafe-lifecycle-gating/phase-01-research-test-reproduction.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261007-typesafe-lifecycle-gating/phase-02-lifecycle-invariant-relaxation-guidance.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261007-typesafe-lifecycle-gating/phase-03-dual-gate-plan-verification-integration.md"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/plans/261007-typesafe-lifecycle-gating/plan.md"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/plans/261009-health-probe-transport-isolation/plan.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261012-judge-threshold-lifecycle-alignment/phase-01-research-and-prediction.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261012-judge-threshold-lifecycle-alignment/phase-02-threshold-and-decision-contract.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261012-judge-threshold-lifecycle-alignment/phase-03-todo-enforcement-and-agent-guidance.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261012-judge-threshold-lifecycle-alignment/phase-04-regression-and-live-verification.md"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/plans/261012-judge-threshold-lifecycle-alignment/plan.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261012-todo-drop-judge-fidelity/phase-01-failing-tests.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261012-todo-drop-judge-fidelity/phase-02-drop-gate-and-ratchet-escalation.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261012-todo-drop-judge-fidelity/phase-03-judge-input-fidelity.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261012-todo-drop-judge-fidelity/phase-04-reports.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261012-todo-drop-judge-fidelity/phase-05-regression-and-deploy.md"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/plans/261012-todo-drop-judge-fidelity/plan.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261012-typesafe-jev-alignment-fix/phase-01-setup-enriched-payload.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261012-typesafe-jev-alignment-fix/phase-02-task-aware-rubrics.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261012-typesafe-jev-alignment-fix/phase-03-pre-flight-advisory-hook.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261012-typesafe-jev-alignment-fix/phase-04-regression-verification.md"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/plans/261012-typesafe-jev-alignment-fix/plan.md"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/plans/261013-bicameral-judge-advisor-autonomous-execution/plan.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261013-bicameral-judge-consensus/phase-01-decision-contract-categorical-verdict-refactoring.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261013-bicameral-judge-consensus/phase-02-advisor-intent-evaluator-bicameral-consensus-engine.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261013-bicameral-judge-consensus/phase-03-sovereign-human-authority-non-blocking-plan-reconciliation.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261013-bicameral-judge-consensus/phase-04-red-team-adversarial-validation-baseline-deployment.md"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/plans/261013-bicameral-judge-consensus/plan.md"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/plans/261013-fix-advisor-decision-answering/plan.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261014-typesafe-jev-advisor-overhaul/phase-01-bicameral-and-escalation-fix.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261014-typesafe-jev-advisor-overhaul/phase-02-state-clamping-and-evidence-fidelity.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261014-typesafe-jev-advisor-overhaul/phase-03-jev-primitive-and-advisor-calibration.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261014-typesafe-jev-advisor-overhaul/phase-04-todo-list-rm-hardening-and-sync.md"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/plans/261014-typesafe-jev-advisor-overhaul/plan.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261014-typesafe-todo-done-verdict-fidelity/phase-01-dual-primitive-jev-calibration.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261014-typesafe-todo-done-verdict-fidelity/phase-02-cognitive-task-classifier-and-work-log-fallback.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261014-typesafe-todo-done-verdict-fidelity/phase-03-plan-cli-stub-filter-and-phase-matching-guard.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261014-typesafe-todo-done-verdict-fidelity/phase-04-task-report-telemetry-and-tdd-regression-suite.md"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/plans/261014-typesafe-todo-done-verdict-fidelity/plan.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261015-advisor-judge-jev-true-calibration/phase-01-advisor-jev-multi-signal-calibration.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261015-advisor-judge-jev-true-calibration/phase-02-zero-0-80-0-30-threshold-walls.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261015-advisor-judge-jev-true-calibration/phase-03-jev-state-criteria-fidelity-pipeline.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261015-advisor-judge-jev-true-calibration/phase-04-tdd-suite-baseline-sync.md"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/plans/261015-advisor-judge-jev-true-calibration/plan.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261015-judge-baseline-audit-cook/phase-01-p0-hermetic-preflight.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261015-judge-baseline-audit-cook/phase-02-p1-bundled-loading.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261015-judge-baseline-audit-cook/phase-03-p2-bounded-transport.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261015-judge-baseline-audit-cook/phase-04-p3-native-todo-transaction.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261015-judge-baseline-audit-cook/phase-05-p4-heuristics-and-intent.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261015-judge-baseline-audit-cook/phase-06-p5-recovery-transaction.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261015-judge-baseline-audit-cook/phase-07-p6-runtime-promotion.md"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/plans/261015-judge-baseline-audit-cook/plan.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261018-jev-session-forensics/execution-prompt.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261018-jev-session-forensics/phase-01-cohort-and-parser-tdd.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261018-jev-session-forensics/phase-02-source-provenance-and-paired-analysis.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261018-jev-session-forensics/phase-03-vietnamese-diagnosis-and-independent-challenge.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261018-jev-session-forensics/phase-04-todo-rejection-recovery-and-deletion.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261018-jev-session-forensics/phase-05-completion-evidence-fidelity-and-runtime-proof.md"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/plans/261018-jev-session-forensics/plan.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261018-jev-session-forensics/reports/analysis-summary.json"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261018-jev-session-forensics/reports/cohort-manifest.json"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261018-jev-session-forensics/reports/diagnosis-vi.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261018-jev-session-forensics/reports/events-redacted.jsonl"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261018-jev-session-forensics/reports/evidence-packet.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261018-jev-session-forensics/reports/extraction-summary.json"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/plans/261018-jev-session-forensics/reports/fresh-native-runtime-evidence.json"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261018-jev-session-forensics/reports/paired-cases.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261018-jev-session-forensics/reports/plan-review-verification.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261018-jev-session-forensics/reports/predict-architect.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261018-jev-session-forensics/reports/predict-devils-advocate.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261018-jev-session-forensics/reports/predict-performance.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261018-jev-session-forensics/reports/predict-security.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261018-jev-session-forensics/reports/predict-synthesis-vi.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261018-jev-session-forensics/reports/predict-ux.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261018-jev-session-forensics/reports/source-provenance.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261018-jev-session-forensics/reports/todo-recovery-research.md"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/plans/261018-jev-session-forensics/reports/todo-recovery-verification.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/261018-jev-session-forensics/reports/verification.md"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/plans/261019-jev-atomic-review/phase-01-evidence-and-authority-prerequisites.md"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/plans/261019-jev-atomic-review/phase-02-shadow-evaluation-of-atomic-judgments.md"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/plans/261019-jev-atomic-review/phase-03-conditional-cutover-and-runtime-proof.md"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/plans/261019-jev-atomic-review/plan.md"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/plans/261019-jev-atomic-review/recovery-handoff.md"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/plans/261019-research-to-cook-execution/execution-prompt.md"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/plans/261019-research-to-cook-execution/phase-01-reconcile-obligations-and-freeze-verification-contracts.md"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/plans/261019-research-to-cook-execution/phase-02-repair-task-evidence-and-receipt-fidelity.md"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/plans/261019-research-to-cook-execution/phase-03-enforce-authority-lifecycle-and-actionable-recovery.md"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/plans/261019-research-to-cook-execution/phase-04-complete-secret-process-and-filesystem-isolation.md"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/plans/261019-research-to-cook-execution/phase-05-consolidate-debate-and-input-boundary-policies.md"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/plans/261019-research-to-cook-execution/phase-06-finish-bounded-transport-and-trusted-tool-policies.md"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/plans/261019-research-to-cook-execution/phase-07-implement-atomic-jev-and-real-advisor-synthesis.md"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/plans/261019-research-to-cook-execution/phase-08-run-paired-evaluation-and-decide-adoption.md"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/plans/261019-research-to-cook-execution/phase-09-migrate-all-consumers-and-verify-integration.md"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/plans/261019-research-to-cook-execution/phase-10-promote-authorized-runtime-and-close-legacy-plans.md"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/plans/261019-research-to-cook-execution/plan.md"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/plans/261019-research-to-cook-execution/reports/plan-validation.json"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/plans/261019-research-to-cook-execution/research/council-inputs.json"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/plans/261019-research-to-cook-execution/research/direction-personas.json"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/plans/261019-research-to-cook-execution/research/final-recovery-reviews.json"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/plans/261019-research-to-cook-execution/research/jev-atomic-online-verification.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/reports/2026-10-06-codebase-architecture-predict.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/reports/2026-10-06-typesafe-review-scenarios.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/reports/2026-10-12-cleanpc-typesafe-brainstorm.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/reports/2026-10-12-todo-drop-blocked-predict.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/reports/2026-10-13-test-suite-integrity-verification.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/reports/2026-10-13-typesafe-payload-fidelity-and-scenario-report.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/reports/2026-10-13-typesafe-threshold-redteam-predict.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/reports/261014-advisor-and-typesafe-evaluation.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/reports/261014-brainstorm-todo-done-verdict-fidelity.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/reports/261014-phase1-session-forensics-and-scout.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/reports/261014-phase1-source-and-payload-audit.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/reports/261014-redteam-audit-5-sessions-typesafe-jev-advisor.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/reports/261014-scout-and-research-todo-done-verdict-fidelity.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/reports/261015-advisor-judge-jev-rootcause-and-research.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/reports/261015-brainstorm-and-predict-advisor-judge-overhaul.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/reports/261015-workspace-revert-predict.md"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/plans/reports/261019-all-plan-implementation-inventory.md"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/plans/reports/261019-all-research-implementation-coverage.md"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/plans/reports/261019-jev-atomic-prediction.md"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/plans/reports/261019-jev-atomic-scenarios.md"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/plans/reports/261019-jev-current-state-and-recovery.md"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/plans/reports/261019-jev-design-calculations.json"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/plans/reports/261019-jev-direction-final-prediction.md"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/plans/reports/261019-research-to-cook-coverage.json"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/plans/reports/261019-source-review-delivery-evidence.json"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/plans/reports/261019-todo-recovery-evidence.json"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/plans/reports/261019-typesafe-source-review-acceptance.md"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/plans/reports/261019-typesafe-source-review-index.json"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/plans/reports/261019-typesafe-source-rootcause-review.md"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/plans/reports/261019-typesafe-source-runtime-map.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/plans/reports/README.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/README.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/scripts/deploy-baseline-to-target.cjs"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/scripts/patch-workspace-planner.cjs"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/scripts/remove-gate3.cjs"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/scripts/safe-update-planner-model.cjs"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/scripts/typesafe-planner-drop-tasks.cjs"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/scripts/update-planner-jev-latest.cjs"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/src/ast-analyzer.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/src/auth-manager.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/src/bicameral-consensus.ts"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/src/cook-expert-judge.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/src/debate-evaluator.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/src/egc.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/src/errors/TypeSafeError.ts"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/src/evidence-collector.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/src/payload-safety.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/src/plan-evaluator.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/src/remediation-generator.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/src/types/security.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/src/typesafe-api-client.cjs"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/src/typesafe-enabled-resolver.cjs"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/src/typesafe-policy-client.cjs"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/src/typesafe-redact-patterns.cjs"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/src/typesafe-redact.cjs"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/src/verification-gate.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/src/xml-enclosure.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tests/adversarial-compliance.test.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tests/adversarial-edge-cases.test.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tests/architecture.test.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tests/ast-analyzer.test.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tests/auth-manager.test.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tests/auth-recovery-watchdog.test.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tests/bicameral-consensus.test.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tests/client-debate.test.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tests/cook-expert-judge.test.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tests/cook-interception-bridge.test.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tests/cook-verification-adversarial.test.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tests/debate-evaluator.test.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tests/e2e-workflow.test.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tests/egc.test.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tests/environment-isolation.test.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tests/evidence-collector.test.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tests/health-watchdog.test.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tests/helpers/test-env-harness.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tests/isolated-verification.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tests/judge-input-fidelity.test.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tests/payload-safety.test.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tests/plan-evaluator.test.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tests/plan-reconciliation.test.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tests/redteam-vulnerabilities.test.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tests/remediation.test.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tests/sync-baseline.test.ts"
+    },
+    {
+      "action": "CREATE",
+      "path": "target/tests/task-artifact-routing.test.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tests/todo-block-remediation.test.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tests/todo-drop-gate.test.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tests/todo-remediation-feedback.test.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tests/typesafe-integrity.test.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tests/typesafe-lifecycle-gating.test.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tests/typesafe-planner-integration.test.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tests/typesafe-planner.test.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tests/typesafe-resolver.test.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tests/typesafe-transport-retry.test.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tests/verification-gate.test.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tests/xml-enclosure.test.ts"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tools/promote-omp-global.ps1"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tools/README.md"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tools/sync-baseline.bat"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tools/sync-baseline.cjs"
+    },
+    {
+      "action": "NOOP",
+      "path": "target/tools/todo-remediation-smoke.ts"
+    },
+    {
+      "action": "OVERWRITE",
+      "path": "target/typesafe-planner.ts"
+    }
+  ],
+  "activationVerdict": "Do not activate F16 alone: thinking-egress/privacy and history/debt/composed-authority/release-security prerequisites remain; no deployment/restart authority granted."
+}

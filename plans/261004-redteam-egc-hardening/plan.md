@@ -30,3 +30,8 @@ Remediates critical vulnerabilities identified in the red-team evaluation of `ty
 | 2 | [Todo Batch and Op Normalization](./phase-02-todo-batch-and-op-normalization.md) | Pending |
 | 3 | [Context and Diff Preservation](./phase-03-context-and-diff-preservation.md) | Pending |
 | 4 | [Deconfliction and Privilege Guard](./phase-04-deconfliction-and-privilege-guard.md) | Pending |
+
+## Execution reconciliation — 2026-10-19
+
+Residual C05/C08/C15/C16/C19 ownership: [consolidated master](../261019-research-to-cook-execution/plan.md), with [source-evidenced dispositions](../reports/261019-research-to-cook-coverage.json). Retire synthetic ops[] and marker-only EGC yielding; preserve native matching-result authority and accepted bounded analyzer semantics. Original pending phases are not silently completed by this execution transfer.
+

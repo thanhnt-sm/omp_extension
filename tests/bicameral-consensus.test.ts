@@ -11,8 +11,36 @@ import {
   type AdvisorIntentResult,
   type JevResult,
   type BicameralConsensusDecision,
+  type ConsensusReasoningInput,
 } from "../src/bicameral-consensus";
 import { collectConversationContext } from "../typesafe-planner";
+import { canonicalDigest } from "../src/task-contract-source";
+import type { AdvisorAssessment, AdvisorReceipt } from "../src/advisor-protocol";
+
+/** Synthetic provenance exercises validation only; it is not live native/UI evidence. */
+function reasoningFixture(verdict: AdvisorAssessment["verdict"] = "proceed"): ConsensusReasoningInput {
+  const digest = "a".repeat(64);
+  const binding: ConsensusReasoningInput["binding"] = {
+    purpose: "task_review", contract: { contractId: "contract", revisionId: "revision", incarnationId: "incarnation" },
+    logicalOperationId: "done:1", target: { phase: "Phase", phaseOrdinal: 0, content: "Task", ordinal: 0 },
+    provenance: { sessionId: "session", branchId: "branch", requestEntryId: "entry", dispatchId: "dispatch", evidenceDigest: digest, policyDigest: digest, questionDigest: digest },
+    authorizedScope: { paths: ["src/example.ts"], operations: ["read"] },
+  };
+  const snapshot = { contractDigest: digest, evidenceDigest: digest, treeDigest: digest, testDigest: digest, policyDigest: digest, parentDigest: digest, childDigest: digest, integrationDigest: digest };
+  const assessment: AdvisorAssessment = {
+    verdict, recommendation: "Independent exact-task diagnosis", confidence: 0.91,
+    rankedOptions: [{ option: "Preserve scope", rationale: "Evidence-bound option", rank: 1 }],
+    findings: [], openQuestions: [],
+    criterionCoverage: [{ criterionId: "criterion", status: verdict === "block" ? "contradicted" : "covered", evidenceRefs: ["evidence:1"] }],
+    parentIntegration: { status: "not_applicable", criterionIds: [], evidenceRefs: [] },
+  };
+  const body: Omit<AdvisorReceipt, "receiptId"> = {
+    schemaVersion: 1, requestId: "request", binding, bindingDigest: canonicalDigest(binding), snapshot,
+    assessment, assessmentDigest: canonicalDigest(assessment), authority: "task_bound",
+    provenance: { parentToolCallId: "parent-call", itemIndex: 0, childId: "child", sessionEpoch: "epoch", terminalDigest: digest },
+  };
+  return { receipt: { ...body, receiptId: `advisor-receipt:${canonicalDigest(body)}` }, binding, snapshot, criterionIds: ["criterion"] };
+}
 
 describe("Phase 2: Bicameral Consensus Engine & Advisor Intent Evaluator", () => {
   describe("Lobe 1: evaluateAdvisorIntent", () => {
@@ -50,7 +78,7 @@ describe("Phase 2: Bicameral Consensus Engine & Advisor Intent Evaluator", () =>
       expect(result.verdict).toBe("DISALLOW");
     });
 
-    test("detects clean build / test success obsolescence", () => {
+    test("clean build alone does not establish task obsolescence", () => {
       const ctx: AdvisorContext = {
         operation: "drop",
         task: "Investigate crash dump",
@@ -59,8 +87,8 @@ describe("Phase 2: Bicameral Consensus Engine & Advisor Intent Evaluator", () =>
       };
 
       const result = evaluateAdvisorIntent(ctx);
-      expect(result.verdict).toBe("ALLOW");
-      expect(result.confidence).toBeGreaterThanOrEqual(0.85);
+      expect(result.verdict).toBe("UNCERTAIN");
+      expect(result.reason).toContain("task-scoped");
       expect(result.reason.toLowerCase()).toContain("clean build");
     });
 
@@ -140,10 +168,11 @@ describe("Phase 2: Bicameral Consensus Engine & Advisor Intent Evaluator", () =>
       const jev: JevResult = {
         verdict: "APPROVE",
         confidence: 0.92,
+        probability: 0.92,
         reasons: ["No active code dependencies rely on dropped task"],
       };
 
-      const decision = arbitrateConsensus(advisor, jev);
+      const decision = arbitrateConsensus(advisor, jev, reasoningFixture());
       expect(decision.verdict).toBe("AUTO_APPROVE");
       expect(decision.escalationMessage).toBeUndefined();
     });
@@ -157,6 +186,7 @@ describe("Phase 2: Bicameral Consensus Engine & Advisor Intent Evaluator", () =>
       const jev: JevResult = {
         verdict: "REJECT",
         confidence: 0.94,
+        probability: 0.12,
         reasons: ["Critical planned acceptance criteria unfulfilled"],
       };
 
@@ -174,13 +204,14 @@ describe("Phase 2: Bicameral Consensus Engine & Advisor Intent Evaluator", () =>
       const jev: JevResult = {
         verdict: "REJECT",
         confidence: 0.85,
+        probability: 0.15,
         reasons: ["Diff contains empty scaffolds without implementation"],
       };
 
-      const decision = arbitrateConsensus(advisor, jev);
+      const decision = arbitrateConsensus(advisor, jev, reasoningFixture());
       expect(decision.verdict).toBe("HUMAN_ESCALATION");
       expect(decision.escalationMessage).toBeDefined();
-      expect(decision.escalationMessage).toContain("clean build");
+      expect(decision.advisor.reason).toContain("clean build");
       expect(decision.escalationMessage).toContain("scaffolds");
     });
 
@@ -193,10 +224,11 @@ describe("Phase 2: Bicameral Consensus Engine & Advisor Intent Evaluator", () =>
       const jev: JevResult = {
         verdict: "APPROVE",
         confidence: 0.90,
+        probability: 0.90,
         reasons: ["Passing tests and clean diff"],
       };
 
-      const decision = arbitrateConsensus(advisor, jev);
+      const decision = arbitrateConsensus(advisor, jev, reasoningFixture("block"));
       expect(decision.verdict).toBe("HUMAN_ESCALATION");
       expect(decision.escalationMessage).toBeDefined();
     });
@@ -210,6 +242,7 @@ describe("Phase 2: Bicameral Consensus Engine & Advisor Intent Evaluator", () =>
       const jev: JevResult = {
         verdict: "NEXT_ACTION_REQUIRED",
         confidence: 0.88,
+        probability: 0.48,
         reasons: ["Missing integration test coverage for error paths"],
       };
 
@@ -228,11 +261,12 @@ describe("Phase 2: Bicameral Consensus Engine & Advisor Intent Evaluator", () =>
       const jev: JevResult = {
         verdict: "APPROVE",
         confidence: 0.95,
+        probability: 0.95,
         reasons: ["Clean test pass"],
       };
 
       const decision = arbitrateConsensus(advisor, jev);
-      expect(decision.verdict).toBe("HUMAN_ESCALATION");
+      expect(decision.disposition.status).toBe("EVIDENCE_REQUIRED");
     });
 
     test("JEV Escalation: ALLOW + ESCALATE yields HUMAN_ESCALATION", () => {
@@ -244,6 +278,7 @@ describe("Phase 2: Bicameral Consensus Engine & Advisor Intent Evaluator", () =>
       const jev: JevResult = {
         verdict: "ESCALATE",
         confidence: 0.70,
+        probability: 0.70,
         reasons: ["Conflicting test and diff signals"],
       };
 
@@ -256,6 +291,7 @@ describe("Phase 2: Bicameral Consensus Engine & Advisor Intent Evaluator", () =>
     test("formats clear dual-perspective message for UI confirmation", () => {
       const decision: BicameralConsensusDecision = {
         verdict: "HUMAN_ESCALATION",
+        disposition: { status: "HUMAN_REQUIRED", reasons: ["Exact-target conflict"] },
         advisor: {
           verdict: "ALLOW",
           confidence: 0.90,
@@ -272,14 +308,14 @@ describe("Phase 2: Bicameral Consensus Engine & Advisor Intent Evaluator", () =>
 
       const formatted = formatConsensusEscalation(decision);
       expect(formatted).toContain("Bicameral Consensus Escalation");
-      expect(formatted).toContain("Lobe 1 (Advisor Intent): ALLOW");
+      expect(formatted).toContain("Local intent signal (not real Advisor): ALLOW");
       expect(formatted).toContain("Lobe 2 (TypeSafe JEV Judge): REJECT");
       expect(formatted).toContain("Sovereign human confirmation");
     });
   });
 
   describe("evaluateBicameralDoneConsensus", () => {
-    test("yields AUTO_APPROVE when advisor intent (ALLOW) and JEV macro (APPROVE) align", async () => {
+    test("raw APPROVE cannot authorize completion without a real bound Advisor receipt", async () => {
       const decision = await evaluateBicameralDoneConsensus({
         todoTask: "Reorganize test and plan files",
         userRequest: "Quy hoạch lại các file plan .md và test",
@@ -304,7 +340,7 @@ describe("Phase 2: Bicameral Consensus Engine & Advisor Intent Evaluator", () =>
         },
       });
 
-      expect(decision.verdict).toBe("AUTO_APPROVE");
+      expect(decision.disposition.status).toBe("EVIDENCE_REQUIRED");
       expect(decision.advisor.verdict).toBe("ALLOW");
       expect(decision.jev.verdict).toBe("APPROVE");
     });
@@ -401,11 +437,11 @@ describe("Phase 2: Bicameral Consensus Engine & Advisor Intent Evaluator", () =>
         mockClient
       );
 
-      expect(decision.verdict).toBe("AUTO_APPROVE");
-      expect(decision.ckVerdict).toBe("proceed");
+      expect(decision.disposition.status).toBe("EVIDENCE_REQUIRED");
+      expect(decision.ckVerdict).toBe("revise");
       expect(decision.recommendedOption).toBe("Fix root cause in bicameral-consensus.ts");
       expect(decision.recommendedIndex).toBe(1);
-      expect(decision.report).toContain("## Verdict\nproceed");
+      expect(decision.report).toContain("## Verdict\nrevise");
       expect(decision.report).toContain("## Recommendation");
       expect(decision.report).toContain("## Ranked options");
       expect(decision.report).toContain("## Findings");
@@ -413,7 +449,7 @@ describe("Phase 2: Bicameral Consensus Engine & Advisor Intent Evaluator", () =>
       expect(decision.report).toContain("## Open questions");
     });
 
-    test("collectConversationContext extracts skill-prompt user request, advisor notes, thinking, toolCall, and toolResult", () => {
+    test("collectConversationContext exports public user, assistant, advisor and tool evidence without private thinking", () => {
       const convo = collectConversationContext({
         sessionManager: {
           getBranch: () => [
@@ -427,7 +463,8 @@ describe("Phase 2: Bicameral Consensus Engine & Advisor Intent Evaluator", () =>
               message: {
                 role: "assistant",
                 content: [
-                  { type: "thinking", thinking: "Root cause traced to collectConversationContext and evaluateAdvisorIntent." },
+                  { type: "thinking", thinking: "Synthetic private diagnosis must not be exported." },
+                  { type: "text", text: "Public diagnosis: the advisor response was missing." },
                   { type: "toolCall", name: "grep", arguments: { i: "Search for advisor in src" } },
                 ],
               },
@@ -451,7 +488,8 @@ describe("Phase 2: Bicameral Consensus Engine & Advisor Intent Evaluator", () =>
       });
 
       expect(convo.userRequest).toContain("kiem tra fix loi advisor khong tra ra cau tra loi");
-      expect(convo.agentWorkLog).toContain("Root cause traced");
+      expect(convo.agentWorkLog).toContain("Public diagnosis: the advisor response was missing.");
+      expect(convo.agentWorkLog).not.toContain("Synthetic private diagnosis");
       expect(convo.agentWorkLog).toContain("[toolCall: grep (Search for advisor in src)]");
       expect(convo.agentWorkLog).toContain("[toolResult:bash]: 280 pass, 0 fail");
       expect(convo.agentWorkLog).toContain("[Advisor]: <advisory");
@@ -462,6 +500,7 @@ describe("Phase 2: Bicameral Consensus Engine & Advisor Intent Evaluator", () =>
       const longJevReason = "Deliverable verification rejected (code_change): JEV verdict is REJECT (score P=0.13).";
       const decision: BicameralConsensusDecision = {
         verdict: "HUMAN_ESCALATION",
+        disposition: { status: "HUMAN_REQUIRED", reasons: ["Lobe conflict"] },
         advisor: {
           verdict: "ALLOW",
           confidence: 0.91,
@@ -507,11 +546,11 @@ describe("Phase 2: Bicameral Consensus Engine & Advisor Intent Evaluator", () =>
       );
 
       expect(res.verdict).toBe("AUTO_REJECT");
-      expect(res.advisor.verdict).toBe("DISALLOW");
+      expect(res.advisor.verdict).toBe("ALLOW");
       expect(res.jev.verdict).toBe("REJECT");
     });
 
-    test("runBicameralDecisionCheck adopts JEV recommended_option even when Lobe 1 heuristic scored another option > 0.75", async () => {
+    test("standalone consultation preserves independent heuristic ranking and real JEV recommendation", async () => {
       const mockClient = {
         evaluate: async () => ({
           answers: {
@@ -543,12 +582,12 @@ describe("Phase 2: Bicameral Consensus Engine & Advisor Intent Evaluator", () =>
         mockClient
       );
 
-      expect(decision.verdict).toBe("AUTO_APPROVE");
-      expect(decision.ckVerdict).toBe("proceed");
-      expect(decision.recommendedOption).toBe("Option B: Event-driven queue");
-      expect(decision.recommendedIndex).toBe(1);
-      expect(decision.rankedOptions[0]?.option).toBe("Option B: Event-driven queue");
-      expect(decision.rankedOptions[0]?.score).toBeGreaterThanOrEqual(0.96);
+      expect(decision.disposition.status).toBe("EVIDENCE_REQUIRED");
+      expect(decision.ckVerdict).toBe("revise");
+      expect(decision.recommendedOption).toBe("Option A: Synchronous polling");
+      expect(decision.recommendedIndex).toBe(0);
+      expect(decision.rankedOptions[0]?.option).toBe("Option A: Synchronous polling");
+      expect(decision.jev.reasons.join(" ")).toContain("Option B: Event-driven queue");
     });
 
     test("evaluateAdvisorIntent(operation: 'done') returns first-class DISALLOW on explicit test failures and varies confidence continuously (not fixed 0.90)", () => {
@@ -581,7 +620,7 @@ describe("Phase 2: Bicameral Consensus Engine & Advisor Intent Evaluator", () =>
       expect(minimalDone.confidence).not.toBe(0.90);
     });
 
-    test("runBicameralMacroCheck routes drift or scope reduction with APPROVE deliverables to RECONCILE_PLAN instead of HUMAN_ESCALATION on attempt 1", async () => {
+    test("macro drift veto preserves raw APPROVE and rejects the actual boundary criterion", async () => {
       const mockClient = {
         evaluate: async () => ({
           answers: {
@@ -606,8 +645,79 @@ describe("Phase 2: Bicameral Consensus Engine & Advisor Intent Evaluator", () =>
       );
 
       expect(res.macroResult.approved).toBe(false);
-      expect(res.verdict).toBe("RECONCILE_PLAN");
-      expect(res.jev.verdict).toBe("NEXT_ACTION_REQUIRED");
+      expect(res.disposition.status).toBe("REJECTED");
+      expect(res.jev.verdict).toBe("APPROVE");
     });
+  });
+});
+
+describe("Authority composition integrity regressions", () => {
+  const intent: AdvisorIntentResult = { verdict: "ALLOW", confidence: 0.99, reason: "Local intent signal only" };
+  const approved: JevResult = { verdict: "APPROVE", probability: 0.94, confidence: 0.6, reasons: ["Task evidence supports criteria"] };
+
+  test("missing probability cannot be manufactured from categorical confidence", () => {
+    const decision = arbitrateConsensus(intent, { verdict: "APPROVE", confidence: 1, reasons: [] }, reasoningFixture());
+    expect(decision.disposition.status).toBe("UNAVAILABLE");
+    expect(decision.jev.probability).toBeUndefined();
+  });
+  test.each([NaN, Infinity, -1, 1.1, "0.9", null])("rejects invalid actual probability %s", probability => {
+    const decision = arbitrateConsensus(intent, { ...approved, probability: probability as number }, reasoningFixture());
+    expect(decision.disposition.status).toBe("UNAVAILABLE");
+  });
+  test("real bound agreement stages only and preserves independent raw confidence/probability", () => {
+    const decision = arbitrateConsensus(intent, approved, reasoningFixture());
+    expect(decision.disposition.status).toBe("APPROVED_PENDING_COMMIT");
+    expect(decision.advisor.confidence).toBe(0.99);
+    expect(decision.jev.confidence).toBe(0.6);
+    expect(decision.jev.probability).toBe(0.94);
+    expect(decision.advisor).not.toBe(intent);
+    expect(decision.jev).not.toBe(approved);
+    expect(Object.isFrozen(decision.jev.reasons)).toBe(true);
+    expect(Object.isFrozen(decision.reasoning?.assessment.criterionCoverage)).toBe(true);
+    expect(approved.verdict).toBe("APPROVE");
+  });
+  test("heuristic signals have no native authority and do not override verified task-scoped obsolescence", () => {
+    const signal = evaluateAdvisorIntent({ operation: "drop", task: "Implement OAuth login", userRequest: "Implement OAuth login" });
+    expect(signal.authority).toBe("none");
+    expect(signal.source).toBe("heuristic");
+    expect(signal.verdict).toBe("DISALLOW");
+    expect(arbitrateConsensus(signal, approved).disposition.status).toBe("EVIDENCE_REQUIRED");
+    expect(arbitrateConsensus(signal, approved, reasoningFixture()).disposition.status).toBe("APPROVED_PENDING_COMMIT");
+  });
+  test.each(["revise", "block", "human_required", "unavailable"] as const)("real Advisor %s never approves raw JEV approval", verdict => {
+    const decision = arbitrateConsensus(intent, approved, reasoningFixture(verdict));
+    expect(decision.disposition.status).not.toBe("APPROVED_PENDING_COMMIT");
+    expect(decision.jev.verdict).toBe("APPROVE");
+    expect(decision.reasoning?.assessment.verdict).toBe(verdict);
+  });
+  test("stale evidence or consultation receipt cannot supply native authority", () => {
+    const stale = reasoningFixture();
+    stale.snapshot = { ...stale.snapshot, evidenceDigest: "b".repeat(64) };
+    expect(arbitrateConsensus(intent, approved, stale).disposition.status).toBe("EVIDENCE_REQUIRED");
+    const consultation = reasoningFixture();
+    consultation.binding = {
+      purpose: "consultation",
+      request: { kind: "user_request", sessionId: "session", entryId: "request", digest: "a".repeat(64) },
+      provenance: consultation.binding.provenance, authorizedScope: consultation.binding.authorizedScope,
+    };
+    const { receiptId: previousReceiptId, ...originalBody } = consultation.receipt;
+    expect(previousReceiptId).toContain("advisor-receipt:");
+    const body: Omit<AdvisorReceipt, "receiptId"> = {
+      ...originalBody, binding: consultation.binding, bindingDigest: canonicalDigest(consultation.binding), authority: "none",
+    };
+    consultation.receipt = { ...body, receiptId: `advisor-receipt:${canonicalDigest(body)}` };
+    const decision = arbitrateConsensus(intent, approved, consultation);
+    expect(decision.reasoning?.authority).toBe("none");
+    expect(decision.disposition.status).toBe("EVIDENCE_REQUIRED");
+  });
+  test.each(["Do not drop the OAuth login task", "Don't skip OAuth login", "Never cancel OAuth login", "OAuth login is not obsolete"])("negated cancellation is not permission: %s", userRequest => {
+    expect(evaluateAdvisorIntent({ operation: "drop", task: "OAuth login", userRequest }).verdict).not.toBe("ALLOW");
+  });
+  test("outage never synthesizes agreement from local decision heuristics", async () => {
+    const decision = await runBicameralDecisionCheck({ question: "Which option?", options: ["Safe option", "Other option"] }, { evaluate: async () => { throw new Error("private service failure"); } });
+    expect(decision.disposition.status).toBe("UNAVAILABLE");
+    expect(decision.jev.verdict).toBe("UNAVAILABLE");
+    expect(decision.jev.probability).toBeUndefined();
+    expect(decision.report).toContain("standalone consultation only");
   });
 });

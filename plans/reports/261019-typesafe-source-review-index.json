@@ -1,0 +1,213 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-19",
+  "reviewScope": "Read-only source review and substantiation, not implementation of findings or H",
+  "sourceRevision": "Original source-inspection anchors, pre-F16 workspace/deployment identity20/20; later bounded repair17/20 identity recorded separately",
+  "sourceFiles": {
+    "entrypoint": [
+      "typesafe-planner.ts"
+    ],
+    "src": [
+      "src/cook-expert-judge.ts",
+      "src/evidence-collector.ts",
+      "src/ast-analyzer.ts",
+      "src/verification-gate.ts",
+      "src/typesafe-api-client.cjs",
+      "src/bicameral-consensus.ts",
+      "src/remediation-generator.ts",
+      "src/plan-evaluator.ts",
+      "src/debate-evaluator.ts",
+      "src/payload-safety.ts",
+      "src/typesafe-policy-client.cjs",
+      "src/typesafe-enabled-resolver.cjs",
+      "src/typesafe-redact-patterns.cjs",
+      "src/typesafe-redact.cjs",
+      "src/auth-manager.ts",
+      "src/xml-enclosure.ts",
+      "src/egc.ts",
+      "src/types/security.ts",
+      "src/errors/TypeSafeError.ts"
+    ],
+    "scripts": [
+      "scripts/typesafe-planner-drop-tasks.cjs",
+      "scripts/remove-gate3.cjs",
+      "scripts/safe-update-planner-model.cjs",
+      "scripts/update-planner-jev-latest.cjs",
+      "scripts/deploy-baseline-to-target.cjs",
+      "scripts/patch-workspace-planner.cjs"
+    ],
+    "tools": [
+      "tools/todo-remediation-smoke.ts",
+      "tools/promote-omp-global.ps1",
+      "tools/sync-baseline.cjs",
+      "tools/sync-baseline.bat"
+    ]
+  },
+  "counts": {
+    "implementationFiles": 30,
+    "src": 19,
+    "scripts": 6,
+    "executableTools": 4,
+    "entrypoints": 1,
+    "findings": 16,
+    "originalFindings": 16,
+    "followupFindings": 1,
+    "totalFindings": 17
+  },
+  "agentDefinitionsAlsoCompared": [
+    "agents/advisor.md",
+    "agents/ck-advisor.md",
+    ".omp/agents/advisor.md",
+    ".omp/agents/ck-advisor.md"
+  ],
+  "testInspection": "Selective test reads plus actual full suite; no claim every test/history line was read",
+  "claims": [
+    {
+      "id": "F01",
+      "title": "HIGH: test receipt và acceptance criteria bị mất ở native done",
+      "canonicalReport": "plans/reports/261019-typesafe-source-rootcause-review.md",
+      "canonicalStartLine": 21,
+      "sourceObservationLimitationsVerbatim": "**Source:** `typesafe-planner.ts:1751-1811`, `src/evidence-collector.ts:514-560`.\n\nNative caller đọc `params.testCommand` và `params.requirements`, nhưng schema todo đang được host cung cấp trong phiên này không có hai field đó hoặc `planPath`. Caller không truyền `planPath` cho evidence collector. `collectConversationContext` trả `lastTestSummary`, nhưng caller native không sử dụng.\n\n**Quan sát:** branch có `357 pass / 0 fail / exit 0`; `lastTestSummary` giữ được nội dung. Payload sau redaction vẫn có `test_summary = No testCommand provided.` và `task_requirements` chỉ là tên todo, không có điều kiện `handle empty input` của user. Test output có thể còn trong work-log ngắn, nhưng đó không thay thế receipt gắn task/evidence.\n\n**Khắc phục đề xuất:** lấy contract và test receipt từ nguồn host-owned, gắn đúng task/revision/evidence; dùng chung evidence builder cho native/advisory, không thêm flag do agent tự khai để tự chứng nhận pass. Không mặc định chạy test cho task nghiên cứu không cần test."
+    },
+    {
+      "id": "F02",
+      "title": "HIGH: task-baseline chỉ lọc tệp, không tạo diff từ baseline",
+      "canonicalReport": "plans/reports/261019-typesafe-source-rootcause-review.md",
+      "canonicalStartLine": 31,
+      "sourceObservationLimitationsVerbatim": "**Source:** `src/evidence-collector.ts:54-120,376-450`.\n\nSnapshot giữ hash của dirty files; diff của tệp thay đổi được lấy bằng `git diff HEAD -- files`, không phải baseline-content → current-content.\n\n**Quan sát:** trước task đổi `preexisting=0→41`; trong task chỉ đổi `taskChange=0→7`. Evidence mang nhãn `task-baseline` nhưng chứa cả dòng thêm `preexisting=41`.\n\n**Tác động:** judge có thể đánh giá WIP ngoài task là drift hoặc attribution sai. Gắn nhãn task-scoped không làm nội dung thật sự task-scoped.\n\n**Khắc phục:** lưu/provision baseline đủ để dựng diff thật, bảo toàn staged/untracked/revert/delete; không chỉ đổi nhãn hoặc loại tệp để né reject."
+    },
+    {
+      "id": "F03",
+      "title": "HIGH: task nhiều commit chỉ gửi commit cuối",
+      "canonicalReport": "plans/reports/261019-typesafe-source-rootcause-review.md",
+      "canonicalStartLine": 43,
+      "sourceObservationLimitationsVerbatim": "**Source:** `src/evidence-collector.ts:419-435`.\n\nCó `baseline.headSha` nhưng fallback dùng `HEAD~1..HEAD` thay vì toàn khoảng từ baseline.\n\n**Quan sát:** task tạo và commit `src/first.ts`, rồi `src/second.ts`. Evidence chỉ có second.ts; phần triển khai first.ts biến mất khỏi payload.\n\n**Khắc phục:** tính khoảng revision theo baseline đúng task và kết hợp working-tree delta; có xử lý first commit, rebase và baseline không còn hợp lệ."
+    },
+    {
+      "id": "F04",
+      "title": "HIGH: rolling conversation window thay hợp đồng user bằng lời thúc tiếp tục",
+      "canonicalReport": "plans/reports/261019-typesafe-source-rootcause-review.md",
+      "canonicalStartLine": 53,
+      "sourceObservationLimitationsVerbatim": "**Source:** `typesafe-planner.ts:726-824`, `src/cook-expert-judge.ts:220-239`.\n\nHai user message gần nhất, tám agent/tool message gần nhất, rồi cắt tail 2.000/3.000 ký tự. Macro cắt tiếp các field xuống khoảng 1.950 ký tự.\n\n**Quan sát:** request gốc yêu cầu lexer/API invariants bị thay bằng `Continue. / Proceed.`; các lần đọc source sau đó đẩy test proof ra khỏi work-log, dù `lastTestSummary` vẫn tồn tại.\n\n**Khắc phục:** contract ổn định có revision; yêu cầu bổ sung chỉ cập nhật contract theo quy tắc rõ ràng. Work-log là claim/background, không là nguồn chân lý hay thay thế contract."
+    },
+    {
+      "id": "F05",
+      "title": "HIGH: outage bị biến thành yêu cầu sửa implementation; Gate 2 retry counter không tăng",
+      "canonicalReport": "plans/reports/261019-typesafe-source-rootcause-review.md",
+      "canonicalStartLine": 63,
+      "sourceObservationLimitationsVerbatim": "**Source:** `typesafe-planner.ts:1775-1777,1804,1815-1826`, `typesafe-planner.ts:1128-1202`.\n\nFormatter có nhánh `isUnavailable` nhưng caller không truyền classification đó. Gate 2 không tăng `consecutiveFailuresByTask`; chỉ Gate 1 tăng. `nextActions` được gán bằng `reasons`; `diffHash` hash task+reasons, không phải evidence.\n\n**Quan sát:** fake HTTP 503 tạo chỉ thị `Align implementation changes...`, `remove uncontracted drift...`; sau hai Gate 2 failure, counter vẫn 0.\n\n**Tác động:** agent có thể sửa code đúng để chữa outage hoặc lặp không có tiến triển. Prompt cấm retry unchanged không phải progress guard thực thi trong code.\n\n**Khắc phục:** phân biệt unavailable / insufficient evidence / semantic reject / authority required; outage không sinh code-edit directives. Progress identity phải gắn evidence/contract; giới hạn retry không biến reject thành pass."
+    },
+    {
+      "id": "F06",
+      "title": "HIGH: Advisor endpoint fail-open khi JEV lỗi",
+      "canonicalReport": "plans/reports/261019-typesafe-source-rootcause-review.md",
+      "canonicalStartLine": 75,
+      "sourceObservationLimitationsVerbatim": "**Source:** `src/bicameral-consensus.ts:1063-1067,1119-1195`.\n\nJEV result được khởi tạo từ local Advisor; khi client trả lỗi hoặc throw, kết quả khởi tạo vẫn được dùng. Decision clarity không điều khiển nhánh approve nếu risk không vượt 2.\n\n**Quan sát:** client error `http_503` → JEV `APPROVE` → `AUTO_APPROVE`. Clarity 0.01 và low-risk cũng `AUTO_APPROVE`.\n\n**Giới hạn:** đây là endpoint tư vấn quyết định; không đồng nghĩa native todo tự động pass trên cùng outage. Native completion vẫn fail-closed ở tình huống 503 đã probe.\n\n**Khắc phục:** unavailable/uncertain phải là trạng thái thật, không giả một lobe đồng ý. Không coi advice là quyền mutation."
+    },
+    {
+      "id": "F07",
+      "title": "HIGH: native done dùng macroResult.approved, bỏ qua consensus",
+      "canonicalReport": "plans/reports/261019-typesafe-source-rootcause-review.md",
+      "canonicalStartLine": 87,
+      "sourceObservationLimitationsVerbatim": "**Source:** `typesafe-planner.ts:1792-1827`, `src/bicameral-consensus.ts:811-869`.\n\n**Quan sát:** Advisor `DISALLOW`, JEV macro approve, consensus `HUMAN_ESCALATION`, nhưng native callback vẫn stage done. Probe chỉ chứng minh staging, không tuyên bố completion thật trong host.\n\n**Khắc phục:** chọn một authority composer được đặc tả rõ và dùng nhất quán; giữ exact target/revision/input identity và matching native commit. Không sửa bằng cách buộc Advisor đồng ý với JEV."
+    },
+    {
+      "id": "F08",
+      "title": "HIGH: Advisor nội bộ là heuristic, và bị sửa verdict sau JEV",
+      "canonicalReport": "plans/reports/261019-typesafe-source-rootcause-review.md",
+      "canonicalStartLine": 95,
+      "sourceObservationLimitationsVerbatim": "**Source:** `src/bicameral-consensus.ts:208-412,828-848,906-918`; các file `agents/advisor.md`, `agents/ck-advisor.md`.\n\nEndpoint `typesafe_advisor` không spawn/read bằng agent contract. Nó xếp hạng theo keyword, overlap và template; `evidencePaths` không được đọc. Vì vậy tên `ck:advisor` không chứng minh reasoning review đã thực sự chạy.\n\nKhi JEV reject, code sửa Advisor thành `DISALLOW` thay vì giữ hai kết quả độc lập. **Quan sát:** verdict/block và reason yêu cầu remediation, nhưng recommendation vẫn `Verified test or build evidence confirms task completion`.\n\n**Khắc phục:** phân biệt `intent_heuristic` với reasoning Advisor thật; giữ raw kết quả độc lập; reasoning agent đọc exact evidence để đề xuất sửa. Không yêu cầu JEV sinh root cause/free-form kế hoạch khắc phục."
+    },
+    {
+      "id": "F09",
+      "title": "HIGH: phủ định của yêu cầu drop bị hiểu ngược",
+      "canonicalReport": "plans/reports/261019-typesafe-source-rootcause-review.md",
+      "canonicalStartLine": 105,
+      "sourceObservationLimitationsVerbatim": "**Source:** `src/bicameral-consensus.ts:431-464`.\n\n**Quan sát:** `Do not drop lexer verification.` → Advisor `ALLOW`, reason user authorized dropping.\n\n**Giới hạn:** drop còn có JEV lobe độc lập; lỗi heuristic đơn lẻ không chứng minh native drop đã được thực thi trái phép.\n\n**Khắc phục:** cancellation là quyết định authority gắn exact target; không suy permission bằng regex chứa động từ, đặc biệt khi có negation/quote/report về lỗi drop."
+    },
+    {
+      "id": "F10",
+      "title": "HIGH: native history không rehydrate do false với nullish coalescing",
+      "canonicalReport": "plans/reports/261019-typesafe-source-rootcause-review.md",
+      "canonicalStartLine": 115,
+      "sourceObservationLimitationsVerbatim": "**Source:** `typesafe-planner.ts:1532-1550,1574-1585`.\n\n`customPhases` bằng `false` cho record không phải `user_todo_edit`; `customPhases ?? resultPhases` giữ false, che kết quả native todo hợp lệ.\n\n**Quan sát differential:** session_start với branch chứa todo init/pending → phases rỗng. Cùng phases qua `user_todo_edit` → khôi phục đúng. Probe đầu tiên thất bại vì kỳ vọng native history khôi phục; điều tra tiếp đã xác định lỗi riêng, không sửa assertion để tuyên bố đường completion pass.\n\n**Khắc phục:** chọn nguồn phases bằng kiểm tra array hợp lệ, không dùng false làm sentinel; kiểm tra normal-result, custom-edit, latest valid result, branch switch và restart. Không reset debt để né gate."
+    },
+    {
+      "id": "F11",
+      "title": "HIGH: chỉ có EGC marker cũng làm planner bỏ gate",
+      "canonicalReport": "plans/reports/261019-typesafe-source-rootcause-review.md",
+      "canonicalStartLine": 125,
+      "sourceObservationLimitationsVerbatim": "**Source:** `typesafe-planner.ts:961-965,1593-1594`; `src/egc.ts:78-81,392-407`.\n\nPlanner suy EGC đang hoạt động từ biến môi trường hoặc sự tồn tại `.omp/egc.json`, không xác nhận EGC đã đăng ký/nạp contract hợp lệ.\n\n**Quan sát:** cùng callback không marker bị reject; thêm file EGC `{}` trong repo tạm → không reject, không có staged approval, dù chưa đăng ký extension EGC.\n\n**Giới hạn:** không probe native commit thật; chưa xác nhận workspace người dùng hiện tại có EGC active. Đây là lỗi handoff enforcement khi điều kiện kích hoạt xuất hiện.\n\n**Khắc phục:** handoff qua host-owned registration/validated contract, không marker do repo/agent có thể tạo. Không tắt planner chỉ để thoát rejection."
+    },
+    {
+      "id": "F12",
+      "title": "MEDIUM: câu hỏi quá rộng và cắt bằng chứng theo vị trí",
+      "canonicalReport": "plans/reports/261019-typesafe-source-rootcause-review.md",
+      "canonicalStartLine": 137,
+      "sourceObservationLimitationsVerbatim": "**Source:** `src/cook-expert-judge.ts:203-322`, `typesafe-planner.ts:442-499,509-696`.\n\nMột choice và một noul cùng hỏi toàn bộ deliverables; drift/scope vẫn cần suy luận toàn cảnh từ diff tóm tắt. Research artifact bị cắt head ~4.940 ký tự, nhiều bước summarization khác không chọn theo criterion.\n\n**Quan sát:** artifact 11.938 ký tự mất acceptance evidence ở cuối; gửi 4.988 ký tự sau enclosure. Đây là mất dữ liệu tái hiện được, không tự chứng minh score nào sai.\n\n**Khắc phục:** chọn evidence hoàn chỉnh theo criterion/claim, khai báo thiếu hoặc truncation; narrow semantic questions; parent integration do reasoning review + kiểm chứng tích hợp. Không chia todo thành vô số dòng rồi giả định lỗi biến mất."
+    },
+    {
+      "id": "F13",
+      "title": "MEDIUM: 32 KiB là local policy, khác test/production; không phải API limit",
+      "canonicalReport": "plans/reports/261019-typesafe-source-rootcause-review.md",
+      "canonicalStartLine": 147,
+      "sourceObservationLimitationsVerbatim": "**Source:** `src/payload-safety.ts:187,195-322`, `typesafe-planner.ts:359,2327-2359`.\n\n**Quan sát:** cùng input qua `preparePayloadSafe`: test 32.768 bytes; production 34.804 bytes. Native đi qua structured object, direct helper vẫn string. Tài liệu repo mô tả cap 32 KiB không nhất quán với helper production.\n\n[API hiện tại](https://docs.typesafe.ai/api.md) ghi body tối đa **32 MiB**; [model](https://docs.typesafe.ai/models.md) có giới hạn context theo **token**, không theo ký tự/byte. Không trộn các đơn vị; không khẳng định 34.804-byte body vi phạm API.\n\n**Khắc phục:** một chính sách rõ ràng, nhất quán giữa runtime/test, đo coverage/evidence loss. Không đơn giản tăng cap hoặc gửi toàn transcript."
+    },
+    {
+      "id": "F14",
+      "title": "MEDIUM: safe plan bị reject chỉ vì nhắc protected path",
+      "canonicalReport": "plans/reports/261019-typesafe-source-rootcause-review.md",
+      "canonicalStartLine": 157,
+      "sourceObservationLimitationsVerbatim": "**Source:** `src/plan-evaluator.ts:67-93,270-283`.\n\n**Quan sát:** plan `never modify ~/.claude/settings.json` bị isolation check từ chối. Khác với micro-check đã dùng path provenance, plan evaluator vẫn quét raw references.\n\n**Khắc phục:** tách forbidden mutation khỏi lời mô tả an toàn/negative requirement; không xóa nhắc boundary chỉ để đạt approve. Nếu chính sách cấm cả đọc/reference, cần thể hiện rõ là policy chứ không gán sai mutation."
+    },
+    {
+      "id": "F15",
+      "title": "MEDIUM: hai debate implementations trả verdict khác nhau",
+      "canonicalReport": "plans/reports/261019-typesafe-source-rootcause-review.md",
+      "canonicalStartLine": 165,
+      "sourceObservationLimitationsVerbatim": "**Source:** `typesafe-planner.ts:1332-1417`, `src/debate-evaluator.ts:107-181`.\n\n**Quan sát:** architect/security 0.5, ba persona còn lại 3 → inline reject, module approve. Model-tier/model-env và security/architect guard cũng khác nhau.\n\n**Khắc phục:** một implementation/policy source-of-truth và consumer-level checks; không chỉnh threshold cho khớp test dễ hơn."
+    },
+    {
+      "id": "F16",
+      "title": "HIGH: report JSON đổi rubric; cạnh tranh artifact làm mất report đúng task",
+      "canonicalReport": "plans/reports/261019-typesafe-source-rootcause-review.md",
+      "canonicalStartLine": 173,
+      "sourceObservationLimitationsVerbatim": "**Source:** `typesafe-planner.ts:395-402,476-498,1790-1811`, `src/cook-expert-judge.ts:211-239`.\n\nSau khi xuất bản map thật 3.735 UTF-8 bytes, parent chạy full affected modules và scratch assertions, rồi changed-path callback smoke riêng. Hai fixture dùng repo tạm có committed baseline được dựng trước khi copy report; giữ nguyên tên/nội dung các output thật.\n\n- **A — chỉ map:** `analysis_research`, research rubric; final artifact 3.781 ký tự, giữ đầy đủ graph/provenance/attestation/causal limits.\n- **B — năm report thật cùng xuất hiện:** `changedFiles` vẫn có map và calculation JSON, nhưng classifier chọn `code_change`, instructions thực tế chuyển sang implementation rubric. Collector đọc prediction/scenarios/rootcause trước; artifact cuối 4.939 ký tự chỉ còn prediction/scenarios, mất mọi nhóm evidence cốt lõi của map.\n- `unified_diff` vẫn có đường dẫn map, nhưng không còn hai limitation quan trọng về staging/commit và thiếu historical wire. Vì vậy không được nói “map không xuất hiện ở bất kỳ kênh nào”; có path không đồng nghĩa đầy đủ proof đã tới judge.\n\n**Kiểm chứng:** run 175 tests/10 files → 173 pass, **2 fail** đúng desired assertions (research bị phân loại code và map không còn trong artifact); separate smoke exit 1, giữ cùng failure. Không nới assertion, không xóa/đổi tên JSON, không reset task baseline để làm mất competition. Evidence: `local://typesafe-map-packet-observed.json`; test output `artifact://41`. Fake responses chỉ instrumentation, không semantic approval/native commit.\n\n**Giới hạn:** report-only competition, reconstructed isolated baseline, không phải exact Main workspace packet hoặc wire của original P=.13. Đây là causal proof của delivery/rubric failure trong fixture, không retrospective attribution của event cũ.\n\n**Khắc phục:** evidence chọn theo stable task/criterion và applicability, không chỉ thứ tự filename/changedFiles; report data JSON không mặc nhiên là product code. Khi proof bắt buộc bị bỏ phải báo insufficient evidence trước semantic conclusion. Sửa plumbing là implementation scope riêng, không được “chữa” bằng cách chỉnh nội dung output thật để săn approve."
+    }
+  ],
+  "verification": {
+    "baseline": "357pass0fail,35files1374expects50.79s",
+    "initialSourceSmoke": "local://typesafe-source-audit-smoke.ts exit0,10.81s; synthetic transport/temp repos",
+    "failingBefore": "artifact://41,173pass2fail175tests10files; separate smokeexit1",
+    "boundedF16After": "artifact://47,387pass0fail1764expects37files56.27s; separate preserved synthetic callback smokeexit0",
+    "limitations": "Synthetic callbacks prove control flow/staging, not model quality/native commitment; F16 workspace only, no deploy/restart; other findings unimplemented"
+  },
+  "freshNativeRejection": {
+    "operation": "done",
+    "exactTarget": "Review every discovered source subsystem and substantiate defects with executable or trace evidence.",
+    "requestRecord": "b2b6000c",
+    "rejectionRecord": "8bcae43c",
+    "callId": "call_1dd307433d164b8da6b90e67ddf68112|fc_0fd9afe64d73e743016ad59909a5e48191b94353d96ab38465",
+    "timestamp": "2026-10-19T04:13:55.973Z",
+    "classification": "code_change",
+    "verdict": "REJECT",
+    "commit": false,
+    "displayedGateScore": 0.15,
+    "rawPrimitiveValuesUnknown": true,
+    "verdictSource": "Displayed normalized native gate result, not captured raw JEV answers"
+  },
+  "causalLimit": "Exact posted Main packet/full answers absent. Source-confirmed retrieval/rubric mechanisms are not proven cause of this probability. Source review acceptance does not require implementing findings/H, deployment equality or unavailable historical wire.",
+  "followupFindings": [
+    {
+      "id": "F17",
+      "sourceRefs": [
+        "C:/Users/thant/Projects/omp_extension/typesafe-planner.ts:763-764,1749,1808",
+        "C:/Users/thant/Projects/omp_extension/src/cook-expert-judge.ts:224",
+        "D:/100.Software/Github/omp_extension/typesafe-planner.ts:787-788"
+      ],
+      "evidence": "plans/reports/261019-private-context-export-evidence.json",
+      "compactAcceptance": "plans/reports/261019-source-review-f17-privacy.md",
+      "scope": "Synthetic-only proof of private-channel inclusion in prepared state; no live transmission assertion"
+    }
+  ]
+}

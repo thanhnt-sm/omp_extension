@@ -38,3 +38,8 @@ created: 2026-10-13
 - Workspace test suite: `285 pass, 0 fail` across 33 files (`bun test`).
 - Target deployment test suite: `300 pass, 0 fail` across 35 files (`node tools/sync-baseline.cjs`).
 - Smoke test: `runBicameralDecisionCheck` returned `SMOKE_VERDICT: proceed | OPTION: Fix root cause in bicameral-consensus and collectConversationContext`.
+
+## Execution reconciliation — 2026-10-19
+
+Residual C02/C04/C05/C18 ownership: [consolidated master](../261019-research-to-cook-execution/plan.md), with [source-evidenced dispositions](../reports/261019-research-to-cook-coverage.json). Preserve actual agent definitions/report interfaces; replace heuristic-as-reasoning and post-JEV mutation with genuine bound consultation/task/parent assessments. Report shape alone is not a reasoner.
+

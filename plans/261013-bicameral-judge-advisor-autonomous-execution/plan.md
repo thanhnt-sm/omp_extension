@@ -88,3 +88,8 @@ Prior to this alignment, the OMP extension suffered from three critical friction
 2. **Target Deployment Sync (`node tools/sync-baseline.cjs`):**
    - Automated timestamped backup: `omp_extension_backup_2026-10-13T11-03-26-075Z`.
    - 295 tests passed across 35 test files in target runtime (100% green).
+
+## Execution reconciliation — 2026-10-19
+
+Residual C02/C03/C05/C11/C12 ownership: [consolidated master](../261019-research-to-cook-execution/plan.md), with [source-evidenced dispositions](../reports/261019-research-to-cook-coverage.json). Finish true full-task deltas, real reasoning and parent/composed-authority acceptance; preserve matching native result and bounded progress recovery. Do not treat prior source/test declarations as current runtime completion.
+

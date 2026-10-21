@@ -9,7 +9,7 @@ interface DiffSection {
 const TEST_PATH = /(?:(?:^|\/)(?:tests?|__tests__|spec)\/.*\.[cm]?[jt]sx?$|\.(?:test|spec)\.[cm]?[jt]sx?$)/i;
 const ASSERTION = /(?:expect\s*\(|assert(?:\s*\.\s*[a-zA-Z]+)?\s*\()/;
 const SUITE = /(?:describe|it|test)\s*\(/;
-const SKIPPED_SUITE = /(?:describe|it|test)\s*\.\s*(?:skip|todo)\s*\(|(?:xdescribe|xit|xtest)\s*\(/;
+const SKIPPED_SUITE = /(?<![\p{ID_Continue}$])(?:(?:describe|it|test)\s*\.\s*(?:skip|todo)\s*\(|(?:xdescribe|xit|xtest)\s*\()/u;
 const COMMENTED_ASSERTION = /^\s*(?:\/\/|\/\*|\*)\s*.*(?:expect\s*\(|assert(?:\s*\.\s*[a-zA-Z]+)?\s*\()/;
 const LITERAL = /(?:true|false|0|1|"(?:\\.|[^"])*"|'(?:\\.|[^'])*')/;
 const TAUTOLOGY = new RegExp(

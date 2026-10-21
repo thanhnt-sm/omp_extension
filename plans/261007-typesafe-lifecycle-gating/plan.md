@@ -58,3 +58,8 @@ Critically, this plan plugs two massive vulnerabilities discovered during advers
 | 4 | How to prevent plan completion bypass when todo is rejected? | Security & Architect | Intercept `write`/`edit` on `plans/**/*.md` containing `status: completed` and `bash` running `plan-cli.cjs check`. |
 | 5 | Why was this bug never caught by existing CI? | Devil's Advocate / QA | Because test suites only tested standalone helper functions, never the event interceptor `handleTodoInterception`. Phase 1 fixes this permanently. |
 | 6 | Does this plan affect `.claude` or Claude account settings? | Security & Architect | NO. Pure project-scope modification. Strict Claude isolation invariant enforced: no touching `.claude` directory, tokens, or global configs. |
+
+## Execution reconciliation — 2026-10-19
+
+Residual C11/C15/C17 ownership: [consolidated master](../261019-research-to-cook-execution/plan.md), with [source-evidenced dispositions](../reports/261019-research-to-cook-coverage.json). Preserve existing closure/native transaction behavior; finish history/debt/composed-authority residuals. Payload human/authorized/reset flags cannot confer permission, and this note does not close current acceptance.
+

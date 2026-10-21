@@ -1,0 +1,3286 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Sanitized historical evidence for cross-session recovery; not an authoritative tracker, approval token, current attestation, or permission.",
+  "workspace": "D:/100.Software/Github/omp_extension",
+  "deployment": "C:/Users/thant/Projects/omp_extension",
+  "authorization": {
+    "boundedSourceRepair": true,
+    "deployment": false,
+    "restartPerformed": false,
+    "globalProxyModified": false
+  },
+  "sourceIdentityAtVerification": {
+    "collectionUtc": "2026-10-19T03:08:23.606Z",
+    "workspace": "D:/100.Software/Github/omp_extension",
+    "deployment": "C:/Users/thant/Projects/omp_extension",
+    "compared": 20,
+    "equal": 17,
+    "mismatches": [
+      "typesafe-planner.ts",
+      "src/cook-expert-judge.ts",
+      "src/evidence-collector.ts"
+    ],
+    "pairs": [
+      {
+        "file": "typesafe-planner.ts",
+        "workspaceSha256": "ff0e8cfd29fb3c9a048cd10c9bf280fcbb90411ac56f224cef2afbe9955c40c6",
+        "deploymentSha256": "163948ed4602a3e17c14bf79adf2f2f2e6b35fffe749df5fb621f3cad76194b4",
+        "equal": false
+      },
+      {
+        "file": "src/ast-analyzer.ts",
+        "workspaceSha256": "8a9d5be7935bb58dc106c394755549376d62751472947581d8f6e2653164b5ed",
+        "deploymentSha256": "8a9d5be7935bb58dc106c394755549376d62751472947581d8f6e2653164b5ed",
+        "equal": true
+      },
+      {
+        "file": "src/auth-manager.ts",
+        "workspaceSha256": "1a014f5db647fb09e6441c64ef8c7ca12d8384d95cd88ad380989530a41fab23",
+        "deploymentSha256": "1a014f5db647fb09e6441c64ef8c7ca12d8384d95cd88ad380989530a41fab23",
+        "equal": true
+      },
+      {
+        "file": "src/bicameral-consensus.ts",
+        "workspaceSha256": "732877fc0a8863cd60509a1f59a4e9783321775660640766fad416728e81f3bc",
+        "deploymentSha256": "732877fc0a8863cd60509a1f59a4e9783321775660640766fad416728e81f3bc",
+        "equal": true
+      },
+      {
+        "file": "src/cook-expert-judge.ts",
+        "workspaceSha256": "7613b5bb8e0e9bc90a40e739da437894fcc4070d587805130251b45ab92d9390",
+        "deploymentSha256": "196b107f01021c6bfdaf5de0902d8258ff4ff36e2a5a19616193fdef6222b0db",
+        "equal": false
+      },
+      {
+        "file": "src/debate-evaluator.ts",
+        "workspaceSha256": "9fe75205ae1e3ef94bcda566a27e52687afc2d5d1a8d740c9ca5280f86125cec",
+        "deploymentSha256": "9fe75205ae1e3ef94bcda566a27e52687afc2d5d1a8d740c9ca5280f86125cec",
+        "equal": true
+      },
+      {
+        "file": "src/egc.ts",
+        "workspaceSha256": "f7aa38a3b5873a498fada5139cf891a6acc85b366e3c925b6c9b0115f6786230",
+        "deploymentSha256": "f7aa38a3b5873a498fada5139cf891a6acc85b366e3c925b6c9b0115f6786230",
+        "equal": true
+      },
+      {
+        "file": "src/errors/TypeSafeError.ts",
+        "workspaceSha256": "cbc9b905b7f1b81f4dfa54aa8cf64eedf2ecf23476525ebaed8eb5c70176a38d",
+        "deploymentSha256": "cbc9b905b7f1b81f4dfa54aa8cf64eedf2ecf23476525ebaed8eb5c70176a38d",
+        "equal": true
+      },
+      {
+        "file": "src/evidence-collector.ts",
+        "workspaceSha256": "43575d2deb6fd0beebbb64bd3794c69a7268633ed0cfed5833e86f47ec7ed3e7",
+        "deploymentSha256": "324c0372cdd70a6ba5938e6a3dd43f3ae5be4aeeace7af22682d43a2c23b7ef6",
+        "equal": false
+      },
+      {
+        "file": "src/payload-safety.ts",
+        "workspaceSha256": "3aab4c0008c30668da4b0efd94eb791596712565459fbf04022bb92eb066f58a",
+        "deploymentSha256": "3aab4c0008c30668da4b0efd94eb791596712565459fbf04022bb92eb066f58a",
+        "equal": true
+      },
+      {
+        "file": "src/plan-evaluator.ts",
+        "workspaceSha256": "b6002e3cf5eb36fa664dcfe65d2b397d16fd37a158a5273f8a023265c9103ca1",
+        "deploymentSha256": "b6002e3cf5eb36fa664dcfe65d2b397d16fd37a158a5273f8a023265c9103ca1",
+        "equal": true
+      },
+      {
+        "file": "src/remediation-generator.ts",
+        "workspaceSha256": "2d215bed75530e4a6610efa125fbb961c99eb89a281247f6f0cef1eb319a89a8",
+        "deploymentSha256": "2d215bed75530e4a6610efa125fbb961c99eb89a281247f6f0cef1eb319a89a8",
+        "equal": true
+      },
+      {
+        "file": "src/types/security.ts",
+        "workspaceSha256": "d2a4ead161f356e5bbfa287088e62945976fa3e22b6fc7331616d90e9d91e67c",
+        "deploymentSha256": "d2a4ead161f356e5bbfa287088e62945976fa3e22b6fc7331616d90e9d91e67c",
+        "equal": true
+      },
+      {
+        "file": "src/typesafe-api-client.cjs",
+        "workspaceSha256": "3a1a082b40f394ec7e31cecd30b264c83350f4e58bf5daa11fee0315f42cafa0",
+        "deploymentSha256": "3a1a082b40f394ec7e31cecd30b264c83350f4e58bf5daa11fee0315f42cafa0",
+        "equal": true
+      },
+      {
+        "file": "src/typesafe-enabled-resolver.cjs",
+        "workspaceSha256": "a60066690a72ff39e96d530540fc9564355dc06da95fe7963e17b1db01377374",
+        "deploymentSha256": "a60066690a72ff39e96d530540fc9564355dc06da95fe7963e17b1db01377374",
+        "equal": true
+      },
+      {
+        "file": "src/typesafe-policy-client.cjs",
+        "workspaceSha256": "bf7454619f78b3e43b311cb65320dd85288fc63ca89256608f965df9c7d927e8",
+        "deploymentSha256": "bf7454619f78b3e43b311cb65320dd85288fc63ca89256608f965df9c7d927e8",
+        "equal": true
+      },
+      {
+        "file": "src/typesafe-redact-patterns.cjs",
+        "workspaceSha256": "5fda466c847cd0b5e60b79e1188a113ab2dc20430a694f96b279d4401c207409",
+        "deploymentSha256": "5fda466c847cd0b5e60b79e1188a113ab2dc20430a694f96b279d4401c207409",
+        "equal": true
+      },
+      {
+        "file": "src/typesafe-redact.cjs",
+        "workspaceSha256": "7895ca45141e29869ff1802ae7bca045cbcefc624c6cb14af60e2eecda87d548",
+        "deploymentSha256": "7895ca45141e29869ff1802ae7bca045cbcefc624c6cb14af60e2eecda87d548",
+        "equal": true
+      },
+      {
+        "file": "src/verification-gate.ts",
+        "workspaceSha256": "1391445166654a69c03f3eaf9d3b14a4294618ef79ad4a4b3c403ee1dbfc9227",
+        "deploymentSha256": "1391445166654a69c03f3eaf9d3b14a4294618ef79ad4a4b3c403ee1dbfc9227",
+        "equal": true
+      },
+      {
+        "file": "src/xml-enclosure.ts",
+        "workspaceSha256": "ecd77847f5eb7a7bfe74ca8ee7b5df75a912fde847f49d7158709cd976806630",
+        "deploymentSha256": "ecd77847f5eb7a7bfe74ca8ee7b5df75a912fde847f49d7158709cd976806630",
+        "equal": true
+      }
+    ],
+    "runtimeOriginComparisons": [
+      {
+        "file": "typesafe-planner.ts",
+        "recordedSha256": "163948ed4602a3e17c14bf79adf2f2f2e6b35fffe749df5fb621f3cad76194b4",
+        "deploymentMatchesRecorded": true,
+        "workspaceMatchesRecorded": false
+      },
+      {
+        "file": "src/typesafe-enabled-resolver.cjs",
+        "recordedSha256": "a60066690a72ff39e96d530540fc9564355dc06da95fe7963e17b1db01377374",
+        "deploymentMatchesRecorded": true,
+        "workspaceMatchesRecorded": true
+      },
+      {
+        "file": "src/typesafe-redact.cjs",
+        "recordedSha256": "7895ca45141e29869ff1802ae7bca045cbcefc624c6cb14af60e2eecda87d548",
+        "deploymentMatchesRecorded": true,
+        "workspaceMatchesRecorded": true
+      },
+      {
+        "file": "src/typesafe-api-client.cjs",
+        "recordedSha256": "3a1a082b40f394ec7e31cecd30b264c83350f4e58bf5daa11fee0315f42cafa0",
+        "deploymentMatchesRecorded": true,
+        "workspaceMatchesRecorded": true
+      },
+      {
+        "file": "src/typesafe-policy-client.cjs",
+        "recordedSha256": "bf7454619f78b3e43b311cb65320dd85288fc63ca89256608f965df9c7d927e8",
+        "deploymentMatchesRecorded": true,
+        "workspaceMatchesRecorded": true
+      }
+    ],
+    "limits": "Disk and five recorded runtime-origin digests only. Not full imported-TypeScript memory attestation, native approval, deployment authorization, or historical rejection attribution."
+  },
+  "verification": {
+    "baseline": {
+      "passed": 357,
+      "failed": 0,
+      "files": 35,
+      "meaning": "Unchanged repository baseline before authorized production repair."
+    },
+    "before": {
+      "passed": 173,
+      "failed": 2,
+      "files": 10,
+      "tests": 175,
+      "smokeExit": 1,
+      "observations": [
+        {
+          "scenario": "A-map-only",
+          "checks": {
+            "nativeCallbackReachedOneFinalRequest": true,
+            "baselineIsTaskScoped": true,
+            "exactTaskOnWire": true,
+            "changedPathsMatchAllCopiedArtifacts": true,
+            "changedPathsMatchSnapshotDelta": true,
+            "changedPathsContainMap": true,
+            "nativeDiffSummaryMatchesEvidenceReadout": true,
+            "classifierIsAnalysisResearch": true,
+            "wireRubricUsesResearchEvidence": true,
+            "wireIncludesMapArtifact": true,
+            "wireRetainsEveryMapCriticalGroup": true,
+            "canonicalDoneShapeOnly": true,
+            "noInventedTestReceipt": true,
+            "fakeApprovalStagesOnly": true
+          },
+          "blockedDesiredAssertions": [],
+          "callbackError": null,
+          "wireArtifactUtf8Bytes": 3781,
+          "wireOrder": [
+            "plans/reports/261019-typesafe-source-runtime-map.md"
+          ],
+          "wireCoverage": {
+            "sourceGraph": {
+              "retained": true,
+              "missing": []
+            },
+            "commitBoundary": {
+              "retained": true,
+              "missing": []
+            },
+            "distinctBranches": {
+              "retained": true,
+              "missing": []
+            },
+            "diskProvenance": {
+              "retained": true,
+              "missing": []
+            },
+            "runtimeProvenance": {
+              "retained": true,
+              "missing": []
+            },
+            "causalLimits": {
+              "retained": true,
+              "missing": []
+            }
+          },
+          "artifactSnapshot": [
+            {
+              "relativePath": "plans/reports/261019-typesafe-source-runtime-map.md",
+              "byteLength": 3735,
+              "sha256": "781c254ce6c8732251bf8eef16d418140557b0589a0fbce203a4bc0da585f553"
+            }
+          ],
+          "fixtureState": {
+            "staged": true,
+            "taskStatus": "in_progress",
+            "committedCount": 0,
+            "hostMessages": []
+          },
+          "requestEvidence": [
+            {
+              "endpoint": "https://api.typesafe.ai/v1/systemone",
+              "method": "POST",
+              "bodyBytes": 11409,
+              "requestedModel": "jev-latest",
+              "resolvedModel": null,
+              "questions": {
+                "deliverables_verdict": {
+                  "type": "choice",
+                  "instructions": "Based on `deliverable_artifacts`, `test_summary`, and `agent_work_log`, does the completed work satisfy `todo_task` and `task_requirements`? Evaluate ONLY the current sub-task in `todo_task` and `task_requirements` (`user_request` and `plan_context` are background context for the broader session; do not penalize for unstarted future tasks). Note: No separate testCommand was configured; do not penalize for 'No testCommand provided' in `test_summary`.",
+                  "criteria": {
+                    "APPROVE": "Deliverables satisfy the research or documentation criteria with concrete analysis or specifications",
+                    "REJECT": "Deliverables fail to address the task requirements or omit required analysis",
+                    "NEXT_ACTION_REQUIRED": "Deliverables are partial and need follow-up actions"
+                  }
+                },
+                "meets_criteria": {
+                  "type": "noul",
+                  "instructions": "Does the research or specification evidence in `deliverable_artifacts` and `agent_work_log` satisfy `todo_task` and `task_requirements`? Evaluate ONLY the current sub-task in `todo_task` and `task_requirements` (`user_request` and `plan_context` are background context for the broader session; do not penalize for unstarted future tasks). Note: No separate testCommand was configured; do not penalize for 'No testCommand provided' in `test_summary`.",
+                  "criteria": {
+                    "true": "Deliverables and evidence satisfy the current sub-task requirements",
+                    "false": "Deliverables are incomplete, missing required evidence, or fail the current sub-task criteria"
+                  }
+                },
+                "architectural_drift": {
+                  "type": "choice",
+                  "instructions": "Assess whether the changes adhere to planned architecture and safety boundaries. Updating companion unit tests (`tests/*`), plans (`plans/*`), documentation/ADRs/journals (`docs/*`), or supporting `src/*` modules is standard engineering practice and is NOT drift or scope creep:",
+                  "criteria": {
+                    "no_drift": "Strict adherence to architecture and boundaries (including companion tests, docs, plans, and supporting modules)",
+                    "unapproved_deviation": "Unplanned architectural deviation or broken safety contract",
+                    "scope_creep": "Scope creep into unrelated external projects or prohibited directories",
+                    "other": "Unrecognized architectural change"
+                  }
+                },
+                "scope_mode": {
+                  "type": "choice",
+                  "instructions": "Assess whether scope was maintained, expanded, or reduced relative to `todo_task` and `task_requirements` (not the whole plan):",
+                  "criteria": {
+                    "HOLD": "Preserves planned requirements exactly",
+                    "EXPANSION": "Justified addition of edge cases, tests, or documentation",
+                    "REDUCTION": "Omits requested functionality",
+                    "other": "Other scope modification"
+                  }
+                }
+              },
+              "state": {
+                "todo_task": "<todo_task>\nMap source callsites and verify workspace/runtime identity for TypeSafe judge and todo gates.\n</todo_task>",
+                "task_requirements": "<task_requirements>\nMap source callsites and verify workspace/runtime identity for TypeSafe judge and todo gates.\n</task_requirements>",
+                "diff_scope": "<diff_scope>\ntask-baseline: only files changed since this task started\n</diff_scope>",
+                "diff_summary": "<diff_summary>\n?? plans/reports/261019-typesafe-source-runtime-map.md\n</diff_summary>",
+                "test_summary": "<test_summary>\nNo testCommand provided.\n</test_summary>",
+                "deliverable_artifacts": "<deliverable_artifacts>\n--- Deliverable: plans/reports/261019-typesafe-source-runtime-map.md ---\n# TypeSafe source/runtime map\n\nOriginal task (verbatim): \"Map source callsites and verify workspace/runtime identity for TypeSafe judge and todo gates.\"\n\nGraph below is source-confirmed, not an execution trace. Workspace W = D:/100.Software/Github/omp_extension; deployment D = ~/Projects/omp_extension. Fresh SHA-256: 20/20 W/D disk pairs equal, 0 mismatches. Five runtime-origin digests and full manifest: [scratch](local://typesafe-map-evidence.md). Disk equality does NOT attest all imported TypeScript in loaded memory or any historical session. The live map rejection (analysis_research, REJECT, P=0.13) is observed, NOT diagnosed; missing persisted map is a packaging gap, not proven cause. No approval or native completion claimed.\n\n## Confirmed graph (paths relative to W unless absolute)\n\n- Loader: ~/.omp/agent/extensions/typesafe-planner.ts:1 exports D/typesafe-planner.ts. typesafe-planner.ts:1421 registers extension; :285-315 loads resolver/redactor/API CJS relative to deployed entrypoint.\n- Native interception: typesafe-planner.ts:2131 tool_call -> handleTodoInterception :1859-1866 -> stageNativeTodoCall :1593-1857. Done collection :1744-1768 captures snapshot, optional test receipt, task baseline.\n- Evidence: src/evidence-collector.ts:359-577 -> status/diff, changed paths, test result, optional plan criteria. Caller typesafe-planner.ts:1758-1768 does not pass planPath.\n- Micro: typesafe-planner.ts:1771-1777 -> src/cook-expert-judge.ts:152-198 checks boundary/test exit/test evasion/evidence; failure cancels call.\n- Macro: typesafe-planner.ts:1788-1827 -> src/bicameral-consensus.ts:811-869 -> src/cook-expert-judge.ts:203-240,329-347 serializes task/requirements/artifacts and calls client. Native acceptance reads macroResult.approved (:1815), not composed consensus. Advisor heuristic is adjusted after JEV (:828-848).\n- Transport: typesafe-planner.ts:2416-2591 client adapters -> executeTypeSafe :2302-2415 (enablement, validation, redaction/cap, answer/policy validation) -> src/typesafe-api-client.cjs:340-464 retry/POST; endpoint :25 is https://api.typesafe.ai/v1/systemone.\n- Native commit: typesafe-planner.ts:1838-1854 stages call/input/generation/revision/targets; tool_result :2133-2266 requires matching successful native result and semantic effect before updating mirrored phases/revision. Preflight staging alone is not commit.\n\n## Distinct branches\n\n- Drop: typesafe-planner.ts:1694-1716 -> src/bicameral-consensus.ts:776-805; rejects or human escalation via exact-target confirmation :1664-1684.\n- Block with rejection debt: typesafe-planner.ts:1718-1728 -> same human confirmation; not completed and debt not cleared by blocking.\n- Explicit verify (advisory): typesafe-planner.ts:2758-2784 -> src/verification-gate.ts:291-467 -> evidence/deterministic gate/evaluateGate. It does not commit native todo.\n- Advisor: typesafe-planner.ts:2879-2933 -> src/bicameral-consensus.ts:1038-1223 intent heuristic + optional JEV decision, not a spawned reasoning agent or native commit.\n- EGC marker/env bypass: typesafe-planner.ts:961-965,1594. History rehydration: :1532-1551. Neither was used as remediation.\n\n## Provenance and limits\n\nSession 2026-10-19T02-18-55-333Z_01a151f4-6be4-7573-8bb7-e95974e16080.jsonl: runtime-origin line 5 (fce61237); prior isolated diagnostic/disk equality line 251 (85ef9afa); exact done attempt/reject lines 346-348 (7c86b82f). Scratch gives full location and sanitized identities, not raw transcript. No captured exact rejection wire payload, so no causal attribution. No baseline/probe/test/build rerun or runtime/test/config/deploy changes in this packaging. Parent owns packet checks, Advisor review and same-target native re-evaluation.\n</deliverable_artifacts>"
+              }
+            }
+          ]
+        },
+        {
+          "scenario": "B-genuine-competition",
+          "checks": {
+            "nativeCallbackReachedOneFinalRequest": true,
+            "baselineIsTaskScoped": true,
+            "exactTaskOnWire": true,
+            "changedPathsMatchAllCopiedArtifacts": true,
+            "changedPathsMatchSnapshotDelta": true,
+            "changedPathsContainMap": true,
+            "nativeDiffSummaryMatchesEvidenceReadout": true,
+            "classifierIsAnalysisResearch": false,
+            "wireRubricUsesResearchEvidence": false,
+            "wireIncludesMapArtifact": false,
+            "wireRetainsEveryMapCriticalGroup": false,
+            "canonicalDoneShapeOnly": true,
+            "noInventedTestReceipt": true,
+            "fakeApprovalStagesOnly": true
+          },
+          "blockedDesiredAssertions": [
+            "classifierIsAnalysisResearch",
+            "wireRubricUsesResearchEvidence",
+            "wireIncludesMapArtifact",
+            "wireRetainsEveryMapCriticalGroup"
+          ],
+          "callbackError": null,
+          "wireArtifactUtf8Bytes": 5621,
+          "wireOrder": [
+            "plans/reports/261019-jev-atomic-prediction.md",
+            "plans/reports/261019-jev-atomic-scenarios.md"
+          ],
+          "wireCoverage": {
+            "sourceGraph": {
+              "retained": false,
+              "missing": [
+                "Graph below is source-confirmed, not an execution trace.",
+                "Loader:",
+                "stageNativeTodoCall",
+                "Evidence:",
+                "src/evidence-collector.ts",
+                "Micro:",
+                "Macro:",
+                "macroResult.approved",
+                "Transport:",
+                "https://api.typesafe.ai/v1/systemone"
+              ]
+            },
+            "commitBoundary": {
+              "retained": false,
+              "missing": [
+                "Native commit:",
+                "tool_result",
+                "Preflight staging alone is not commit."
+              ]
+            },
+            "distinctBranches": {
+              "retained": false,
+              "missing": [
+                "Drop:",
+                "Block with rejection debt:",
+                "Explicit verify (advisory):",
+                "Advisor:",
+                "EGC marker/env bypass:",
+                "Neither was used as remediation."
+              ]
+            },
+            "diskProvenance": {
+              "retained": false,
+              "missing": [
+                "20/20",
+                "0 mismatches.",
+                "Five runtime-origin digests",
+                "Disk equality does NOT attest all imported TypeScript in loaded memory or any historical session."
+              ]
+            },
+            "runtimeProvenance": {
+              "retained": false,
+              "missing": [
+                "runtime-origin line 5",
+                "prior isolated diagnostic/disk equality line 251",
+                "exact done attempt/reject lines 346-348"
+              ]
+            },
+            "causalLimits": {
+              "retained": false,
+              "missing": [
+                "missing persisted map is a packaging gap, not proven cause.",
+                "No approval or native completion claimed.",
+                "No captured exact rejection wire payload, so no causal attribution."
+              ]
+            }
+          },
+          "artifactSnapshot": [
+            {
+              "relativePath": "plans/reports/261019-jev-atomic-prediction.md",
+              "byteLength": 22742,
+              "sha256": "8e7aa7da2e417695a99f56cd73f815d299d58e750ffaf0fd19c62ae5826f8b6f"
+            },
+            {
+              "relativePath": "plans/reports/261019-jev-atomic-scenarios.md",
+              "byteLength": 8875,
+              "sha256": "76986b3cfe509f8ca08f0197fe259fcc250f8d2e4cdcc4f858e1423879ea5692"
+            },
+            {
+              "relativePath": "plans/reports/261019-jev-design-calculations.json",
+              "byteLength": 2334,
+              "sha256": "647e28f462c6fa7d0eed10a1a3ced17b89d234561bf1fa2b0ca516507caf4119"
+            },
+            {
+              "relativePath": "plans/reports/261019-typesafe-source-rootcause-review.md",
+              "byteLength": 18909,
+              "sha256": "7ccd02f5cac0d3025e9a8f185011735b6c47f22819de4f58eac3ea77e4b8b7dc"
+            },
+            {
+              "relativePath": "plans/reports/261019-typesafe-source-runtime-map.md",
+              "byteLength": 3735,
+              "sha256": "781c254ce6c8732251bf8eef16d418140557b0589a0fbce203a4bc0da585f553"
+            }
+          ],
+          "fixtureState": {
+            "staged": true,
+            "taskStatus": "in_progress",
+            "committedCount": 0,
+            "hostMessages": []
+          },
+          "requestEvidence": [
+            {
+              "endpoint": "https://api.typesafe.ai/v1/systemone",
+              "method": "POST",
+              "bodyBytes": 21055,
+              "requestedModel": "jev-latest",
+              "resolvedModel": null,
+              "questions": {
+                "deliverables_verdict": {
+                  "type": "choice",
+                  "instructions": "Based on `unified_diff`, `diff_summary`, `test_summary`, and `agent_work_log`, does the completed work satisfy `todo_task` and `task_requirements`? Evaluate ONLY the current sub-task in `todo_task` and `task_requirements` (`user_request` and `plan_context` are background context for the broader session; do not penalize for unstarted future tasks). Note: `unified_diff` may be summarized per file for size budget; corroborate with `diff_summary`, `test_summary`, and `agent_work_log`. Note: No separate testCommand was configured; do not penalize for 'No testCommand provided' in `test_summary`.",
+                  "criteria": {
+                    "APPROVE": "Implementation fulfills the task acceptance criteria based on unified_diff, diff_summary, and agent_work_log",
+                    "REJECT": "Implementation fails to address the task requirements or stubs out needed functionality",
+                    "NEXT_ACTION_REQUIRED": "Implementation is partial, has failing tests, or needs follow-up actions"
+                  }
+                },
+                "meets_criteria": {
+                  "type": "noul",
+                  "instructions": "Does the implementation in `unified_diff`, `diff_summary`, `test_summary`, and `agent_work_log` satisfy `todo_task` and `task_requirements`? Evaluate ONLY the current sub-task in `todo_task` and `task_requirements` (`user_request` and `plan_context` are background context for the broader session; do not penalize for unstarted future tasks). Note: `unified_diff` may be summarized per file for size budget; corroborate with `diff_summary`, `test_summary`, and `agent_work_log`. Note: No separate testCommand was configured; do not penalize for 'No testCommand provided' in `test_summary`.",
+                  "criteria": {
+                    "true": "Deliverables and evidence satisfy the current sub-task requirements",
+                    "false": "Deliverables are incomplete, missing required evidence, or fail the current sub-task criteria"
+                  }
+                },
+                "architectural_drift": {
+                  "type": "choice",
+                  "instructions": "Assess whether the changes adhere to planned architecture and safety boundaries. Updating companion unit tests (`tests/*`), plans (`plans/*`), documentation/ADRs/journals (`docs/*`), or supporting `src/*` modules is standard engineering practice and is NOT drift or scope creep:",
+                  "criteria": {
+                    "no_drift": "Strict adherence to architecture and boundaries (including companion tests, docs, plans, and supporting modules)",
+                    "unapproved_deviation": "Unplanned architectural deviation or broken safety contract",
+                    "scope_creep": "Scope creep into unrelated external projects or prohibited directories",
+                    "other": "Unrecognized architectural change"
+                  }
+                },
+                "scope_mode": {
+                  "type": "choice",
+                  "instructions": "Assess whether scope was maintained, expanded, or reduced relative to `todo_task` and `task_requirements` (not the whole plan):",
+                  "criteria": {
+                    "HOLD": "Preserves planned requirements exactly",
+                    "EXPANSION": "Justified addition of edge cases, tests, or documentation",
+                    "REDUCTION": "Omits requested functionality",
+                    "other": "Other scope modification"
+                  }
+                }
+              },
+              "state": {
+                "todo_task": "<todo_task>\nMap source callsites and verify workspace/runtime identity for TypeSafe judge and todo gates.\n</todo_task>",
+                "task_requirements": "<task_requirements>\nMap source callsites and verify workspace/runtime identity for TypeSafe judge and todo gates.\n</task_requirements>",
+                "diff_scope": "<diff_scope>\ntask-baseline: only files changed since this task started\n</diff_scope>",
+                "diff_summary": "<diff_summary>\n?? plans/reports/261019-jev-atomic-prediction.md\n?? plans/reports/261019-jev-atomic-scenarios.md\n?? plans/reports/261019-jev-design-calculations.json\n?? plans/reports/261019-typesafe-source-rootcause-review.md\n?? plans/reports/261019-typesafe-source-runtime-map.md\n</diff_summary>",
+                "test_summary": "<test_summary>\nNo testCommand provided.\n</test_summary>",
+                "deliverable_artifacts": "<deliverable_artifacts>\n\n--- Deliverable: plans/reports/261019-jev-atomic-prediction.md ---\n# Prediction Report: JEV atomic evidence, Advisor synthesis và parent acceptance\n\nNgày: 2026-10-19. Yêu cầu: `ck:predict`, red-team, nghiên cứu online, `ck:scenario`, tính toán/so sánh và giải pháp. Phạm vi: thiết kế có bằng chứng; chưa triển khai runtime hoặc gọi live JEV để benchmark.\n\n## Verdict: CAUTION\n\n**Đúng hướng: JEV nên kiểm các judgment hẹp, có evidence đủ và rõ. Không đúng nếu suy ra phải băm mọi todo thành việc li ti, JEV tự quyết định hoàn tất, hoặc mọi plan lớn đều bắt human duyệt.**\n\nKhuyến nghị: **repaired-M → H shadow → conditional cutover**. M là workflow hiện tại sau khi sửa lỗi evidence/authority đã chứng minh. H giữ task hierarchy, dùng JEV cho predicate ngữ nghĩa hẹp, Advisor reasoning thật cho synthesis/integration, human theo thẩm quyền/rủi ro hiện có. A, biến thể “child JEV pass hết thì parent done”, bị loại.\n\nKích thước todo không phải tiêu chí đủ. Một report dài có thể chỉ cần kiểm một quan hệ claim–source; một todo một dòng “thiết kế auth an toàn” vẫn là reasoning phức tạp.\n\n## Agreements (all personas align)\n\n- Code sở hữu workflow, deterministic checks và side effects; JEV không sinh implementation, root cause hay kế hoạch khắc phục mở.\n- Sửa nguồn evidence, original contract và authority composition trước; decomposition không phục hồi bằng chứng đã mất hoặc bị gán sai.\n- Giữ original obligations và parent integration. Child pass không chứng minh toàn hệ thống đạt yêu cầu.\n- Advisor khuyến nghị không phải human authorization; semantic receipt không phải native commit.\n- Missing evidence, contradiction, outage và authority conflict là các trạng thái khác nhau; không chữa HTTP503 bằng sửa implementation.\n- Không có số đo cho thấy H chính xác/rẻ/nhanh hơn trên workload này. Phải so với **repaired M**, không chỉ với đầu vào hiện tại đang lỗi.\n\n## Independent analyses and debate\n\nNăm phiên phân tích riêng đọc cùng contract/evidence, không đọc kết quả nhau ở vòng đầu. Sau khi đủ năm kết quả, parent đưa các xung đột cụ thể cho vòng phản biện. Đây là analytical subagents của `ck:predict`, không phải Agent Teams; `TeamCreate` không được runtime cung cấp.\n\n| Persona | Vòng độc lập | Sau phản biện |\n|---|---|---|\n| Architect | CAUTION, ưu tiên H | Đồng ý repaired-M trước, H shadow sau; chưa cutover |\n| Security | CAUTION, ưu tiên H có ràng buộc authority | Đồng ý có điều kiện; shadow không được mutation hoặc xuất dữ liệu ngoài policy |\n| Performance | CAUTION, ưu tiên H có accounting | Đồng ý trình tự; global batch có thể rẻ hơn H; phải đo tổng chi phí |\n| UX/DX | CAUTION, ưu tiên H; không human-every-plan | Đồng ý hướng thiết kế; tách lifecycle khỏi verification, bảo toàn research completion |\n| Devil’s Advocate | CAUTION, ưu tiên sửa M trước | Conditional GO cho phép so sánh, không cho promotion; dừng ở M nếu đủ tốt là hợp lệ |\n## Conflicts & Resolutions\n| Topic | Architect | Security | Performance | UX | Devil's Advocate | Resolution |\n|---|---|---|---|---|---|---|\n| Làm H ngay hay sửa M trước | H là hướng kiến trúc tốt | Cần vá authority trước | Không quy lợi ích sửa plumbing cho decomposition | Sửa error state trước | Sửa M có thể đã đủ | Sửa correctness làm baseline; H chỉ shadow |\n| Tiny todo hay tiny judgment | Giữ hierarchy | Decomposition không cấp quyền | Request lẻ gây nhân context | Tránh tracker hàng trăm item | Chia quá nhỏ làm mất quan hệ | Todo có ý nghĩa; predicate hẹp bên trong |\n\n... [markdown artifact summarized for size budget] ...\n\n--- Deliverable: plans/reports/261019-jev-atomic-scenarios.md ---\n# Scenario Report: JEV atomic evidence + Advisor parent review\n\nNgày: 2026-10-19. Thiết kế/điều tra, chưa triển khai runtime.\n\nDimensions analyzed: all 12 ck:scenario dimensions; User Types=agent/Advisor/human, Environment=headless/Windows/runtime mode, Business Logic=contract/scope/parent completion. Dimensions skipped: none.\n\nBảng nêu expected behavior, không tuyên bố 36 production tests đã pass. Cột bằng chứng phân biệt actual-source smoke, existing-suite, phép tính, và scenario thiết kế. Các known-source repro được mô tả trong [source review](261019-typesafe-source-rootcause-review.md).\n\n| ID | Dimension | Scenario | Severity | Expected Behavior | Evidence status |\n|---|---|---|---|---|---|\n| U1 | User Types | Agent thực thi tự khai test pass | High | Chỉ nhận receipt do host thu; claim không tự cấp quyền | Design |\n| U2 | User Types | Advisor khuyến nghị proceed nhưng không có native approval | Critical | Advice không cấp quyền mutation hoặc hoàn tất | Observed: native staging/consensus mismatch |\n| U3 | User Types | Human từ chối xác nhận đúng tập target | Critical | Không đổi task/debt; không suy consent từ model | Existing-suite coverage |\n| I1 | Input Extremes | Criterion hoặc bằng chứng bắt buộc rỗng | High | EVIDENCE_REQUIRED; không suy nội dung để chấm | Design |\n| I2 | Input Extremes | Acceptance proof\n[... 3321 chars truncated ...]\n\n</deliverable_artifacts>"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "after": {
+      "passed": 387,
+      "failed": 0,
+      "files": 37,
+      "expects": 1764,
+      "seconds": 56.27,
+      "observedCommand": "bun test ./tests \"C:/Users/thant/.omp/agent/sessions/--D--100.Software-Github-omp_extension--/2026-10-19T02-18-55-333Z_01a151f4-6be4-7573-8bb7-e95974e16080/local/typesafe-map-packet.test.ts\"",
+      "summaryText": "387 pass\n0 fail\n1764 expect() calls\nRan 387 tests across 37 files. [56.27s]",
+      "portableRegressionCommand": "bun test ./tests/task-artifact-routing.test.ts",
+      "portableFullSuiteCommand": "bun test",
+      "smokeExit": 0,
+      "constraints": {
+        "liveApiCalls": 0,
+        "nativeToolInvocations": 0,
+        "nativeResultCallbacks": 0,
+        "runtimeOrReportMutations": 0,
+        "syntheticApprovalIsSemanticEvidence": false
+      },
+      "cleanup": {
+        "ownedTempRootRemoved": true,
+        "fetchRestored": true
+      },
+      "observations": [
+        {
+          "scenario": "A-map-only",
+          "checks": {
+            "nativeCallbackReachedOneFinalRequest": true,
+            "baselineIsTaskScoped": true,
+            "exactTaskOnWire": true,
+            "changedPathsMatchAllCopiedArtifacts": true,
+            "changedPathsMatchSnapshotDelta": true,
+            "changedPathsContainMap": true,
+            "nativeDiffSummaryMatchesEvidenceReadout": true,
+            "classifierIsAnalysisResearch": true,
+            "wireRubricUsesResearchEvidence": true,
+            "wireIncludesMapArtifact": true,
+            "wireRetainsEveryMapCriticalGroup": true,
+            "canonicalDoneShapeOnly": true,
+            "noInventedTestReceipt": true,
+            "fakeApprovalStagesOnly": true
+          },
+          "blockedDesiredAssertions": [],
+          "callbackError": null,
+          "wireArtifactUtf8Bytes": 3697,
+          "wireOrder": [
+            "plans/reports/261019-typesafe-source-runtime-map.md"
+          ],
+          "wireCoverage": {
+            "sourceGraph": {
+              "retained": true,
+              "missing": []
+            },
+            "commitBoundary": {
+              "retained": true,
+              "missing": []
+            },
+            "distinctBranches": {
+              "retained": true,
+              "missing": []
+            },
+            "diskProvenance": {
+              "retained": true,
+              "missing": []
+            },
+            "runtimeProvenance": {
+              "retained": true,
+              "missing": []
+            },
+            "causalLimits": {
+              "retained": true,
+              "missing": []
+            }
+          },
+          "artifactSnapshot": [
+            {
+              "relativePath": "plans/reports/261019-typesafe-source-runtime-map.md",
+              "byteLength": 3560,
+              "sha256": "39917af60fd8e83cf1657a62787b85656b92689bfbda185e04f810ca0d4878e0"
+            }
+          ],
+          "fixtureState": {
+            "staged": true,
+            "taskStatus": "in_progress",
+            "committedCount": 0,
+            "hostMessages": []
+          },
+          "requestEvidence": [
+            {
+              "endpoint": "https://api.typesafe.ai/v1/systemone",
+              "method": "POST",
+              "bodyBytes": 11154,
+              "requestedModel": "jev-latest",
+              "resolvedModel": null,
+              "questions": {
+                "deliverables_verdict": {
+                  "type": "choice",
+                  "instructions": "Based on `deliverable_artifacts`, `test_summary`, and `agent_work_log`, does the completed work satisfy `todo_task` and `task_requirements`? Evaluate ONLY the current sub-task in `todo_task` and `task_requirements` (`user_request` and `plan_context` are background context for the broader session; do not penalize for unstarted future tasks). Note: No separate testCommand was configured; do not penalize for 'No testCommand provided' in `test_summary`.",
+                  "criteria": {
+                    "APPROVE": "Deliverables satisfy the research or documentation criteria with concrete analysis or specifications",
+                    "REJECT": "Deliverables fail to address the task requirements or omit required analysis",
+                    "NEXT_ACTION_REQUIRED": "Deliverables are partial and need follow-up actions"
+                  }
+                },
+                "meets_criteria": {
+                  "type": "noul",
+                  "instructions": "Does the research or specification evidence in `deliverable_artifacts` and `agent_work_log` satisfy `todo_task` and `task_requirements`? Evaluate ONLY the current sub-task in `todo_task` and `task_requirements` (`user_request` and `plan_context` are background context for the broader session; do not penalize for unstarted future tasks). Note: No separate testCommand was configured; do not penalize for 'No testCommand provided' in `test_summary`.",
+                  "criteria": {
+                    "true": "Deliverables and evidence satisfy the current sub-task requirements",
+                    "false": "Deliverables are incomplete, missing required evidence, or fail the current sub-task criteria"
+                  }
+                },
+                "architectural_drift": {
+                  "type": "choice",
+                  "instructions": "Assess whether the changes adhere to planned architecture and safety boundaries. Updating companion unit tests (`tests/*`), plans (`plans/*`), documentation/ADRs/journals (`docs/*`), or supporting `src/*` modules is standard engineering practice and is NOT drift or scope creep:",
+                  "criteria": {
+                    "no_drift": "Strict adherence to architecture and boundaries (including companion tests, docs, plans, and supporting modules)",
+                    "unapproved_deviation": "Unplanned architectural deviation or broken safety contract",
+                    "scope_creep": "Scope creep into unrelated external projects or prohibited directories",
+                    "other": "Unrecognized architectural change"
+                  }
+                },
+                "scope_mode": {
+                  "type": "choice",
+                  "instructions": "Assess whether scope was maintained, expanded, or reduced relative to `todo_task` and `task_requirements` (not the whole plan):",
+                  "criteria": {
+                    "HOLD": "Preserves planned requirements exactly",
+                    "EXPANSION": "Justified addition of edge cases, tests, or documentation",
+                    "REDUCTION": "Omits requested functionality",
+                    "other": "Other scope modification"
+                  }
+                }
+              },
+              "state": {
+                "todo_task": "<todo_task>\nMap source callsites and verify workspace/runtime identity for TypeSafe judge and todo gates.\n</todo_task>",
+                "task_requirements": "<task_requirements>\nMap source callsites and verify workspace/runtime identity for TypeSafe judge and todo gates.\n</task_requirements>",
+                "diff_scope": "<diff_scope>\ntask-baseline: only files changed since this task started\n</diff_scope>",
+                "diff_summary": "<diff_summary>\n?? plans/reports/261019-typesafe-source-runtime-map.md\n</diff_summary>",
+                "test_summary": "<test_summary>\nNo testCommand provided.\n</test_summary>",
+                "deliverable_artifacts": "<deliverable_artifacts>\n--- Deliverable: plans/reports/261019-typesafe-source-runtime-map.md ---\n# TypeSafe source/runtime map\n\nOriginal task (verbatim): \"Map source callsites and verify workspace/runtime identity for TypeSafe judge and todo gates.\"\n\nGraph below is source-confirmed, not an execution trace. W = D:/100.Software/Github/omp_extension; D = ~/Projects/omp_extension. Pre-repair disk snapshot: 20/20 equal, 0 mismatches. Five runtime-origin digests and baseline: [scratch](local://typesafe-map-evidence.md). Post-repair disk check: **17/20 equal**, differences in entrypoint, cook-expert-judge and evidence-collector; [full hashes](local://typesafe-postrepair-identity.json). Disk equality does NOT attest all imported TypeScript in loaded memory or any historical session. Original REJECT P=.13 remains undiagnosed: missing persisted map is a packaging gap, not proven cause. No approval or native completion claimed.\n\n## Confirmed graph (paths relative to W unless absolute)\n\n- Loader: ~/.omp/agent/extensions/typesafe-planner.ts:1 exports D/typesafe-planner.ts. Workspace typesafe-planner.ts:1445 registers extension; resolver/redactor/API CJS load relative to entrypoint.\n- Native interception: typesafe-planner.ts:2161 tool_call -> handleTodoInterception :1889 -> stageNativeTodoCall :1617. Done captures snapshot, optional test receipt and task baseline.\n- Evidence: src/evidence-collector.ts:448 -> status/diff, changed paths, tests, optional plan criteria. Native caller still does not pass planPath.\n- Micro: src/cook-expert-judge.ts:167 checks boundary/test exit/test evasion/evidence; failure cancels call.\n- Macro: native stage -> src/bicameral-consensus.ts:811 -> src/cook-expert-judge.ts:218. Collector receives actual task.content; shared applicability and 4940-byte UTF-8 artifact budget apply. Native still reads macroResult.approved, not composed consensus; Advisor heuristic adjustment remains unchanged.\n- Transport: createExtensionJudgeClient :2451 -> executeTypeSafe :2332 -> src/typesafe-api-client.cjs:340-464 retry/POST https://api.typesafe.ai/v1/systemone. Post-redaction proof loss now fails closed.\n- Native commit: staged call/input/generation/revision/targets -> tool_result :2163 requires matching successful native result and semantic effect before mirror/checkpoint update. Preflight staging alone is not commit.\n\n## Distinct branches\n\n- Drop: native stage -> src/bicameral-consensus.ts:776-805; reject or exact-target human confirmation. Policy unchanged.\n- Block with rejection debt: same trusted confirmation; not completed and debt not cleared.\n- Explicit verify (advisory): typesafe_verify_completion registration :2794 -> src/verification-gate.ts:291-467; does not commit native todo.\n- Advisor: typesafe_advisor registration :2915 -> src/bicameral-consensus.ts:1038-1223 heuristic + optional JEV, not a spawned reasoning agent or native commit.\n- EGC marker/env bypass: typesafe-planner.ts:985,1618. History rehydration: :1556. Neither was used as remediation.\n\n## Provenance and limits\n\nSession 2026-10-19T02-18-55-333Z_01a151f4-6be4-7573-8bb7-e95974e16080.jsonl: runtime-origin line 5 (fce61237); prior isolated diagnostic/disk equality line 251 (85ef9afa); exact done attempt/reject lines 346-348 (7c86b82f). No captured exact rejection wire payload, so no causal attribution. Authorized repair changed W only; proxy/target not deployed or restarted. Recorded entrypoint digest still matches D, not repaired W; five recorded digests are not all-module memory attestation. Parent owns fresh checks, Advisor review and native authority; fixture approval cannot close this task.\n\n\n[Artifact selection=exact-task-bound; selected=1; omitted=0; unreadable=0; truncated=0]\n\n</deliverable_artifacts>"
+              }
+            }
+          ]
+        },
+        {
+          "scenario": "B-genuine-competition",
+          "checks": {
+            "nativeCallbackReachedOneFinalRequest": true,
+            "baselineIsTaskScoped": true,
+            "exactTaskOnWire": true,
+            "changedPathsMatchAllCopiedArtifacts": true,
+            "changedPathsMatchSnapshotDelta": true,
+            "changedPathsContainMap": true,
+            "nativeDiffSummaryMatchesEvidenceReadout": true,
+            "classifierIsAnalysisResearch": true,
+            "wireRubricUsesResearchEvidence": true,
+            "wireIncludesMapArtifact": true,
+            "wireRetainsEveryMapCriticalGroup": true,
+            "canonicalDoneShapeOnly": true,
+            "noInventedTestReceipt": true,
+            "fakeApprovalStagesOnly": true
+          },
+          "blockedDesiredAssertions": [],
+          "callbackError": null,
+          "wireArtifactUtf8Bytes": 4914,
+          "wireOrder": [
+            "plans/reports/261019-typesafe-source-runtime-map.md",
+            "plans/reports/261019-typesafe-source-rootcause-review.md"
+          ],
+          "wireCoverage": {
+            "sourceGraph": {
+              "retained": true,
+              "missing": []
+            },
+            "commitBoundary": {
+              "retained": true,
+              "missing": []
+            },
+            "distinctBranches": {
+              "retained": true,
+              "missing": []
+            },
+            "diskProvenance": {
+              "retained": true,
+              "missing": []
+            },
+            "runtimeProvenance": {
+              "retained": true,
+              "missing": []
+            },
+            "causalLimits": {
+              "retained": true,
+              "missing": []
+            }
+          },
+          "artifactSnapshot": [
+            {
+              "relativePath": "plans/reports/261019-jev-atomic-prediction.md",
+              "byteLength": 23252,
+              "sha256": "bfaf79a681fbeb8722b0749d1dfb0931726c0f85d56bf981d45148bdb7c718a4"
+            },
+            {
+              "relativePath": "plans/reports/261019-jev-atomic-scenarios.md",
+              "byteLength": 8875,
+              "sha256": "76986b3cfe509f8ca08f0197fe259fcc250f8d2e4cdcc4f858e1423879ea5692"
+            },
+            {
+              "relativePath": "plans/reports/261019-jev-design-calculations.json",
+              "byteLength": 2334,
+              "sha256": "647e28f462c6fa7d0eed10a1a3ced17b89d234561bf1fa2b0ca516507caf4119"
+            },
+            {
+              "relativePath": "plans/reports/261019-typesafe-source-rootcause-review.md",
+              "byteLength": 22158,
+              "sha256": "1e2b2f6301f0f50af9f72af7c2524fa8d32e9d685df9c73fa8c11faa36dece33"
+            },
+            {
+              "relativePath": "plans/reports/261019-typesafe-source-runtime-map.md",
+              "byteLength": 3560,
+              "sha256": "39917af60fd8e83cf1657a62787b85656b92689bfbda185e04f810ca0d4878e0"
+            }
+          ],
+          "fixtureState": {
+            "staged": true,
+            "taskStatus": "in_progress",
+            "committedCount": 0,
+            "hostMessages": []
+          },
+          "requestEvidence": [
+            {
+              "endpoint": "https://api.typesafe.ai/v1/systemone",
+              "method": "POST",
+              "bodyBytes": 20038,
+              "requestedModel": "jev-latest",
+              "resolvedModel": null,
+              "questions": {
+                "deliverables_verdict": {
+                  "type": "choice",
+                  "instructions": "Based on `deliverable_artifacts`, `test_summary`, and `agent_work_log`, does the completed work satisfy `todo_task` and `task_requirements`? Evaluate ONLY the current sub-task in `todo_task` and `task_requirements` (`user_request` and `plan_context` are background context for the broader session; do not penalize for unstarted future tasks). Note: No separate testCommand was configured; do not penalize for 'No testCommand provided' in `test_summary`.",
+                  "criteria": {
+                    "APPROVE": "Deliverables satisfy the research or documentation criteria with concrete analysis or specifications",
+                    "REJECT": "Deliverables fail to address the task requirements or omit required analysis",
+                    "NEXT_ACTION_REQUIRED": "Deliverables are partial and need follow-up actions"
+                  }
+                },
+                "meets_criteria": {
+                  "type": "noul",
+                  "instructions": "Does the research or specification evidence in `deliverable_artifacts` and `agent_work_log` satisfy `todo_task` and `task_requirements`? Evaluate ONLY the current sub-task in `todo_task` and `task_requirements` (`user_request` and `plan_context` are background context for the broader session; do not penalize for unstarted future tasks). Note: No separate testCommand was configured; do not penalize for 'No testCommand provided' in `test_summary`.",
+                  "criteria": {
+                    "true": "Deliverables and evidence satisfy the current sub-task requirements",
+                    "false": "Deliverables are incomplete, missing required evidence, or fail the current sub-task criteria"
+                  }
+                },
+                "architectural_drift": {
+                  "type": "choice",
+                  "instructions": "Assess whether the changes adhere to planned architecture and safety boundaries. Updating companion unit tests (`tests/*`), plans (`plans/*`), documentation/ADRs/journals (`docs/*`), or supporting `src/*` modules is standard engineering practice and is NOT drift or scope creep:",
+                  "criteria": {
+                    "no_drift": "Strict adherence to architecture and boundaries (including companion tests, docs, plans, and supporting modules)",
+                    "unapproved_deviation": "Unplanned architectural deviation or broken safety contract",
+                    "scope_creep": "Scope creep into unrelated external projects or prohibited directories",
+                    "other": "Unrecognized architectural change"
+                  }
+                },
+                "scope_mode": {
+                  "type": "choice",
+                  "instructions": "Assess whether scope was maintained, expanded, or reduced relative to `todo_task` and `task_requirements` (not the whole plan):",
+                  "criteria": {
+                    "HOLD": "Preserves planned requirements exactly",
+                    "EXPANSION": "Justified addition of edge cases, tests, or documentation",
+                    "REDUCTION": "Omits requested functionality",
+                    "other": "Other scope modification"
+                  }
+                }
+              },
+              "state": {
+                "todo_task": "<todo_task>\nMap source callsites and verify workspace/runtime identity for TypeSafe judge and todo gates.\n</todo_task>",
+                "task_requirements": "<task_requirements>\nMap source callsites and verify workspace/runtime identity for TypeSafe judge and todo gates.\n</task_requirements>",
+                "diff_scope": "<diff_scope>\ntask-baseline: only files changed since this task started\n</diff_scope>",
+                "diff_summary": "<diff_summary>\n?? plans/reports/261019-jev-atomic-prediction.md\n?? plans/reports/261019-jev-atomic-scenarios.md\n?? plans/reports/261019-jev-design-calculations.json\n?? plans/reports/261019-typesafe-source-rootcause-review.md\n?? plans/reports/261019-typesafe-source-runtime-map.md\n</diff_summary>",
+                "test_summary": "<test_summary>\nNo testCommand provided.\n</test_summary>",
+                "deliverable_artifacts": "<deliverable_artifacts>\n--- Deliverable: plans/reports/261019-typesafe-source-runtime-map.md ---\n# TypeSafe source/runtime map\n\nOriginal task (verbatim): \"Map source callsites and verify workspace/runtime identity for TypeSafe judge and todo gates.\"\n\nGraph below is source-confirmed, not an execution trace. W = D:/100.Software/Github/omp_extension; D = ~/Projects/omp_extension. Pre-repair disk snapshot: 20/20 equal, 0 mismatches. Five runtime-origin digests and baseline: [scratch](local://typesafe-map-evidence.md). Post-repair disk check: **17/20 equal**, differences in entrypoint, cook-expert-judge and evidence-collector; [full hashes](local://typesafe-postrepair-identity.json). Disk equality does NOT attest all imported TypeScript in loaded memory or any historical session. Original REJECT P=.13 remains undiagnosed: missing persisted map is a packaging gap, not proven cause. No approval or native completion claimed.\n\n## Confirmed graph (paths relative to W unless absolute)\n\n- Loader: ~/.omp/agent/extensions/typesafe-planner.ts:1 exports D/typesafe-planner.ts. Workspace typesafe-planner.ts:1445 registers extension; resolver/redactor/API CJS load relative to entrypoint.\n- Native interception: typesafe-planner.ts:2161 tool_call -> handleTodoInterception :1889 -> stageNativeTodoCall :1617. Done captures snapshot, optional test receipt and task baseline.\n- Evidence: src/evidence-collector.ts:448 -> status/diff, changed paths, tests, optional plan criteria. Native caller still does not pass planPath.\n- Micro: src/cook-expert-judge.ts:167 checks boundary/test exit/test evasion/evidence; failure cancels call.\n- Macro: native stage -> src/bicameral-consensus.ts:811 -> src/cook-expert-judge.ts:218. Collector receives actual task.content; shared applicability and 4940-byte UTF-8 artifact budget apply. Native still reads macroResult.approved, not composed consensus; Advisor heuristic adjustment remains unchanged.\n- Transport: createExtensionJudgeClient :2451 -> executeTypeSafe :2332 -> src/typesafe-api-client.cjs:340-464 retry/POST https://api.typesafe.ai/v1/systemone. Post-redaction proof loss now fails closed.\n- Native commit: staged call/input/generation/revision/targets -> tool_result :2163 requires matching successful native result and semantic effect before mirror/checkpoint update. Preflight staging alone is not commit.\n\n## Distinct branches\n\n- Drop: native stage -> src/bicameral-consensus.ts:776-805; reject or exact-target human confirmation. Policy unchanged.\n- Block with rejection debt: same trusted confirmation; not completed and debt not cleared.\n- Explicit verify (advisory): typesafe_verify_completion registration :2794 -> src/verification-gate.ts:291-467; does not commit native todo.\n- Advisor: typesafe_advisor registration :2915 -> src/bicameral-consensus.ts:1038-1223 heuristic + optional JEV, not a spawned reasoning agent or native commit.\n- EGC marker/env bypass: typesafe-planner.ts:985,1618. History rehydration: :1556. Neither was used as remediation.\n\n## Provenance and limits\n\nSession 2026-10-19T02-18-55-333Z_01a151f4-6be4-7573-8bb7-e95974e16080.jsonl: runtime-origin line 5 (fce61237); prior isolated diagnostic/disk equality line 251 (85ef9afa); exact done attempt/reject lines 346-348 (7c86b82f). No captured exact rejection wire payload, so no causal attribution. Authorized repair changed W only; proxy/target not deployed or restarted. Recorded entrypoint digest still matches D, not repaired W; five recorded digests are not all-module memory attestation. Parent owns fresh checks, Advisor review and native authority; fixture approval cannot close this task.\n\n--- Deliverable: plans/reports/261019-typesafe-source-rootcause-review.md ---\n# Source review: TypeSafe JEV, todo và Advisor\n\nNgày: 2026-10-19. Phạm vi: review/điều tra; không sửa runtime, test, threshold, loader hoặc triển khai. Báo cáo thiết kế `ck:predict` theo yêu cầu bổ sung sẽ tách riêng.\n\n## Kết luận\n\n**Giả thuyết input gửi judge có vấn đề được củng cố bằng các lỗi tái hiện ở code tích hợp. Chưa có bằng chứng để kết luận JEV luôn sai hoặc đo tỷ lệ chính xác của JEV trên công việc này.** Các lỗi gồm mất hợp đồng/bằng chứng, diff không đúng task, biến lỗi dịch vụ thành yêu cầu sửa code, quyền quyết định không nhất quán và Advisor nội bộ không phải reasoning agent.\n\nCó thêm lỗi an toàn ngoài triệu chứng chấm thấp: native history không rehydrate, EGC marker có thể làm planner bỏ qua gate, và native completion bỏ qua consensus escalation. Không dùng các đường này để vượt gate.\n\n## Phạm vi và phương pháp\n\n- Đọc source triển khai đư\n[Artifact truncated; omitted content is not evidence of completeness.]\n\n[Artifact selection=exact-task-bound; selected=2; omitted=3; unreadable=0; truncated=1]\n\n</deliverable_artifacts>"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "activationPreflight": {
+    "command": "node tools/sync-baseline.cjs --dry-run",
+    "exit": 0,
+    "baselineFilesAtObservation": 282,
+    "outputSummary": "Preflight succeeded for 282 baseline files. Dry run completed; no lock, backup, staging, journal, or filesystem mutation was performed.",
+    "limits": "Snapshot before subsequent handoff/report edits. Re-run preflight before authorized activation and inspect all actions, including global allowlist copies. Not deployment or loaded-runtime proof."
+  },
+  "originalRejection": {
+    "target": "Map source callsites and verify workspace/runtime identity for TypeSafe judge and todo gates.",
+    "operation": "done",
+    "gate": "Gate 2 Macro-Check",
+    "taskType": "analysis_research",
+    "verdict": "REJECT",
+    "p": 0.13,
+    "callId": "call_3dfe0a8ce60b471ca8bdd395b521b523|fc_0330017500a72c73016ad580b468f48191b99f746ec9590baf",
+    "recordIds": [
+      "b4344716",
+      "7b44baeb",
+      "7c86b82f"
+    ],
+    "session": "2026-10-19T02-18-55-333Z_01a151f4-6be4-7573-8bb7-e95974e16080",
+    "limits": "Exact original wire/full answers/resolved model unavailable; no retrospective causal attribution or original native completion."
+  },
+  "workspaceAdvisorReview": {
+    "verdict": "proceed",
+    "scope": "Accept bounded workspace source repair; no blocking production defect found in review. Not deployment/original mapping approval.",
+    "remainingCoverageGap": "Negative fixture specifically inducing artifact loss during final preparation before POST was not run; recommended before deployment validation."
+  },
+  "nativeCompletionReceipts": [
+    {
+      "operation": "done",
+      "target": "Repair research-report applicability and task-aware evidence delivery without weakening acceptance or changing runtime deployment.",
+      "observedNativeStatus": "completed",
+      "observedOverall": "1/19 done, 7 open, 11 blocked",
+      "attemptsForThisTarget": 1,
+      "limits": "Source acceptance only; does not attest repaired code loaded by Main.",
+      "session": "2026-10-19T02-18-55-333Z_01a151f4-6be4-7573-8bb7-e95974e16080",
+      "recordId": "e824e6e7",
+      "recordLine": 870,
+      "toolCallId": "call_d93b430bd9ee4ecc9d9efce36c06daa2|fc_093cbc92371a0396016ad58b6f1cc0819188f652b3480fe3ab",
+      "recordTimestamp": "2026-10-19T03:15:53.444Z"
+    },
+    {
+      "operation": "done",
+      "target": "Verify authorized plumbing changes with preserved competition assertions, full affected modules and actual callback smoke.",
+      "observedNativeStatus": "completed",
+      "observedOverall": "2/19 done, 6 open, 11 blocked",
+      "attemptsForThisTarget": 1,
+      "limits": "Verification acceptance only; not original mapping approval or activation.",
+      "session": "2026-10-19T02-18-55-333Z_01a151f4-6be4-7573-8bb7-e95974e16080",
+      "recordId": "7c331054",
+      "recordLine": 881,
+      "toolCallId": "call_d02f879de2f64285984a6bb052f324a2|fc_093cbc92371a0396016ad58b7f93088191a34da51e5a680039",
+      "recordTimestamp": "2026-10-19T03:16:09.396Z"
+    },
+    {
+      "operation": "done",
+      "target": "Map source callsites and verify workspace/runtime identity for TypeSafe judge and todo gates.",
+      "observedNativeStatus": "completed",
+      "observedOverall": "3/19 done, 16 open",
+      "attemptsSinceMaterialEvidenceChange": 1,
+      "session": "2026-10-19T02-18-55-333Z_01a151f4-6be4-7573-8bb7-e95974e16080",
+      "recordId": "d309dc2a",
+      "recordTimestamp": "2026-10-19T03:27:29.505Z",
+      "toolCallId": "call_50df3b7ca3cc48e0a1a8beb7b9f62d09|fc_093cbc92371a0396016ad58e251b9c8191a5b883c7e187a7bb",
+      "limits": "Literal source/runtime mapping only. Does not attest corrected runtime activation, historical rejection cause, or other composites."
+    }
+  ],
+  "unblockReceipts": [
+    {
+      "operation": "unblock",
+      "target": "Review every discovered source subsystem and substantiate defects with executable or trace evidence.",
+      "phase": "Source review and root-cause verification",
+      "overall": "Overall: 2/19 done, 7 open, 10 blocked.",
+      "committed": true,
+      "reason": "Old source-authorization/failing-test condition superseded; per-target readiness review restored. No completion or debt reset."
+    },
+    {
+      "operation": "unblock",
+      "target": "Verify JEV request construction, response parsing, rubric selection and threshold behavior against a failed case.",
+      "phase": "Source review and root-cause verification",
+      "overall": "Overall: 2/19 done, 8 open, 9 blocked.",
+      "committed": true,
+      "reason": "Old source-authorization/failing-test condition superseded; per-target readiness review restored. No completion or debt reset."
+    },
+    {
+      "operation": "unblock",
+      "target": "Reproduce todo blocked/drop rejection in isolation and verify operation-target evidence pairing.",
+      "phase": "Source review and root-cause verification",
+      "overall": "Overall: 2/19 done, 9 open, 8 blocked.",
+      "committed": true,
+      "reason": "Old source-authorization/failing-test condition superseded; per-target readiness review restored. No completion or debt reset."
+    },
+    {
+      "operation": "unblock",
+      "target": "Verify Advisor remediation and authoritative re-evaluation using a complete failed evidence chain.",
+      "phase": "Source review and root-cause verification",
+      "overall": "Overall: 2/19 done, 10 open, 7 blocked.",
+      "committed": true,
+      "reason": "Old source-authorization/failing-test condition superseded; per-target readiness review restored. No completion or debt reset."
+    },
+    {
+      "operation": "unblock",
+      "target": "Run bun test, affected-module checks and isolated changed-path smoke to discriminate root-cause hypotheses without changing verification assets.",
+      "phase": "Source review and root-cause verification",
+      "overall": "Overall: 2/19 done, 11 open, 6 blocked.",
+      "committed": true,
+      "reason": "Old source-authorization/failing-test condition superseded; per-target readiness review restored. No completion or debt reset."
+    },
+    {
+      "operation": "unblock",
+      "target": "Analyze appropriate boundaries for JEV atomic judgments versus Advisor and human review of large todos and plans.",
+      "phase": "Source review and root-cause verification",
+      "overall": "Overall: 2/19 done, 12 open, 5 blocked.",
+      "committed": true,
+      "reason": "Old source-authorization/failing-test condition superseded; per-target readiness review restored. No completion or debt reset."
+    },
+    {
+      "operation": "unblock",
+      "target": "Red-team the proposed decomposition and identify integration, authority, evidence and failure-recovery risks.",
+      "phase": "Source review and root-cause verification",
+      "overall": "Overall: 2/19 done, 13 open, 4 blocked.",
+      "committed": true,
+      "reason": "Old source-authorization/failing-test condition superseded; per-target readiness review restored. No completion or debt reset."
+    },
+    {
+      "operation": "unblock",
+      "target": "Research current official online best practices for accurate and efficient TypeSafe JEV judgments.",
+      "phase": "Source review and root-cause verification",
+      "overall": "Overall: 2/19 done, 14 open, 3 blocked.",
+      "committed": true,
+      "reason": "Old source-authorization/failing-test condition superseded; per-target readiness review restored. No completion or debt reset."
+    },
+    {
+      "operation": "unblock",
+      "target": "Build and exercise scenario cases for small independent judgments, parent acceptance, rejection and unavailable-service transitions.",
+      "phase": "Source review and root-cause verification",
+      "overall": "Overall: 2/19 done, 15 open, 2 blocked.",
+      "committed": true,
+      "reason": "Old source-authorization/failing-test condition superseded; per-target readiness review restored. No completion or debt reset."
+    },
+    {
+      "operation": "unblock",
+      "target": "Calculate and compare request, context, cost and reliability tradeoffs without presenting assumptions as measurements.",
+      "phase": "Source review and root-cause verification",
+      "overall": "Overall: 2/19 done, 16 open, 1 blocked.",
+      "committed": true,
+      "reason": "Old source-authorization/failing-test condition superseded; per-target readiness review restored. No completion or debt reset."
+    },
+    {
+      "operation": "unblock",
+      "target": "Synthesize independent five-persona ck:predict verdict and an evidence-backed implementation-ready solution in Vietnamese.",
+      "phase": "Source review and root-cause verification",
+      "overall": "Overall: 2/19 done, 17 open.",
+      "committed": true,
+      "reason": "Old source-authorization/failing-test condition superseded; per-target readiness review restored. No completion or debt reset.",
+      "recordingNote": "Successful native result explicitly showed this target pending and omitted the zero-blocked suffix. Local parser expected an explicit0 and raised after the successful mutation. No mutation was retried."
+    }
+  ],
+  "latestNativeSnapshot": {
+    "observedAtUtc": "2026-10-19",
+    "total": 23,
+    "completed": 3,
+    "open": 20,
+    "blocked": 0,
+    "source": "Actual native todo view after fresh source-review rejection",
+    "limits": "Two distinct targets have rejected native done attempts (source review and verification); other18open targets remain independently pending/unattempted. No more unsafe context-exporting remote completion checks."
+  },
+  "recoveryDebate": {
+    "personas": [
+      "Architect",
+      "Security",
+      "Performance",
+      "UX",
+      "DevilsAdvocate"
+    ],
+    "independentPasses": 5,
+    "explicitDebate": true,
+    "verdict": "CAUTION",
+    "correction": "Identity verification does not require identity equality or deployment. All personas and the same-operation Advisor withdrew the added activation prerequisite for literal mapping. One materially evidence-updated native evaluation then committed.",
+    "noRuntimeChangesDuringDebate": true
+  },
+  "securityFindings": [
+    {
+      "rule_id": "RECOVERY-SEC-01",
+      "title": "A writable EGC sentinel disables the native todo gate without a live replacement",
+      "summary": "An agent or repository author can create .omp/egc.json, after which every native todo preflight returns before target binding, rejection-debt confirmation, or completion/drop verification. The planner checks only file existence, not whether EGC is loaded, enforcing, or initialized. Even when EGC is loaded, an absent or malformed contract at session_start leaves K null and its interceptor returns without enforcing anything. This is a reachable fail-open delegation path, not legitimate task reactivation. No deployed instance or exploit execution was verified.",
+      "severity": "high",
+      "confidence": "high",
+      "category": "Authorization / fail-open gate delegation",
+      "locations": [
+        {
+          "path": "typesafe-planner.ts",
+          "start_line": 985,
+          "end_line": 989,
+          "role": "Agent-writable sentinel is treated as authority"
+        },
+        {
+          "path": "typesafe-planner.ts",
+          "start_line": 1617,
+          "end_line": 1621,
+          "role": "All native todo controls are skipped"
+        },
+        {
+          "path": "src/egc.ts",
+          "start_line": 280,
+          "end_line": 286,
+          "role": "Replacement gate is inactive when no contract was initialized"
+        },
+        {
+          "path": "src/egc.ts",
+          "start_line": 392,
+          "end_line": 397,
+          "role": "Missing or invalid startup contract leaves replacement inactive"
+        }
+      ],
+      "cwe": [
+        "CWE-862",
+        "CWE-807"
+      ],
+      "evidence": [
+        {
+          "label": "Untrusted source to authorization bypass",
+          "explanation": "hasActiveEGC accepts existsSync(cwd/.omp/egc.json), and stageNativeTodoCall immediately returns when it is true. The planner's nearby write/edit restrictions cover todo files, its global proxy and named TypeSafe infrastructure, not this EGC contract sentinel (typesafe-planner.ts:1897–1984). Ordinary workspace writes can therefore change who enforces todo without trusted host approval.",
+          "excerpt": "if (hasActiveEGC(getProjectDir(ctx))) return;"
+        },
+        {
+          "label": "No replacement-enforcement guarantee",
+          "explanation": "EGC loads K only at session_start, setting it to null for absent or invalid JSON. Its tool_call handler starts with if (!K) return. Creating the sentinel later can disable the planner while EGC remains inactive; file presence also says nothing about whether the separate EGC extension was loaded.",
+          "excerpt": "if (!K) return;"
+        },
+        {
+          "label": "Documented intent is not an enforcement handshake",
+          "explanation": "The deconfliction design explicitly proposes existence-based delegation and acknowledges an ungated-task risk, but its notification mitigation does not establish that another gate actually owns the operation.",
+          "excerpt": "plans/261004-redteam-egc-hardening/phase-04-deconfliction-and-privilege-guard.md:15–33,55–57"
+        }
+      ],
+      "anchor": "typesafe-planner.ts:1618",
+      "remediation": "Do not use EGC activation as blocked-task recovery. In a separately authorized hardening change, delegate only through trusted host-owned registration confirming an initialized enforcing replacement; absent, invalid, shadow-only, or unloaded replacement must not disable the current gate. Add negative regressions for mid-session sentinel creation, malformed contracts and unloaded EGC without weakening existing assertions."
+    },
+    {
+      "rule_id": "RECOVERY-SEC-02",
+      "title": "Native completion ignores the final bicameral human-escalation verdict",
+      "summary": "The native done path calls runBicameralMacroCheck but authorizes completion using only macro.macroResult.approved, the JEV sub-result. When the Advisor disallows or is uncertain and JEV approves, the wrapper deliberately returns HUMAN_ESCALATION; that verdict is ignored, no trusted UI confirmation is requested, and an approved DONE report is staged. A later matching native result can commit it. This is an actual authority-control omission, not evidence that either of the two recently completed source targets encountered a conflict.",
+      "severity": "high",
+      "confidence": "high",
+      "category": "Authorization / ignored consensus decision",
+      "locations": [
+        {
+          "path": "typesafe-planner.ts",
+          "start_line": 1822,
+          "end_line": 1868,
+          "role": "Uses JEV sub-result rather than authoritative consensus"
+        },
+        {
+          "path": "src/bicameral-consensus.ts",
+          "start_line": 521,
+          "end_line": 545,
+          "role": "Advisor can independently disallow completion"
+        },
+        {
+          "path": "src/bicameral-consensus.ts",
+          "start_line": 731,
+          "end_line": 753,
+          "role": "Conflicts require human authority"
+        },
+        {
+          "path": "src/bicameral-consensus.ts",
+          "start_line": 827,
+          "end_line": 869,
+          "role": "Preserves separate consensus verdict and macro sub-result"
+        }
+      ],
+      "cwe": [
+        "CWE-862",
+        "CWE-841"
+      ],
+      "evidence": [
+        {
+          "label": "Attacker-influenced input reaches separate decisions",
+          "explanation": "Task evidence, test summary, artifacts and agent work log feed the Advisor and JEV. The Advisor has independent unsafe-operation and explicit-failure refusal branches. JEV approval does not overwrite the Advisor verdict; runBicameralMacroCheck returns both decisions.",
+          "excerpt": "return { ...decision, macroResult: jevMacro };"
+        },
+        {
+          "label": "Required confirmation is skipped",
+          "explanation": "arbitrateConsensus maps DISALLOW plus APPROVE, and UNCERTAIN plus APPROVE, to HUMAN_ESCALATION. The native done consumer checks only !macro.macroResult.approved before creating an approved report and staged operation. Unlike the nearby drop branch, it never handles HUMAN_ESCALATION.",
+          "excerpt": "if (!macro.macroResult.approved) {"
+        },
+        {
+          "label": "Regression intent, not exercised verification",
+          "explanation": "Read-only inspection of tests/bicameral-consensus.test.ts:187–235 shows explicit expectations that DISALLOW/APPROVE and UNCERTAIN/APPROVE require HUMAN_ESCALATION. Those helper assertions do not establish enforcement by the native done consumer.",
+          "excerpt": null
+        }
+      ],
+      "anchor": "typesafe-planner.ts:1845",
+      "remediation": "In separately authorized hardening, make the final consensus verdict control native done: stage AUTO_APPROVE only, or an explicitly permitted HUMAN_ESCALATION after fresh trusted host/UI authorization bound to the exact operation and targets. Preserve rejection/reconciliation. Include native-consumer regressions for disagreement, headless execution and stale confirmation; do not blanket-block independent research or treat benign quoted safety references as proof of an actual unsafe operation."
+    },
+    {
+      "rule_id": "RECOVERY-SEC-03",
+      "title": "The done gate can omit changes made after its pre-test workspace snapshot",
+      "summary": "With a task-start baseline, native done captures its afterSnapshot before executing the agent-supplied testCommand. collectTaskEvidence computes changedFiles from that older snapshot, then filters current Git status and diffs to that list. A test command or invoked test script can modify another tracked file after the snapshot; that change is omitted from both deterministic boundary/evasion checks and the semantic packet. Freshness checks cover input and todo generation/revision, not workspace contents, so a successful check can stage completion for evidence that excludes the final tree.",
+      "severity": "high",
+      "confidence": "high",
+      "category": "Evidence integrity / time-of-check-time-of-use",
+      "locations": [
+        {
+          "path": "typesafe-planner.ts",
+          "start_line": 1768,
+          "end_line": 1792,
+          "role": "Captures workspace before running caller-controlled tests"
+        },
+        {
+          "path": "src/evidence-collector.ts",
+          "start_line": 465,
+          "end_line": 505,
+          "role": "Derives filtered evidence from pre-test snapshot"
+        },
+        {
+          "path": "typesafe-planner.ts",
+          "start_line": 1671,
+          "end_line": 1685,
+          "role": "Freshness assertions do not compare workspace state"
+        },
+        {
+          "path": "typesafe-planner.ts",
+          "start_line": 2196,
+          "end_line": 2208,
+          "role": "Native result binding does not revalidate checked workspace"
+        }
+      ],
+      "cwe": [
+        "CWE-367",
+        "CWE-841"
+      ],
+      "evidence": [
+        {
+          "label": "Direct source-to-omission path",
+          "explanation": "params.testCommand executes after captureWorkspaceSnapshot. The same earlier snapshot is passed as afterSnapshot. With a baseline, the collector uses diffSnapshots(baseline, afterSnapshot) and only iterates those filenames when selecting current porcelain entries and tracked diffs. No concurrency assumption or payload execution is needed to identify this ordering.",
+          "excerpt": "baseline: state.taskBaselines.get(task.content) ?? state.lastCheckpoint,\nafterSnapshot: snapshot,"
+        },
+        {
+          "label": "Nearby controls bind metadata, not final bytes",
+          "explanation": "assertApprovalFresh protects canonical input hash, generation, revision and phase/index/content bindings. These are valuable replay controls but do not notice test-driven file changes. The saved workspaceSnapshot is later used as a baseline/checkpoint rather than compared against the live tree before staging or commit.",
+          "excerpt": "if (staged.op === \"done\") state.lastCheckpoint = staged.workspaceSnapshot;"
+        }
+      ],
+      "anchor": "typesafe-planner.ts:1776",
+      "remediation": "Separately authorize a narrow evidence-ordering repair: collect the verification snapshot after tests finish, bind the judged packet to its workspace/evidence digest, and invalidate/re-evaluate if relevant bytes change before authorization/commit. Add an isolated regression where the test command modifies a second file absent from the pre-test snapshot; assert that it reaches boundary/evasion and macro evidence. Do not rerun unchanged semantic evidence or claim a saved report hash proves the current workspace."
+    },
+    {
+      "rule_id": "RECOVERY-SEC-04",
+      "title": "Session hydration restores task status but discards rejection debt",
+      "summary": "Rejection reasons and remediation debt exist only in factory-owned maps. session_start, session_switch, session_branch and session_tree clear those maps, while phasesFromBranch restores only todo phases. After an ordinary session transition retaining an unfinished task, the resumed agent can block it without the previously required rejected-task human confirmation because rejectedBlock sees empty maps. Task completion still has its normal gate; this is loss of debt and its block-authorization requirement, not automatic completion or a stale approval being restored.",
+      "severity": "medium",
+      "confidence": "high",
+      "category": "Cross-session authorization state / debt persistence",
+      "locations": [
+        {
+          "path": "typesafe-planner.ts",
+          "start_line": 1556,
+          "end_line": 1574,
+          "role": "Hydrates native phase state only"
+        },
+        {
+          "path": "typesafe-planner.ts",
+          "start_line": 1598,
+          "end_line": 1609,
+          "role": "Deletes failure and remediation maps"
+        },
+        {
+          "path": "typesafe-planner.ts",
+          "start_line": 1742,
+          "end_line": 1751,
+          "role": "Human confirmation depends solely on those maps"
+        },
+        {
+          "path": "typesafe-planner.ts",
+          "start_line": 2298,
+          "end_line": 2301,
+          "role": "Session transitions invoke debt-clearing invalidation"
+        }
+      ],
+      "cwe": [
+        "CWE-862",
+        "CWE-841"
+      ],
+      "evidence": [
+        {
+          "label": "Persisted contract and volatile debt diverge",
+          "explanation": "The factory initializes empty pendingRemediations and lastFailureReasonByTask maps. Gate rejection records them in memory. invalidateTodoState clears them and repopulates phases from the branch, without reconstructing rejection history.",
+          "excerpt": "state.pendingRemediations.clear();\nstate.consecutiveFailuresByTask.clear();\nstate.lastFailureReasonByTask.clear();"
+        },
+        {
+          "label": "Resumed agent receives a weaker block requirement",
+          "explanation": "rejectedBlock is true only when the selected task is present in one of those maps. Therefore an unchanged rejected task restored as pending/in_progress loses the human-confirmed-block requirement following lifecycle invalidation. The host lifecycle transition itself need not be malicious.",
+          "excerpt": "targets.some((task) => state.lastFailureReasonByTask.has(task.content) || state.pendingRemediations.has(task.content))"
+        },
+        {
+          "label": "Important legitimate behavior remains distinct",
+          "explanation": "Within one factory/session, unblock/start retain the task as open and do not clear debt (typesafe-planner.ts:992,1122–1126,2255–2282). tests/todo-block-remediation.test.ts:112–139 documents that intended behavior. A repository handoff can document debt but is not currently an authenticated runtime debt store.",
+          "excerpt": null
+        }
+      ],
+      "anchor": "typesafe-planner.ts:1604",
+      "remediation": "For the current workflow, preserve original rejection/debt in the sanitized handoff, reconcile with actual native state on resume, and do not claim runtime debt durability or restore approvals from agent-authored JSON. Any runtime persistence change needs separate authorization and trusted host/session-owned rejection entries keyed to workspace/session and exact contract identity; clear transient approvals on lifecycle changes while retaining still-applicable debt. Add resume/branch tests for rejected-task confirmation, not only staged-call invalidation."
+    },
+    {
+      "rule_id": "RECOVERY-SEC-05",
+      "title": "EGC treats an agent-declared blocker as a successful completion check",
+      "summary": "When EGC is the enforcing replacement gate, the agent-accessible egc_blocked tool sets a task's ledger status to blocked using caller-supplied reason/tried strings without trusted approval. attempt then returns null for blocked tasks before checking contract approval or running verification. The todo done interceptor interprets null as success and allows native completion. The ledger remains blocked, so this is not a verified ledger entry, but it can produce native completed state without evidence and can also permit drop/rm. This differs materially from the planner's legitimate unblock behavior.",
+      "severity": "high",
+      "confidence": "high",
+      "category": "Workflow authorization / blocker-to-completion bypass",
+      "locations": [
+        {
+          "path": "src/egc.ts",
+          "start_line": 254,
+          "end_line": 260,
+          "role": "Blocked status bypasses approval and evidence checks"
+        },
+        {
+          "path": "src/egc.ts",
+          "start_line": 307,
+          "end_line": 318,
+          "role": "Null attempt result permits native done and blocked tasks may be removed"
+        },
+        {
+          "path": "src/egc.ts",
+          "start_line": 329,
+          "end_line": 340,
+          "role": "Agent tool sets blocked state without trusted confirmation"
+        }
+      ],
+      "cwe": [
+        "CWE-841",
+        "CWE-862"
+      ],
+      "evidence": [
+        {
+          "label": "Agent-controlled blocker source",
+          "explanation": "egc_blocked accepts an exact task or ID plus reason and tried strings and sets r.status to blocked. It does not require real attempts, a trusted UI confirmation, or an approved contract.",
+          "excerpt": "r.status = \"blocked\"; r.note = `${p.reason} | tried: ${p.tried}`; save();"
+        },
+        {
+          "label": "Blocker reaches native-completion permission",
+          "explanation": "attempt returns null immediately for blocked entries; the done loop interprets a null message as permission to set the local simulated state to completed and does not add a blocking problem. The hook then allows the host operation.",
+          "excerpt": "if (t.status === \"blocked\") return null;"
+        },
+        {
+          "label": "Scope and deployment limit",
+          "explanation": "This applies only when the separate EGC extension owns gating. It does not demonstrate EGC is active in the current Main runtime, nor invalidate the two observed native source-task commits. tests/egc.test.ts:26–87 checks registration/init, not this blocker transition.",
+          "excerpt": null
+        }
+      ],
+      "anchor": "src/egc.ts:256",
+      "remediation": "Do not adopt egc_blocked or switch to EGC as a recovery shortcut. In separately authorized EGC hardening, blocked must remain unverified and must not satisfy done; preserve the unfinished contract and require genuine human authority for cancellation/removal according to policy. Add native-operation regressions covering egc_blocked followed by done/drop/rm under approved and unapproved contracts, with truthful ledger/native status assertions."
+    },
+    {
+      "rule_id": "RECOVERY-SEC-06",
+      "title": "Artifact collection follows workspace links into host-readable private files",
+      "summary": "Artifact selection rejects lexical traversal and absolute filenames, but reads accepted workspace paths without resolving and constraining their real targets. On a host supporting symbolic links or junctions, an agent/repository-controlled reports/proof.md link can point outside the repository. Both untracked-diff collection and deliverable collection follow it; its contents can then be sent to the judge. Final redaction removes recognized credentials, not arbitrary confidential prose or personal data. This is a conditional external-file disclosure path; no such link or disclosure was observed in the active workspace.",
+      "severity": "medium",
+      "confidence": "high",
+      "category": "Evidence privacy / link-following outside trust boundary",
+      "locations": [
+        {
+          "path": "typesafe-planner.ts",
+          "start_line": 451,
+          "end_line": 463,
+          "role": "Lexical containment followed by a link-following read"
+        },
+        {
+          "path": "src/evidence-collector.ts",
+          "start_line": 528,
+          "end_line": 535,
+          "role": "Untracked evidence also dereferences the file"
+        },
+        {
+          "path": "src/cook-expert-judge.ts",
+          "start_line": 253,
+          "end_line": 256,
+          "role": "Collected content enters semantic evidence"
+        },
+        {
+          "path": "typesafe-planner.ts",
+          "start_line": 2369,
+          "end_line": 2403,
+          "role": "Redacted evidence is transmitted without real-target authorization"
+        },
+        {
+          "path": "src/typesafe-redact-patterns.cjs",
+          "start_line": 612,
+          "end_line": 623,
+          "role": "Redaction is credential-pattern based, not a private-content allowlist"
+        }
+      ],
+      "cwe": [
+        "CWE-59",
+        "CWE-200"
+      ],
+      "evidence": [
+        {
+          "label": "Repository-controlled filename to external-file read",
+          "explanation": "A path such as reports/proof.md passes the extension/report checks and lexical isAbsolute/.. rejection even if it resolves through a link to a private host file. readFileSync follows the link. There is no realpath/lstat containment check in these collectors.",
+          "excerpt": "content = readFileSync(path.resolve(projectDir, file), \"utf8\");"
+        },
+        {
+          "label": "Nearby redaction does not authorize external content",
+          "explanation": "The final planner transport applies preparePayload and checks redacted artifact preservation before sending. Those controls prevent recognized secret leakage and silent evidence truncation; redactString's documented operations are literal-key, token, key/value, home-directory and entropy redaction. Ordinary private prose survives and can reach the request before any verdict is returned.",
+          "excerpt": "const bodyStr = JSON.stringify(prepared);"
+        },
+        {
+          "label": "Prerequisite and bounded claim",
+          "explanation": "Exploitation requires a readable external target and a functioning symlink/junction already present or creatable on the host. Windows link policy and the live workspace were not probed. This finding does not assert that the proposed recovery bundle has already been implemented or leaked data.",
+          "excerpt": null
+        }
+      ],
+      "anchor": "typesafe-planner.ts:459",
+      "remediation": "When separately authorized, reject link-based evidence escape or validate the real target as an explicitly allowed regular file within the repository before reading; apply the same boundary to diff fallback and deliverable collection. For the immediate handoff, use a reviewed allowlist of repository-owned regular evidence files and persist only sanitized bounded summaries/manifests, not raw logs, conversation/thinking blocks, credentials or arbitrary linked content. Network redaction must not be treated as at-rest bundle privacy."
+    }
+  ],
+  "taskLedger": [
+    {
+      "snapshotIndex": 0,
+      "phase": "Source review and root-cause verification",
+      "target": "Map source callsites and verify workspace/runtime identity for TypeSafe judge and todo gates.",
+      "nativeStatus": "completed",
+      "deliverableStatus": "complete",
+      "evidencePaths": [
+        "plans/reports/261019-typesafe-source-runtime-map.md"
+      ],
+      "owner": "Parent verifier/orchestrator",
+      "nextAction": "Preserve matching native completion; do not reevaluate.",
+      "unfinishedAcceptance": [],
+      "dependency": null,
+      "limits": "Ledger is evidence, not authority; preserve full original target meaning."
+    },
+    {
+      "snapshotIndex": 1,
+      "phase": "Source review and root-cause verification",
+      "target": "Review every discovered source subsystem and substantiate defects with executable or trace evidence.",
+      "nativeStatus": "in_progress",
+      "deliverableStatus": "review_and_substantiation_complete_native_rejected",
+      "evidencePaths": [
+        "plans/reports/261019-typesafe-source-rootcause-review.md",
+        "plans/reports/261019-typesafe-source-review-acceptance.md",
+        "plans/reports/261019-typesafe-source-review-index.json",
+        "plans/reports/261019-source-review-delivery-evidence.json"
+      ],
+      "owner": "Parent verifier and thant/project runtime operator for any actual activation",
+      "nextAction": "Complete all ready planning/source work; before a new native attempt demonstrate relevant target proof survives actual collector/preparation. If runtime plumbing must change/activate, obtain scoped managed-sync/restart authority and verify that path; do not implement16findings/H just to close this review",
+      "unfinishedAcceptance": [
+        "Relevant proof delivery for this exact native evaluation is not established; new compact report is omitted in prospective deployed-source competition.",
+        "Fresh exact native done and matching successful result remain absent."
+      ],
+      "dependency": {
+        "kind": "submission_fidelity_and_conditional_runtime_authority",
+        "notRequired": [
+          "Implement all16findings or H to satisfy this review",
+          "Workspace/deployment equality",
+          "Unavailable historical Main wire"
+        ],
+        "releaseCondition": "Verified exact-task submission fidelity plus fresh independent review, then same native operation with matching successful native result; no equality/historical-wire acceptance invented"
+      },
+      "limits": "Ledger is evidence, not authority; preserve full original target meaning.",
+      "lastNativeOutcome": {
+        "operation": "done",
+        "exactTarget": "Review every discovered source subsystem and substantiate defects with executable or trace evidence.",
+        "requestRecord": "b2b6000c",
+        "rejectionRecord": "8bcae43c",
+        "callId": "call_1dd307433d164b8da6b90e67ddf68112|fc_0fd9afe64d73e743016ad59909a5e48191b94353d96ab38465",
+        "timestamp": "2026-10-19T04:13:55.973Z",
+        "classification": "code_change",
+        "verdict": "REJECT",
+        "commit": false,
+        "displayedGateScore": 0.15,
+        "rawPrimitiveValuesUnknown": true,
+        "verdictSource": "Displayed normalized native gate result, not captured raw JEV answers"
+      }
+    },
+    {
+      "snapshotIndex": 2,
+      "phase": "Source review and root-cause verification",
+      "target": "Verify JEV request construction, response parsing, rubric selection and threshold behavior against a failed case.",
+      "nativeStatus": "pending",
+      "deliverableStatus": "complete_with_recorded_limits",
+      "evidencePaths": [
+        "plans/reports/261019-typesafe-source-rootcause-review.md",
+        "plans/reports/261019-todo-recovery-evidence.json"
+      ],
+      "owner": "Parent verifier/orchestrator",
+      "nextAction": "Validate literal acceptance and relevant submission fidelity before the first exact-target native evaluation. Do not add blanket activation/historical-wire conditions or reset/drop scope.",
+      "unfinishedAcceptance": [
+        "Exact target native completion remains uncommitted; substantive deliverable does not create authority."
+      ],
+      "dependency": null,
+      "limits": "Ledger is evidence, not authority; preserve full original target meaning."
+    },
+    {
+      "snapshotIndex": 3,
+      "phase": "Source review and root-cause verification",
+      "target": "Reproduce todo blocked/drop rejection in isolation and verify operation-target evidence pairing.",
+      "nativeStatus": "pending",
+      "deliverableStatus": "complete_with_recorded_limits",
+      "evidencePaths": [
+        "plans/reports/261019-typesafe-source-rootcause-review.md",
+        "tests/todo-block-remediation.test.ts"
+      ],
+      "owner": "Parent verifier/orchestrator",
+      "nextAction": "Validate literal acceptance and relevant submission fidelity before the first exact-target native evaluation. Do not add blanket activation/historical-wire conditions or reset/drop scope.",
+      "unfinishedAcceptance": [
+        "Exact target native completion remains uncommitted; substantive deliverable does not create authority."
+      ],
+      "dependency": null,
+      "limits": "Ledger is evidence, not authority; preserve full original target meaning."
+    },
+    {
+      "snapshotIndex": 4,
+      "phase": "Source review and root-cause verification",
+      "target": "Verify Advisor remediation and authoritative re-evaluation using a complete failed evidence chain.",
+      "nativeStatus": "pending",
+      "deliverableStatus": "complete_with_recorded_limits",
+      "evidencePaths": [
+        "plans/reports/261019-todo-recovery-evidence.json",
+        "plans/reports/261019-typesafe-source-rootcause-review.md"
+      ],
+      "owner": "Parent verifier/orchestrator",
+      "nextAction": "Validate literal acceptance and relevant submission fidelity before the first exact-target native evaluation. Do not add blanket activation/historical-wire conditions or reset/drop scope.",
+      "unfinishedAcceptance": [
+        "Exact target native completion remains uncommitted; substantive deliverable does not create authority."
+      ],
+      "dependency": null,
+      "limits": "Operational rejected->Advisor->source/test remediation->verification->fresh review->original same-target approval chain is recorded. Exact historical wire and causal attribution of P=.13 are unavailable; do not invent them."
+    },
+    {
+      "snapshotIndex": 5,
+      "phase": "Source review and root-cause verification",
+      "target": "Run bun test, affected-module checks and isolated changed-path smoke to discriminate root-cause hypotheses without changing verification assets.",
+      "nativeStatus": "pending",
+      "deliverableStatus": "verification_executed_native_rejected",
+      "evidencePaths": [
+        "plans/reports/261019-todo-recovery-evidence.json",
+        "plans/reports/261019-verification-task-acceptance.md"
+      ],
+      "owner": "Parent verifier/orchestrator",
+      "nextAction": "Preserve actual completed verification receipts; obtain separate source repair authority for task-bound evidence/privacy/history/authority; no unchanged retry or scope expansion to all implementation.",
+      "unfinishedAcceptance": [
+        "Exact target native completion remains uncommitted; substantive deliverable does not create authority."
+      ],
+      "dependency": null,
+      "limits": "Ledger is evidence, not authority; preserve full original target meaning.",
+      "lastNativeOutcome": {
+        "operation": "done",
+        "exactTarget": "Run bun test, affected-module checks and isolated changed-path smoke to discriminate root-cause hypotheses without changing verification assets.",
+        "rejectionRecord": "a46e8cb1",
+        "timestamp": "2026-10-19T04:46:48.784Z",
+        "callId": "call_e5f46ae4dd564f8eb837379b518766e2|fc_0e9662d8c337af50016ad5a0be58bc8191b9390cec3be21248",
+        "displayedGateType": "code_change",
+        "displayedGateVerdict": "REJECT",
+        "displayedGateScore": 0.1,
+        "rawPrimitiveValuesUnknown": true,
+        "commit": false,
+        "requestRecord": "f4d69e6d",
+        "attemptsForThisTarget": 1,
+        "scopeReductionReasonObserved": true,
+        "rawAnswersUnknown": true,
+        "retryReady": false
+      },
+      "criterionReceiptMatrix": [
+        {
+          "criterion": "Unmodified suite",
+          "receipt": "357pass0fail1374expects35files50.79s",
+          "outcome": "Baseline green does not cover new bugs"
+        },
+        {
+          "criterion": "Isolated actual-source audit",
+          "receipt": "exit0,10.81s",
+          "outcome": "Input/contract/delta/history/authority mechanisms exercised, synthetic/no live JEV"
+        },
+        {
+          "criterion": "Full affected modules+preserved assertions",
+          "receipt": "artifact41,173pass2fail175tests10files31.31s",
+          "outcome": "Genuine desired failures discriminate JSON applicability/proof-loss hypotheses"
+        },
+        {
+          "criterion": "Separate callback smoke",
+          "receipt": "exit1,Acontrol/Bcompetition",
+          "outcome": "Actual source fixture failure, not historical Main wire"
+        },
+        {
+          "criterion": "Separately authorized F16 remediation supplement",
+          "receipt": "artifact47,387/0,1764expects37files56.27s; separate smoke0",
+          "outcome": "Original assertions preserved;25new cases only in separately authorized repair"
+        }
+      ]
+    },
+    {
+      "snapshotIndex": 6,
+      "phase": "Source review and root-cause verification",
+      "target": "Analyze appropriate boundaries for JEV atomic judgments versus Advisor and human review of large todos and plans.",
+      "nativeStatus": "pending",
+      "deliverableStatus": "complete_with_recorded_limits",
+      "evidencePaths": [
+        "plans/reports/261019-jev-atomic-prediction.md"
+      ],
+      "owner": "Parent verifier/orchestrator",
+      "nextAction": "Validate literal acceptance and relevant submission fidelity before the first exact-target native evaluation. Do not add blanket activation/historical-wire conditions or reset/drop scope.",
+      "unfinishedAcceptance": [
+        "Exact target native completion remains uncommitted; substantive deliverable does not create authority."
+      ],
+      "dependency": null,
+      "limits": "Ledger is evidence, not authority; preserve full original target meaning."
+    },
+    {
+      "snapshotIndex": 7,
+      "phase": "Source review and root-cause verification",
+      "target": "Red-team the proposed decomposition and identify integration, authority, evidence and failure-recovery risks.",
+      "nativeStatus": "pending",
+      "deliverableStatus": "complete_with_recorded_limits",
+      "evidencePaths": [
+        "plans/reports/261019-jev-atomic-prediction.md",
+        "plans/reports/261019-jev-atomic-scenarios.md"
+      ],
+      "owner": "Parent verifier/orchestrator",
+      "nextAction": "Validate literal acceptance and relevant submission fidelity before the first exact-target native evaluation. Do not add blanket activation/historical-wire conditions or reset/drop scope.",
+      "unfinishedAcceptance": [
+        "Exact target native completion remains uncommitted; substantive deliverable does not create authority."
+      ],
+      "dependency": null,
+      "limits": "Ledger is evidence, not authority; preserve full original target meaning."
+    },
+    {
+      "snapshotIndex": 8,
+      "phase": "Source review and root-cause verification",
+      "target": "Research current official online best practices for accurate and efficient TypeSafe JEV judgments.",
+      "nativeStatus": "pending",
+      "deliverableStatus": "complete_with_recorded_limits",
+      "evidencePaths": [
+        "plans/reports/261019-jev-atomic-prediction.md"
+      ],
+      "owner": "Parent verifier/orchestrator",
+      "nextAction": "Validate literal acceptance and relevant submission fidelity before the first exact-target native evaluation. Do not add blanket activation/historical-wire conditions or reset/drop scope.",
+      "unfinishedAcceptance": [
+        "Exact target native completion remains uncommitted; substantive deliverable does not create authority."
+      ],
+      "dependency": null,
+      "limits": "Ledger is evidence, not authority; preserve full original target meaning."
+    },
+    {
+      "snapshotIndex": 9,
+      "phase": "Source review and root-cause verification",
+      "target": "Build and exercise scenario cases for small independent judgments, parent acceptance, rejection and unavailable-service transitions.",
+      "nativeStatus": "pending",
+      "deliverableStatus": "complete_with_recorded_limits",
+      "evidencePaths": [
+        "plans/reports/261019-jev-atomic-scenarios.md",
+        "plans/reports/261019-jev-design-calculations.json"
+      ],
+      "owner": "Parent verifier/orchestrator",
+      "nextAction": "Validate literal acceptance and relevant submission fidelity before the first exact-target native evaluation. Do not add blanket activation/historical-wire conditions or reset/drop scope.",
+      "unfinishedAcceptance": [
+        "Exact target native completion remains uncommitted; substantive deliverable does not create authority."
+      ],
+      "dependency": null,
+      "limits": "Ledger is evidence, not authority; preserve full original target meaning."
+    },
+    {
+      "snapshotIndex": 10,
+      "phase": "Source review and root-cause verification",
+      "target": "Calculate and compare request, context, cost and reliability tradeoffs without presenting assumptions as measurements.",
+      "nativeStatus": "pending",
+      "deliverableStatus": "complete_with_recorded_limits",
+      "evidencePaths": [
+        "plans/reports/261019-jev-design-calculations.json"
+      ],
+      "owner": "Parent verifier/orchestrator",
+      "nextAction": "Validate literal acceptance and relevant submission fidelity before the first exact-target native evaluation. Do not add blanket activation/historical-wire conditions or reset/drop scope.",
+      "unfinishedAcceptance": [
+        "Exact target native completion remains uncommitted; substantive deliverable does not create authority."
+      ],
+      "dependency": null,
+      "limits": "Ledger is evidence, not authority; preserve full original target meaning."
+    },
+    {
+      "snapshotIndex": 11,
+      "phase": "Source review and root-cause verification",
+      "target": "Synthesize independent five-persona ck:predict verdict and an evidence-backed implementation-ready solution in Vietnamese.",
+      "nativeStatus": "pending",
+      "deliverableStatus": "complete_with_recorded_limits",
+      "evidencePaths": [
+        "plans/reports/261019-jev-direction-final-prediction.md",
+        "plans/261019-research-to-cook-execution/research/direction-personas.json"
+      ],
+      "owner": "Parent verifier/orchestrator",
+      "nextAction": "Validate literal acceptance and relevant submission fidelity before the first exact-target native evaluation. Do not add blanket activation/historical-wire conditions or reset/drop scope.",
+      "unfinishedAcceptance": [
+        "Exact target native completion remains uncommitted; substantive deliverable does not create authority."
+      ],
+      "dependency": null,
+      "limits": "Ledger is evidence, not authority; preserve full original target meaning."
+    },
+    {
+      "snapshotIndex": 12,
+      "phase": "Source review and root-cause verification",
+      "target": "Repair research-report applicability and task-aware evidence delivery without weakening acceptance or changing runtime deployment.",
+      "nativeStatus": "completed",
+      "deliverableStatus": "complete",
+      "evidencePaths": [
+        "plans/reports/261019-typesafe-source-rootcause-review.md",
+        "docs/typesafe-operations.md"
+      ],
+      "owner": "Parent verifier/orchestrator",
+      "nextAction": "Preserve matching native completion; do not reevaluate.",
+      "unfinishedAcceptance": [],
+      "dependency": null,
+      "limits": "Ledger is evidence, not authority; preserve full original target meaning."
+    },
+    {
+      "snapshotIndex": 13,
+      "phase": "Source review and root-cause verification",
+      "target": "Verify authorized plumbing changes with preserved competition assertions, full affected modules and actual callback smoke.",
+      "nativeStatus": "completed",
+      "deliverableStatus": "complete",
+      "evidencePaths": [
+        "tests/task-artifact-routing.test.ts",
+        "plans/reports/261019-todo-recovery-evidence.json"
+      ],
+      "owner": "Parent verifier/orchestrator",
+      "nextAction": "Preserve matching native completion; do not reevaluate.",
+      "unfinishedAcceptance": [],
+      "dependency": null,
+      "limits": "Ledger is evidence, not authority; preserve full original target meaning."
+    },
+    {
+      "snapshotIndex": 14,
+      "phase": "Source review and root-cause verification",
+      "target": "Obtain fresh Advisor review and re-evaluate the original mapping completion through the authoritative native gate.",
+      "nativeStatus": "pending",
+      "deliverableStatus": "complete_with_recorded_limits",
+      "evidencePaths": [
+        "plans/reports/261019-todo-recovery-evidence.json"
+      ],
+      "owner": "Parent verifier/orchestrator",
+      "nextAction": "Validate literal acceptance and relevant submission fidelity before the first exact-target native evaluation. Do not add blanket activation/historical-wire conditions or reset/drop scope.",
+      "unfinishedAcceptance": [
+        "Exact target native completion remains uncommitted; substantive deliverable does not create authority."
+      ],
+      "dependency": null,
+      "limits": "Fresh Advisor review and actual original same-target reevaluation are now observed; no activation requirement is added."
+    },
+    {
+      "snapshotIndex": 15,
+      "phase": "Source review and root-cause verification",
+      "target": "Review every blocked todo against current evidence and distinguish actionable internal work from real external dependencies.",
+      "nativeStatus": "pending",
+      "deliverableStatus": "complete_with_recorded_limits",
+      "evidencePaths": [
+        "plans/261019-jev-atomic-review/recovery-handoff.md",
+        "plans/reports/261019-todo-recovery-evidence.json"
+      ],
+      "owner": "Parent verifier/orchestrator",
+      "nextAction": "Validate literal acceptance and relevant submission fidelity before the first exact-target native evaluation. Do not add blanket activation/historical-wire conditions or reset/drop scope.",
+      "unfinishedAcceptance": [
+        "Exact target native completion remains uncommitted; substantive deliverable does not create authority."
+      ],
+      "dependency": null,
+      "limits": "Ledger is evidence, not authority; preserve full original target meaning."
+    },
+    {
+      "snapshotIndex": 16,
+      "phase": "Source review and root-cause verification",
+      "target": "Have Advisor define and lead scoped remediation for actionable blockers while preserving native completion authority.",
+      "nativeStatus": "pending",
+      "deliverableStatus": "complete_with_recorded_limits",
+      "evidencePaths": [
+        "plans/reports/261019-todo-recovery-evidence.json"
+      ],
+      "owner": "Parent verifier/orchestrator",
+      "nextAction": "Validate literal acceptance and relevant submission fidelity before the first exact-target native evaluation. Do not add blanket activation/historical-wire conditions or reset/drop scope.",
+      "unfinishedAcceptance": [
+        "Exact target native completion remains uncommitted; substantive deliverable does not create authority."
+      ],
+      "dependency": null,
+      "limits": "Ledger is evidence, not authority; preserve full original target meaning."
+    },
+    {
+      "snapshotIndex": 17,
+      "phase": "Source review and root-cause verification",
+      "target": "Produce a durable self-contained next-session handoff for every unresolved blocker with evidence, owner, next action and resume checks.",
+      "nativeStatus": "pending",
+      "deliverableStatus": "complete_with_recorded_limits",
+      "evidencePaths": [
+        "plans/261019-jev-atomic-review/recovery-handoff.md",
+        "plans/reports/261019-todo-recovery-evidence.json",
+        "plans/261019-research-to-cook-execution/execution-prompt.md"
+      ],
+      "owner": "Parent verifier/orchestrator",
+      "nextAction": "Validate literal acceptance and relevant submission fidelity before the first exact-target native evaluation. Do not add blanket activation/historical-wire conditions or reset/drop scope.",
+      "unfinishedAcceptance": [
+        "Exact target native completion remains uncommitted; substantive deliverable does not create authority."
+      ],
+      "dependency": null,
+      "limits": "Ledger is evidence, not authority; preserve full original target meaning."
+    },
+    {
+      "snapshotIndex": 18,
+      "phase": "Source review and root-cause verification",
+      "target": "Run independent five-persona prediction and debate on blocker recovery before further runtime changes.",
+      "nativeStatus": "pending",
+      "deliverableStatus": "complete_with_recorded_limits",
+      "evidencePaths": [
+        "plans/reports/261019-jev-current-state-and-recovery.md"
+      ],
+      "owner": "Parent verifier/orchestrator",
+      "nextAction": "Validate literal acceptance and relevant submission fidelity before the first exact-target native evaluation. Do not add blanket activation/historical-wire conditions or reset/drop scope.",
+      "unfinishedAcceptance": [
+        "Exact target native completion remains uncommitted; substantive deliverable does not create authority."
+      ],
+      "dependency": null,
+      "limits": "Ledger is evidence, not authority; preserve full original target meaning."
+    },
+    {
+      "snapshotIndex": 19,
+      "phase": "Source review and root-cause verification",
+      "target": "Audit all project research documents and unfinished plans against current implementation evidence and overlapping scope.",
+      "nativeStatus": "pending",
+      "deliverableStatus": "complete_with_recorded_limits",
+      "evidencePaths": [
+        "plans/reports/261019-all-plan-implementation-inventory.md",
+        "plans/reports/261019-all-research-implementation-coverage.md",
+        "plans/reports/261019-research-to-cook-coverage.json"
+      ],
+      "owner": "Parent verifier/orchestrator",
+      "nextAction": "Validate literal acceptance and relevant submission fidelity before the first exact-target native evaluation. Do not add blanket activation/historical-wire conditions or reset/drop scope.",
+      "unfinishedAcceptance": [
+        "Exact target native completion remains uncommitted; substantive deliverable does not create authority."
+      ],
+      "dependency": null,
+      "limits": "Ledger is evidence, not authority; preserve full original target meaning."
+    },
+    {
+      "snapshotIndex": 20,
+      "phase": "Source review and root-cause verification",
+      "target": "Create or update implementation plans for every accepted unimplemented research recommendation, including atomic JEV and real Advisor synthesis.",
+      "nativeStatus": "pending",
+      "deliverableStatus": "complete_with_recorded_limits",
+      "evidencePaths": [
+        "plans/261019-research-to-cook-execution/plan.md",
+        "plans/reports/261019-research-to-cook-coverage.json"
+      ],
+      "owner": "Parent verifier/orchestrator",
+      "nextAction": "Validate literal acceptance and relevant submission fidelity before the first exact-target native evaluation. Do not add blanket activation/historical-wire conditions or reset/drop scope.",
+      "unfinishedAcceptance": [
+        "Exact target native completion remains uncommitted; substantive deliverable does not create authority."
+      ],
+      "dependency": null,
+      "limits": "Ledger is evidence, not authority; preserve full original target meaning."
+    },
+    {
+      "snapshotIndex": 21,
+      "phase": "Source review and root-cause verification",
+      "target": "Prepare a complete dependency-ordered ck:cook --auto handoff for all unfinished in-scope work with verification and deployment authority gates.",
+      "nativeStatus": "pending",
+      "deliverableStatus": "complete_with_recorded_limits",
+      "evidencePaths": [
+        "plans/261019-research-to-cook-execution/execution-prompt.md",
+        "plans/261019-research-to-cook-execution/plan.md"
+      ],
+      "owner": "Parent verifier/orchestrator",
+      "nextAction": "Validate literal acceptance and relevant submission fidelity before the first exact-target native evaluation. Do not add blanket activation/historical-wire conditions or reset/drop scope.",
+      "unfinishedAcceptance": [
+        "Exact target native completion remains uncommitted; substantive deliverable does not create authority."
+      ],
+      "dependency": null,
+      "limits": "Ledger is evidence, not authority; preserve full original target meaning."
+    },
+    {
+      "snapshotIndex": 22,
+      "phase": "Source review and root-cause verification",
+      "target": "Validate JEV atomic evidence and Advisor synthesis through cited online research, independent council lenses and a durable adjudicated ADR; apply findings to the automatic implementation plan.",
+      "nativeStatus": "pending",
+      "deliverableStatus": "complete_with_recorded_limits",
+      "evidencePaths": [
+        "plans/261019-research-to-cook-execution/research/jev-atomic-online-verification.md",
+        "docs/decisions/ADR-20261019-jev-atomic-advisor-direction.md",
+        "plans/261019-research-to-cook-execution/plan.md"
+      ],
+      "owner": "Parent verifier/orchestrator",
+      "nextAction": "Validate literal acceptance and relevant submission fidelity before the first exact-target native evaluation. Do not add blanket activation/historical-wire conditions or reset/drop scope.",
+      "unfinishedAcceptance": [
+        "Exact target native completion remains uncommitted; substantive deliverable does not create authority."
+      ],
+      "dependency": null,
+      "limits": "Five-call online research plus independent council; no measured H superiority or deployment authority."
+    }
+  ],
+  "freshSourceReviewRecovery": {
+    "schemaVersion": 1,
+    "date": "2026-10-19",
+    "artifact": {
+      "path": "plans/reports/261019-typesafe-source-review-acceptance.md",
+      "bytes": 3590,
+      "sha256": "1c57a44ccc7ebd3ee230eb4279057fac4bfb01dd3277f87b8fcaa1803dce33e6"
+    },
+    "completeIndex": "plans/reports/261019-typesafe-source-review-index.json",
+    "advisorDiagnosis": "NativeReviewRecoveryAdvisor: review substance supported; publish compact proof, verify delivery, no unchanged native retry",
+    "initialSmoke": {
+      "exitCode": 1,
+      "classification": "scratch read-scope guard stopped before evidence reads; metadata-only diagnosis found four already-reviewed agent definitions and existing reports/todo-recovery-verification.md",
+      "correction": "Added only those already-authorized evidence categories; kept original whole-proof/16claim positive assertion and every competing input; added regular-file/hardlink/link containment checks"
+    },
+    "smoke": {
+      "exitCode": 0,
+      "bun": "1.4.0 Windows x64",
+      "scope": "prospective deployed-source/helper execution on current changed-file order, NOT exact Main baseline/wire or native operation",
+      "networkCalls": 0,
+      "nativeOperations": 0,
+      "reportBytes": 3590,
+      "changedFileCount": 117,
+      "control": {
+        "collectedBytes": 3668,
+        "collectedComplete": true,
+        "finalBytes": 7477,
+        "finalComplete": true,
+        "claimCount": 16,
+        "effectiveQuestion": "see_deployed_question_contract"
+      },
+      "competition": {
+        "collectedBytes": 8268,
+        "collectedComplete": false,
+        "finalBytes": 11152,
+        "finalComplete": false,
+        "claimCount": 0,
+        "effectiveQuestion": "see_deployed_question_contract"
+      },
+      "nativeRetryReady": false,
+      "meaning": "New compact proof is still omitted under current deployed collection; no native retry justified"
+    },
+    "limitations": [
+      "Actual deployed-source helpers and production payload preparation, injected observation-only judge client; zero network and native operations",
+      "Current117changed-file full-working-tree order is prospective, NOT Main original task baseline or exact posted wire",
+      "Guarded public project Markdown reads; no private prompt/key/raw state persisted",
+      "Positive report-only control is a diagnostic, not evidence removal from a real submission; all actual competition retained",
+      "Native3/23done20open0blocked; this new source-review target remains rejected/in_progress with debt. No approved native result is inferred"
+    ],
+    "nextAction": {
+      "owner": "thant/project runtime operator and implementation parent",
+      "action": "Complete all ready planning/source work; before a new native attempt demonstrate relevant target proof survives actual collector/preparation. If runtime plumbing must change/activate, obtain scoped managed-sync/restart authority and verify that path; do not implement16findings/H just to close this review",
+      "releaseCondition": "Verified exact-task submission fidelity plus fresh independent review, then same native operation with matching successful native result; no equality/historical-wire acceptance invented"
+    }
+  },
+  "masterHandoff": {
+    "path": "plans/261019-research-to-cook-execution/plan.md",
+    "executionPrompt": "plans/261019-research-to-cook-execution/execution-prompt.md",
+    "command": "/ck:cook --auto D:/100.Software/Github/omp_extension/plans/261019-research-to-cook-execution/plan.md",
+    "coverage": "plans/reports/261019-research-to-cook-coverage.json",
+    "council": "docs/decisions/ADR-20261019-jev-atomic-advisor-direction.md",
+    "prediction": "plans/reports/261019-jev-direction-final-prediction.md",
+    "executionStarted": false,
+    "activePlanPersisted": false,
+    "activePlanReason": "Actual setter command returned CK_SESSION_ID not set; absolute execution path is authoritative handoff."
+  },
+  "planVerification": {
+    "phaseDocuments": 10,
+    "metadataPending": 10,
+    "completeCanonicalSections": 10,
+    "boilerplatePhases": 0,
+    "coverageCounts": {
+      "legacyPlans": 33,
+      "legacyPhaseFiles": 83,
+      "researchRecommendations": 35,
+      "securityFindings": 6,
+      "masterPhases": 10,
+      "followupSecurityFindings": 1
+    },
+    "unassignedRecommendations": 0,
+    "masterCliStatus": "pending,10Pending,blocksoriginalatomic,blockedBynone",
+    "atomicCliStatus": "pending,3Pending,blockedBymaster",
+    "sourceTestsRerunForDocs": false,
+    "accountingFinalCorrection": "Shadow completion cost can validly be unavailable/null; required per-scheduled-review cash gate remains enforced. Independent final review found no further document correction."
+  },
+  "finalHandoffAdvisor": {
+    "agent": "ReviewEvidenceFinalAdvisor",
+    "verdict": "proceed_with_report_and_automatic_source_handoff",
+    "confidence": 0.97,
+    "nativeApproval": false,
+    "nativeRetryAuthorized": false,
+    "report": "## Verdict\nproceed\n\nProceed with the report and automatic source-implementation handoff. No further documentation correction was identified. **This is not native approval or authorization for another native attempt.**\n\n## Recommendation\nParent should dispatch ready implementation work using the existing master/execution prompt, without treating future implementation of the sixteen findings or H as acceptance for this completed source review.\n\nThe remaining submission-plumbing problem is demonstrated prospectively; attributing the historical P=.15 rejection to it remains **[INFERENCE]**. Keep native recovery separate:\n1. Parent assesses the already-tested F16 repair against the relevant submission path.\n2. Only if necessary, the runtime operator supplies scoped managed-sync/restart authority. Any executable repair follows the existing parent inspection, affected-module and changed-path verification contract—not new checks for this documentation handoff.\n3. After demonstrated exact-target proof delivery and fresh independent review, parent may evaluate the same Gate1/Gate2 native `done`: “Review every discovered source subsystem and substantiate defects with executable or trace evidence.” Require its matching successful native result; preserve existing debt and receipts meanwhile.\n\nNo tests, new data collection or historical-wire recovery are required for this review/handoff.\n\n## Ranked options\n1. **9/10 — Proceed with report and dependency-ordered source handoff.** Supported and actionable; empirical/activation/native obligations remain explicitly pending.\n2. **7/10 — Narrow authorized submission-runtime recovery, when needed.** Addresses demonstrated delivery failure; requires real scoped authority and verification, not blanket deployment equality.\n3. **0/10 — Retry native now, wait globally for activation, or expand review acceptance.** Unsupported; risks unchanged resampling, unnecessary blocking or scope distortion.\n\n## Findings\n- **INFO · confidence 0.99 — Coverage supported.** `plans/reports/261019-typesafe-source-review-index.json:6-60` inventories **30 files = 1 entrypoint + 19 src + 6 scripts + 4 executable tools**. The compact acceptance `:14-34` and canonical rootcause report `:21-187` preserve all **F01–F16** source/observation/limitation chains. Four agent definitions are additional comparisons; selective test inspection is disclosed.\n- **INFO · confidence 1.00 — Compact receipt is consistent.** `plans/reports/261019-source-review-delivery-evidence.json:4-7`, recovery handoff `:25`, and durable recovery evidence `:1735-1738` agree on **3590 UTF-8 bytes**, SHA-256 `1c57a44ccc7ebd3ee230eb4279057fac4bfb01dd3277f87b8fcaa1803dce33e6`. This confirms recorded metadata consistency, not a fresh hash computation.\n- **HIGH · confidence 1.00 — Delivery remains insufficient for retry.** Delivery evidence `:17-48`: report-only control retained 16 claims; **117-file competition omitted the complete report and retained 0 claim IDs**. Exit0 records successful observation, not approval. Zero network/native operations; prospective deployed-helper execution, not exact Main baseline/wire.\n- **HIGH · confidence 1.00 — Native debt is accurately preserved.** Index `:182-194` records `code_change REJECT P=.15`, no commit, unknown exact wire/causality. Handoff `:3,14-22` preserves **3/23 done,20 open,0 blocked** and earlier genuine receipts; neither synthetic staging nor advisory approval becomes native completion.\n- **INFO · confidence 0.99 — Authority is correctly scoped.** Handoff `:29-35,76-86`, master `:59,93`, and execution prompt `:32,48` make runtime activation a conditional tooling-recovery route—not a prerequisite for every independent task. No sixteen-fix/H/deployment-equality acceptance was added.\n- **INFO · confidence 0.99 — Accounting correction is consistent.** Phase08 `:45,60,65,90` permits shadow completion cost **unavailable/null with zero support**, rejects numerical completion-cost claims without positive supported denominators, and retains the complete usage-priced **scheduled-review-episode** cash gate. Native completion is not required merely to validate shadow accounting.\n\n## Confidence\n0.97\n\nReadonly document/receipt review only; no source re-audit, edits, tests or native operations.\n\n## Open questions\nNone for proceeding with the report/automatic source handoff. Parent retains native authority and completion state."
+  },
+  "journal": "docs/journals/2026-10-19-jev-atomic-direction-and-handoff.md",
+  "followupPrivateContextFinding": {
+    "schemaVersion": 1,
+    "date": "2026-10-19",
+    "finding": "F17",
+    "severity": "High",
+    "mechanism": "Deployed conversation projection explicitly admits assistant thinking blocks; native macro includes projected worklog in prepared outbound state.",
+    "sources": [
+      "C:/Users/thant/Projects/omp_extension/typesafe-planner.ts:763-764,1749,1808",
+      "C:/Users/thant/Projects/omp_extension/src/cook-expert-judge.ts:224",
+      "D:/100.Software/Github/omp_extension/typesafe-planner.ts:787-788"
+    ],
+    "probe": {
+      "exitCode": 0,
+      "fixture": "synthetic thinking block only; no real private content read or persisted",
+      "projectionRetainsSyntheticThinking": true,
+      "preparedStateRetainsSyntheticThinking": true,
+      "observedClientInvocations": 1,
+      "networkCalls": 0,
+      "nativeOperations": 0,
+      "scope": "Actual deployed helpers/production preparation with injected observation-only client, NOT captured Main wire"
+    },
+    "unsafeExistingTestReportedByAdvisor": "tests/bicameral-consensus.test.ts:416-458 expects thinking inclusion; inspect before authorized repair and replace unsafe incidental expectation with final-egress privacy regression plus positive public-evidence preservation",
+    "limitations": [
+      "No actual private thinking read/copied into the probe or persisted in this evidence",
+      "No API/network/native operation in the probe",
+      "This proves a prepared-state construction defect, not captured historical transmission or causality for gate scores"
+    ],
+    "safety": "Suspend further native remote completion checks using this path until a verified privacy-safe implementation is actually active; do not disable or bypass the native gate.",
+    "ownerAction": "Separate source authorization for typed public-context projection and tested final-egress exclusion; safe activation additionally preserves native obligations/debt and release security."
+  },
+  "freshVerificationRejection": {
+    "operation": "done",
+    "exactTarget": "Run bun test, affected-module checks and isolated changed-path smoke to discriminate root-cause hypotheses without changing verification assets.",
+    "rejectionRecord": "a46e8cb1",
+    "timestamp": "2026-10-19T04:46:48.784Z",
+    "callId": "call_e5f46ae4dd564f8eb837379b518766e2|fc_0e9662d8c337af50016ad5a0be58bc8191b9390cec3be21248",
+    "displayedGateType": "code_change",
+    "displayedGateVerdict": "REJECT",
+    "displayedGateScore": 0.1,
+    "rawPrimitiveValuesUnknown": true,
+    "commit": false,
+    "requestRecord": "f4d69e6d",
+    "attemptsForThisTarget": 1,
+    "scopeReductionReasonObserved": true,
+    "rawAnswersUnknown": true,
+    "retryReady": false
+  },
+  "activationPreflightLatest": {
+    "schemaVersion": 1,
+    "baselineFiles": 311,
+    "exitCode": 0,
+    "wallSeconds": 2.06,
+    "mutation": false,
+    "scope": "Checkpoint after first report handoff and second verification rejection; later new reports require a new final release preflight",
+    "actionCounts": {
+      "NOOP": 239,
+      "CREATE": 40,
+      "OVERWRITE": 39,
+      "PRUNE": 0
+    },
+    "globalActions": [
+      {
+        "action": "NOOP",
+        "path": "global_claude/hooks/lib/typesafe-enabled-resolver.cjs"
+      },
+      {
+        "action": "NOOP",
+        "path": "global_claude/mcp/typesafe/typesafe-api-client.cjs"
+      },
+      {
+        "action": "NOOP",
+        "path": "global_claude/mcp/typesafe/typesafe-policy-client.cjs"
+      },
+      {
+        "action": "NOOP",
+        "path": "global_claude/mcp/typesafe/typesafe-redact-patterns.cjs"
+      },
+      {
+        "action": "NOOP",
+        "path": "global_claude/mcp/typesafe/typesafe-redact.cjs"
+      },
+      {
+        "action": "NOOP",
+        "path": "global_omp_agents/advisor.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "global_omp_agents/ck-advisor.md"
+      }
+    ],
+    "productionOverwrites": [
+      {
+        "action": "OVERWRITE",
+        "path": "target/src/cook-expert-judge.ts"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/src/evidence-collector.ts"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/typesafe-planner.ts"
+      }
+    ],
+    "allActions": [
+      {
+        "action": "NOOP",
+        "path": "global_claude/hooks/lib/typesafe-enabled-resolver.cjs"
+      },
+      {
+        "action": "NOOP",
+        "path": "global_claude/mcp/typesafe/typesafe-api-client.cjs"
+      },
+      {
+        "action": "NOOP",
+        "path": "global_claude/mcp/typesafe/typesafe-policy-client.cjs"
+      },
+      {
+        "action": "NOOP",
+        "path": "global_claude/mcp/typesafe/typesafe-redact-patterns.cjs"
+      },
+      {
+        "action": "NOOP",
+        "path": "global_claude/mcp/typesafe/typesafe-redact.cjs"
+      },
+      {
+        "action": "NOOP",
+        "path": "global_omp_agents/advisor.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "global_omp_agents/ck-advisor.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/.gitignore"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/.omp/agents/advisor.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/.omp/agents/ck-advisor.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/AGENTS.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/agents/advisor.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/agents/ck-advisor.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/docs/codebase-summary.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/docs/data-flow-and-states.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/docs/decisions/ADR-2026-10-05-predict-model-tier.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/docs/decisions/ADR-20261012-typesafe-jev-alignment.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/docs/decisions/ADR-20261013-remediation-ratchet-and-wildcard-resolver.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/docs/decisions/ADR-20261013-typesafe-bicameral-judge-alignment.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/docs/decisions/ADR-20261014-typesafe-jev-advisor-overhaul.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/docs/decisions/ADR-20261015-advisor-judge-jev-true-calibration.md"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/docs/decisions/ADR-20261019-jev-atomic-advisor-direction.md"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/docs/decisions/README.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/docs/journals/2026-10-01-typesafe-role-judge-validation.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/docs/journals/2026-10-02-typesafe-judge-alignment-fix.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/docs/journals/2026-10-02-typesafe-plan-compliance-elevation.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/docs/journals/2026-10-03-source-code-relocation.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/docs/journals/2026-10-03-typesafe-extension-proxy-pattern.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/docs/journals/2026-10-07-health-probe-dual-notification-analysis.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/docs/journals/2026-10-07-typesafe-fix-plan-execution.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/docs/journals/2026-10-07-typesafe-lifecycle-gating-fix.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/docs/journals/2026-10-12-typesafe-jev-alignment-fix.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/docs/journals/2026-10-13-typesafe-bicameral-judge-consensus.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/docs/journals/2026-10-13-typesafe-remediation-ratchet-and-block-guard.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/docs/journals/2026-10-14-fix-advisor-decision-answering.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/docs/journals/2026-10-15-advisor-judge-jev-true-calibration.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/docs/journals/2026-10-15-judge-baseline-audit-p0-p6.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/docs/journals/2026-10-15-session-start-health-notification-fix.md"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/docs/journals/2026-10-19-jev-atomic-direction-and-handoff.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/docs/journals/261014-redteam-5-sessions-typesafe-jev-advisor.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/docs/journals/261014-typesafe-todo-done-verdict-fidelity.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/docs/journals/261018-0838-jev-session-forensics-recovery.md"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/docs/journals/261018-1125-deployment-evidence-phase-five-blocker.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/docs/model-specification.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/docs/operations-and-user-guide.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/docs/SAD.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/docs/SDD.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/docs/solution-explanation.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/docs/source-code-logic-flow.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/docs/source-code-modeling.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/docs/source-code-specification.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/docs/system-architecture.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/docs/typesafe-judge-research.md"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/docs/typesafe-operations.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/docs/typesafe-red-team-report.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/JEV_SESSION_FORENSICS_PLAN_JEV_PLAN.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/JUDGE_BASELINE_AUDIT_PLAN.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/JUDGE_BASELINE_COOK_PLAN.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/package.json"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261001-auth-error-visibility/phase-01-update-interfaces.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261001-auth-error-visibility/phase-02-implement-out-of-band-notification.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261001-auth-error-visibility/phase-03-test-and-verify.md"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/plans/261001-auth-error-visibility/plan.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261001-typesafe-concerns/expert-prompt.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261001-typesafe-concerns/expert-response.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261001-typesafe-concerns/phase-01-expert-consultation-prompt.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261001-typesafe-concerns/phase-02-case-2-enforced-call-site-lattice.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261001-typesafe-concerns/phase-03-case-6-confidence-handling.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261001-typesafe-concerns/phase-04-test-suite-update-to-complete.md"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/plans/261001-typesafe-concerns/plan.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261001-typesafe-role-judge-validation/draft-role-judge-validation.md"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/plans/261001-typesafe-role-judge-validation/plan.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261002-cook-mandatory-typesafe-verification/phase-01-workflow-specification-review-gate-upgrade.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261002-cook-mandatory-typesafe-verification/phase-02-dual-cadence-verification-engine-expert-roles.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261002-cook-mandatory-typesafe-verification/phase-03-omp-extension-interception-bridge-integration.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261002-cook-mandatory-typesafe-verification/phase-04-adversarial-stress-test-matrix-validation.md"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/plans/261002-cook-mandatory-typesafe-verification/plan.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261002-typesafe-compliance-elevation/phase-01-deterministic-state-collection-payload-safety.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261002-typesafe-compliance-elevation/phase-02-plan-time-quality-elevation-engine.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261002-typesafe-compliance-elevation/phase-03-execution-compliance-dual-verification-gate.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261002-typesafe-compliance-elevation/phase-04-adversarial-robustness-e2e-validation.md"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/plans/261002-typesafe-compliance-elevation/plan.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261002-typesafe-judge-alignment-fix/phase-01-audit-and-unify-network-transport.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261002-typesafe-judge-alignment-fix/phase-02-api-contract-and-schema-alignment.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261002-typesafe-judge-alignment-fix/phase-03-context-and-state-de-cluttering-anti-context-rot.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261002-typesafe-judge-alignment-fix/phase-04-fix-compound-tools-rerank-and-multi-label.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261002-typesafe-judge-alignment-fix/phase-05-configuration-hardening-and-zero-conflict-verification.md"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/plans/261002-typesafe-judge-alignment-fix/plan.md"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/plans/261003-planner-import-proxy/plan.md"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/plans/261003-rerank-orchestrator/plan.md"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/plans/261003-typesafe-best-practice-alignment/plan.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261003-typesafe-stability-guardrails/phase-01-file-and-code-integrity-shield.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261003-typesafe-stability-guardrails/phase-02-dynamic-auth-recovery-and-key-watchdog.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261003-typesafe-stability-guardrails/phase-03-session-pre-flight-health-probe.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261003-typesafe-stability-guardrails/phase-04-test-environment-isolation-and-hardening.md"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/plans/261003-typesafe-stability-guardrails/plan.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261004-redteam-egc-hardening/phase-01-tdd-regression-suites.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261004-redteam-egc-hardening/phase-02-todo-batch-and-op-normalization.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261004-redteam-egc-hardening/phase-03-context-and-diff-preservation.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261004-redteam-egc-hardening/phase-04-deconfliction-and-privilege-guard.md"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/plans/261004-redteam-egc-hardening/plan.md"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/plans/261004-typesafe-judge-hardening/plan.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261005-predict-recommendations/phase-01-authorization-and-tests.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261005-predict-recommendations/phase-02-decouple-evaluator.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261005-predict-recommendations/phase-03-documentation.md"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/plans/261005-predict-recommendations/plan.md"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/plans/261005-typesafe-judge-enhancement/plan.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261006-red-team-hardening/phase-01-architecture.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261006-red-team-hardening/phase-02-ast-diffing.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261006-red-team-hardening/phase-03-xml-boundaries.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261006-red-team-hardening/phase-04-remediation.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261006-red-team-hardening/phase-05-auth-rotation.md"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/plans/261006-red-team-hardening/plan.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261006-red-team-hardening/research/community-solutions-plan.md"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/plans/261007-health-probe-analysis/plan.md"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/plans/261007-key-isolation/plan.md"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/plans/261007-typesafe-auto-completion/plan.md"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/plans/261007-typesafe-fix/plan.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261007-typesafe-lifecycle-gating/phase-01-research-test-reproduction.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261007-typesafe-lifecycle-gating/phase-02-lifecycle-invariant-relaxation-guidance.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261007-typesafe-lifecycle-gating/phase-03-dual-gate-plan-verification-integration.md"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/plans/261007-typesafe-lifecycle-gating/plan.md"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/plans/261009-health-probe-transport-isolation/plan.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261012-judge-threshold-lifecycle-alignment/phase-01-research-and-prediction.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261012-judge-threshold-lifecycle-alignment/phase-02-threshold-and-decision-contract.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261012-judge-threshold-lifecycle-alignment/phase-03-todo-enforcement-and-agent-guidance.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261012-judge-threshold-lifecycle-alignment/phase-04-regression-and-live-verification.md"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/plans/261012-judge-threshold-lifecycle-alignment/plan.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261012-todo-drop-judge-fidelity/phase-01-failing-tests.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261012-todo-drop-judge-fidelity/phase-02-drop-gate-and-ratchet-escalation.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261012-todo-drop-judge-fidelity/phase-03-judge-input-fidelity.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261012-todo-drop-judge-fidelity/phase-04-reports.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261012-todo-drop-judge-fidelity/phase-05-regression-and-deploy.md"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/plans/261012-todo-drop-judge-fidelity/plan.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261012-typesafe-jev-alignment-fix/phase-01-setup-enriched-payload.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261012-typesafe-jev-alignment-fix/phase-02-task-aware-rubrics.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261012-typesafe-jev-alignment-fix/phase-03-pre-flight-advisory-hook.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261012-typesafe-jev-alignment-fix/phase-04-regression-verification.md"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/plans/261012-typesafe-jev-alignment-fix/plan.md"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/plans/261013-bicameral-judge-advisor-autonomous-execution/plan.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261013-bicameral-judge-consensus/phase-01-decision-contract-categorical-verdict-refactoring.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261013-bicameral-judge-consensus/phase-02-advisor-intent-evaluator-bicameral-consensus-engine.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261013-bicameral-judge-consensus/phase-03-sovereign-human-authority-non-blocking-plan-reconciliation.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261013-bicameral-judge-consensus/phase-04-red-team-adversarial-validation-baseline-deployment.md"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/plans/261013-bicameral-judge-consensus/plan.md"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/plans/261013-fix-advisor-decision-answering/plan.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261014-typesafe-jev-advisor-overhaul/phase-01-bicameral-and-escalation-fix.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261014-typesafe-jev-advisor-overhaul/phase-02-state-clamping-and-evidence-fidelity.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261014-typesafe-jev-advisor-overhaul/phase-03-jev-primitive-and-advisor-calibration.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261014-typesafe-jev-advisor-overhaul/phase-04-todo-list-rm-hardening-and-sync.md"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/plans/261014-typesafe-jev-advisor-overhaul/plan.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261014-typesafe-todo-done-verdict-fidelity/phase-01-dual-primitive-jev-calibration.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261014-typesafe-todo-done-verdict-fidelity/phase-02-cognitive-task-classifier-and-work-log-fallback.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261014-typesafe-todo-done-verdict-fidelity/phase-03-plan-cli-stub-filter-and-phase-matching-guard.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261014-typesafe-todo-done-verdict-fidelity/phase-04-task-report-telemetry-and-tdd-regression-suite.md"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/plans/261014-typesafe-todo-done-verdict-fidelity/plan.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261015-advisor-judge-jev-true-calibration/phase-01-advisor-jev-multi-signal-calibration.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261015-advisor-judge-jev-true-calibration/phase-02-zero-0-80-0-30-threshold-walls.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261015-advisor-judge-jev-true-calibration/phase-03-jev-state-criteria-fidelity-pipeline.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261015-advisor-judge-jev-true-calibration/phase-04-tdd-suite-baseline-sync.md"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/plans/261015-advisor-judge-jev-true-calibration/plan.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261015-judge-baseline-audit-cook/phase-01-p0-hermetic-preflight.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261015-judge-baseline-audit-cook/phase-02-p1-bundled-loading.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261015-judge-baseline-audit-cook/phase-03-p2-bounded-transport.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261015-judge-baseline-audit-cook/phase-04-p3-native-todo-transaction.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261015-judge-baseline-audit-cook/phase-05-p4-heuristics-and-intent.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261015-judge-baseline-audit-cook/phase-06-p5-recovery-transaction.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261015-judge-baseline-audit-cook/phase-07-p6-runtime-promotion.md"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/plans/261015-judge-baseline-audit-cook/plan.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261018-jev-session-forensics/execution-prompt.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261018-jev-session-forensics/phase-01-cohort-and-parser-tdd.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261018-jev-session-forensics/phase-02-source-provenance-and-paired-analysis.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261018-jev-session-forensics/phase-03-vietnamese-diagnosis-and-independent-challenge.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261018-jev-session-forensics/phase-04-todo-rejection-recovery-and-deletion.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261018-jev-session-forensics/phase-05-completion-evidence-fidelity-and-runtime-proof.md"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/plans/261018-jev-session-forensics/plan.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261018-jev-session-forensics/reports/analysis-summary.json"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261018-jev-session-forensics/reports/cohort-manifest.json"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261018-jev-session-forensics/reports/diagnosis-vi.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261018-jev-session-forensics/reports/events-redacted.jsonl"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261018-jev-session-forensics/reports/evidence-packet.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261018-jev-session-forensics/reports/extraction-summary.json"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/plans/261018-jev-session-forensics/reports/fresh-native-runtime-evidence.json"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261018-jev-session-forensics/reports/paired-cases.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261018-jev-session-forensics/reports/plan-review-verification.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261018-jev-session-forensics/reports/predict-architect.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261018-jev-session-forensics/reports/predict-devils-advocate.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261018-jev-session-forensics/reports/predict-performance.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261018-jev-session-forensics/reports/predict-security.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261018-jev-session-forensics/reports/predict-synthesis-vi.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261018-jev-session-forensics/reports/predict-ux.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261018-jev-session-forensics/reports/source-provenance.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261018-jev-session-forensics/reports/todo-recovery-research.md"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/plans/261018-jev-session-forensics/reports/todo-recovery-verification.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/261018-jev-session-forensics/reports/verification.md"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/plans/261019-jev-atomic-review/phase-01-evidence-and-authority-prerequisites.md"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/plans/261019-jev-atomic-review/phase-02-shadow-evaluation-of-atomic-judgments.md"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/plans/261019-jev-atomic-review/phase-03-conditional-cutover-and-runtime-proof.md"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/plans/261019-jev-atomic-review/plan.md"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/plans/261019-jev-atomic-review/recovery-handoff.md"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/plans/261019-research-to-cook-execution/execution-prompt.md"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/plans/261019-research-to-cook-execution/phase-01-reconcile-obligations-and-freeze-verification-contracts.md"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/plans/261019-research-to-cook-execution/phase-02-repair-task-evidence-and-receipt-fidelity.md"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/plans/261019-research-to-cook-execution/phase-03-enforce-authority-lifecycle-and-actionable-recovery.md"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/plans/261019-research-to-cook-execution/phase-04-complete-secret-process-and-filesystem-isolation.md"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/plans/261019-research-to-cook-execution/phase-05-consolidate-debate-and-input-boundary-policies.md"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/plans/261019-research-to-cook-execution/phase-06-finish-bounded-transport-and-trusted-tool-policies.md"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/plans/261019-research-to-cook-execution/phase-07-implement-atomic-jev-and-real-advisor-synthesis.md"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/plans/261019-research-to-cook-execution/phase-08-run-paired-evaluation-and-decide-adoption.md"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/plans/261019-research-to-cook-execution/phase-09-migrate-all-consumers-and-verify-integration.md"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/plans/261019-research-to-cook-execution/phase-10-promote-authorized-runtime-and-close-legacy-plans.md"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/plans/261019-research-to-cook-execution/plan.md"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/plans/261019-research-to-cook-execution/reports/plan-validation.json"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/plans/261019-research-to-cook-execution/research/council-inputs.json"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/plans/261019-research-to-cook-execution/research/direction-personas.json"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/plans/261019-research-to-cook-execution/research/final-recovery-reviews.json"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/plans/261019-research-to-cook-execution/research/jev-atomic-online-verification.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/reports/2026-10-06-codebase-architecture-predict.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/reports/2026-10-06-typesafe-review-scenarios.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/reports/2026-10-12-cleanpc-typesafe-brainstorm.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/reports/2026-10-12-todo-drop-blocked-predict.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/reports/2026-10-13-test-suite-integrity-verification.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/reports/2026-10-13-typesafe-payload-fidelity-and-scenario-report.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/reports/2026-10-13-typesafe-threshold-redteam-predict.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/reports/261014-advisor-and-typesafe-evaluation.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/reports/261014-brainstorm-todo-done-verdict-fidelity.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/reports/261014-phase1-session-forensics-and-scout.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/reports/261014-phase1-source-and-payload-audit.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/reports/261014-redteam-audit-5-sessions-typesafe-jev-advisor.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/reports/261014-scout-and-research-todo-done-verdict-fidelity.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/reports/261015-advisor-judge-jev-rootcause-and-research.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/reports/261015-brainstorm-and-predict-advisor-judge-overhaul.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/reports/261015-workspace-revert-predict.md"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/plans/reports/261019-all-plan-implementation-inventory.md"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/plans/reports/261019-all-research-implementation-coverage.md"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/plans/reports/261019-jev-atomic-prediction.md"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/plans/reports/261019-jev-atomic-scenarios.md"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/plans/reports/261019-jev-current-state-and-recovery.md"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/plans/reports/261019-jev-design-calculations.json"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/plans/reports/261019-jev-direction-final-prediction.md"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/plans/reports/261019-research-to-cook-coverage.json"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/plans/reports/261019-source-review-delivery-evidence.json"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/plans/reports/261019-todo-recovery-evidence.json"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/plans/reports/261019-typesafe-source-review-acceptance.md"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/plans/reports/261019-typesafe-source-review-index.json"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/plans/reports/261019-typesafe-source-rootcause-review.md"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/plans/reports/261019-typesafe-source-runtime-map.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/plans/reports/README.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/README.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/scripts/deploy-baseline-to-target.cjs"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/scripts/patch-workspace-planner.cjs"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/scripts/remove-gate3.cjs"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/scripts/safe-update-planner-model.cjs"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/scripts/typesafe-planner-drop-tasks.cjs"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/scripts/update-planner-jev-latest.cjs"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/src/ast-analyzer.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/src/auth-manager.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/src/bicameral-consensus.ts"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/src/cook-expert-judge.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/src/debate-evaluator.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/src/egc.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/src/errors/TypeSafeError.ts"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/src/evidence-collector.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/src/payload-safety.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/src/plan-evaluator.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/src/remediation-generator.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/src/types/security.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/src/typesafe-api-client.cjs"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/src/typesafe-enabled-resolver.cjs"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/src/typesafe-policy-client.cjs"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/src/typesafe-redact-patterns.cjs"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/src/typesafe-redact.cjs"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/src/verification-gate.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/src/xml-enclosure.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tests/adversarial-compliance.test.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tests/adversarial-edge-cases.test.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tests/architecture.test.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tests/ast-analyzer.test.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tests/auth-manager.test.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tests/auth-recovery-watchdog.test.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tests/bicameral-consensus.test.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tests/client-debate.test.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tests/cook-expert-judge.test.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tests/cook-interception-bridge.test.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tests/cook-verification-adversarial.test.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tests/debate-evaluator.test.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tests/e2e-workflow.test.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tests/egc.test.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tests/environment-isolation.test.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tests/evidence-collector.test.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tests/health-watchdog.test.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tests/helpers/test-env-harness.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tests/isolated-verification.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tests/judge-input-fidelity.test.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tests/payload-safety.test.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tests/plan-evaluator.test.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tests/plan-reconciliation.test.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tests/redteam-vulnerabilities.test.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tests/remediation.test.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tests/sync-baseline.test.ts"
+      },
+      {
+        "action": "CREATE",
+        "path": "target/tests/task-artifact-routing.test.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tests/todo-block-remediation.test.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tests/todo-drop-gate.test.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tests/todo-remediation-feedback.test.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tests/typesafe-integrity.test.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tests/typesafe-lifecycle-gating.test.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tests/typesafe-planner-integration.test.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tests/typesafe-planner.test.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tests/typesafe-resolver.test.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tests/typesafe-transport-retry.test.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tests/verification-gate.test.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tests/xml-enclosure.test.ts"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tools/promote-omp-global.ps1"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tools/README.md"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tools/sync-baseline.bat"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tools/sync-baseline.cjs"
+      },
+      {
+        "action": "NOOP",
+        "path": "target/tools/todo-remediation-smoke.ts"
+      },
+      {
+        "action": "OVERWRITE",
+        "path": "target/typesafe-planner.ts"
+      }
+    ],
+    "activationVerdict": "Do not activate F16 alone: thinking-egress/privacy and history/debt/composed-authority/release-security prerequisites remain; no deployment/restart authority granted."
+  },
+  "remoteCompletionSafety": {
+    "status": "suspended_pending_authorized_fix_and_safe_activation",
+    "finding": "F17",
+    "reason": "Synthetic private-channel marker survives actual deployed projection and production preparation; no real private content or historical transmission claimed",
+    "notAGateBypass": true
+  },
+  "verificationRecoveryAdvisor": "## Verdict\nrevise\n\n**Task6 needs a task-specific verification-evidence amendment, not implementation of all16findings/H or another unchanged387/0 run. Its native completion remains uncommitted. Separately, the newly confirmed private-thinking collection is a tooling-safety prerequisite: do not make another remote native judgment through the current collector.**\n\n## Recommendation\n\n**Diagnosis.** The best-supported evidence-delivery hypothesis is that native done does not project the available verification receipts into `test_summary`, does not supply explicit criteria, and can judge HEAD-relative/competing changes with an implementation rubric. These mechanisms are source-confirmed; their responsibility for this particular displayedP=.10/REDUCTION is **[INFERENCE]**, not established historical causation. No named missing implementation was diagnosed by that rejection.\n\n**Minimum report amendment—execute in the existing recovery bundle/handoff, without source/test changes:**\n\n- Record a separate task6 recovery entry, preserving task2's distinct rejection. Suggested **report-only fields, NOT native arguments**: `operation=done`; exact original `target`; `requestRecord=f4d69e6d`; `rejectionRecord=a46e8cb1`; `timestamp=2026-10-19T04:46:48.784Z`; `callId=call_e5f46ae4dd564f8eb837379b518766e2|fc_0e9662d8c337af50016ad5a0be58bc8191b9390cec3be21248`; `attemptsForThisTarget=1`; `classification=code_change`; `displayedGateScore=.10`; `displayedNormalizedVerdict=REJECT`; `scopeReductionReasonObserved=true`; `rawAnswersUnknown=true`; `nativeCommitted=false`; `retryReady=false`.\n- Add a concise criterion→receipt→hypothesis-outcome matrix: unchanged `bun test`357/0; actual-source isolated audit exit0/10.81s; affected modules plus preserved diagnostics173/2 across175tests/10files; separate callback smoke exit1, with Acontrol preserving proof and Bcompetition changing rubric/omitting proof. These failures **discriminated hypotheses**, satisfying a verification/investigation obligation; task6 does not require every discovered defect to be repaired or every diagnostic to be green.\n- Separately retain the later authorized F16 repair's387/0,1764expects/37files and independent smokeexit0 as supplementary remediation evidence. Existing assertions were preserved; the25new permanent cases belonged to the separately authorized repair, not retroactive modification of task6's acceptance. Keep fixture/synthetic/no-native-commit limits explicit.\n- Correct `taskLedger[5]`, `latestNativeSnapshot.limits`, handoff row6/top summary and the execution prompt's stale checkpoint: task6 has now received a failed done attempt. Preserve3/23done,20open,0blocked, all3committed records, and both rejected targets/debts. Do not infer that18other open targets are rejected or activation-dependent.\n\n**Public worklog path—supported carrier, not a safe retry today.** Ordinary successful `read` results and public assistant text are collected into `agent_work_log`; the implementation rubric explicitly consults that field. Small real receipt excerpts can therefore carry task6 proof without new arguments or deploying an artifact-selector repair. However tool results are normally tail-clamped to400characters, only8recent entries survive, macro worklog is tail-clamped to1950characters, and later preparation can shorten it again. A large report read is not faithful proof delivery. A bounded public receipt projection is a legitimate candidate, not a demonstrated exact Main packet or trusted receipt binding. There is no exposed same-native read-only packet-preview/receipt-injection endpoint in the deployed registrations. The separate `typesafe_verify_completion` API is advisory, uses a different evidence/question path, may execute tests, and cannot commit native completion.\n\n**Safety now makes real source/activation authority necessary before another current-native remote judgment.** Both deployed and workspace collectors explicitly append assistant `thinking` into the same worklog. Commentary cannot reliably flush/filter all such content; enclosures and credential redaction are not a private-reasoning filter. No historical private-content transmission is claimed. Parent's synthetic-marker-only probe is suitable prospective evidence; its result was not supplied to this review and is not claimed passed.\n\n**Dependency-ordered corrective assignments, conditional on new authorization:**\n\n1. **Documentation executor:** make only the report corrections above. No tests/build/native/API calls are required for these amendments.\n2. **One source executor:** in workspace `typesafe-planner.ts`, remove the assistant-`thinking` collection branch at787–788; retain public text, existing tool-call name/public-intent summaries and legitimate public tool-result evidence. Do not substitute a regex that attempts to recognize private reasoning after concatenation, and do not change thresholds, native schema, task meaning or authorization policy. No broad F01–F16/H implementation is required for this safety repair.\n3. **Independent test executor:** replace the explicitly unsafe thinking-inclusion expectation in `tests/bicameral-consensus.test.ts:416–458` with exclusion plus public-text/tool-intent/tool-result preservation; extend an existing fidelity/packet test with synthetic markers covering thinking-only and mixed blocks. Require the private marker absent from collected context **and the final prepared outgoing body**, while compact public verification facts remain present. This is a separately authorized security-contract correction, not weakening task6's original diagnostic assertions.\n4. **Parent:** inspect actual changes, then run the complete affected modules and an isolated actual callback→macro→production-preparation smoke with network interception and no real native mutation. Use long/competing contexts and ensure exclusion is due to filtering, not incidental truncation. These would be fresh checks of changed privacy code, not an unchanged387/0 resample. Return results for independent review.\n5. **Operator, only with explicit managed-promotion/restart authority:** use the supported sync flow, inspect fresh actions and loaded provenance, never write the proxy/global files directly. **Do not restart as debt recovery.** F10/SEC04 remain unresolved: activation needs an actual supported trusted preservation/reconciliation mechanism for existing obligations/debt, or separately authorized repair of that lifecycle defect; an agent-authored JSON bundle does not restore runtime authority. Promoting the existing F16 patch alone does not fix thinking collection or native receipt binding.\n6. Only after safe loaded execution, relevant public-proof delivery and fresh independent assessment, reevaluate **the same native `todo` operation `op=done` with task6's unchanged exact target**, and require its matching successful native result. Do not submit now, resample unchanged semantic rejection, use ask-as-ui, reset/drop debt or claim Advisor approval is closure.\n\n**True external input:** thant/project owner must explicitly authorize the bounded workspace privacy fix and associated tests/docs; separately authorize managed activation/restart with a supported debt-preserving resume arrangement. Current planning/report authority grants neither. A supported host-provided read-only prepared-packet export could resolve delivery uncertainty without deployment, but no such exposed surface was found, and packet visibility alone would not repair the current thinking-egress path. Historical wire is not a new task6 acceptance requirement.\n\n## Ranked options\n\n1. **Report correction + separately authorized narrow privacy fix/controlled activation —0.97.** Preserves task6 scope and addresses the concrete new safety blocker; activation must preserve debt.\n2. **Bounded public receipt/worklog projection after privacy safety is established —0.85.** Existing supported channel; potentially avoids additional receipt/classifier implementation. Exact survival needs evidence, and it never supplies native authority by itself.\n3. **Deploy F16 alone —0.25.** May improve report selection but leaves thinking collection, receipt/criteria plumbing and lifecycle hazards; insufficient as the next action.\n4. **Implement all16findings/H, rerun unchanged387/0, override or reset —0.00.** Unrelated scope expansion, non-corrective resampling or authority/debt bypass; reject.\n\n## Findings\n\n- **HIGH; confidence1.00 — session JSONL:1552–1554:** exact task6 request/result are paired; Gate2 displayed code_change/REJECT/P=.10 and scope-reduction text; result isError, not a native commit. Its state was not subsequently reset/dropped in the supplied checkpoint.\n- **HIGH; confidence1.00 — deployed `typesafe-planner.ts:763–764,1808`; deployed `src/cook-expert-judge.ts:224`; workspace `typesafe-planner.ts:787–788`:** assistant thinking is explicitly concatenated into worklog and projected toward remote state. This establishes an unsafe reachable dataflow, **not proof that historical private content reached the vendor**.\n- **HIGH; confidence1.00 — `tests/bicameral-consensus.test.ts:416–458`:** the existing test intentionally expects thinking inclusion, explaining why merely preserving every old expectation would preserve the privacy defect. Replace that unsafe expectation while preserving public-evidence checks.\n- **HIGH; confidence.99 — deployed `typesafe-planner.ts:1751–1768,1794–1810,808–823`:** native reads unsupported testCommand/requirements fields, supplies no planPath, ignores available lastTestSummary and falls back to task text. The observed task6 request contains none of those extra fields. Receipts existing in history/repo do not imply a populated native test_summary.\n- **HIGH; confidence.99 — deployed `src/evidence-collector.ts:376–450`:** task-baseline filters filenames but tracked content comes from `git diff HEAD`; commit fallback uses HEAD~1..HEAD. Task6's exact baseline/changed-file attribution is unavailable; these defects cannot be attributed causally to its score.\n- **MEDIUM; confidence.99 — deployed `typesafe-planner.ts:476–498`; deployed macro:209–239; delivery evidence JSON:19–48:** artifact reader accepts Markdown/text, not task6's JSON bundle directly; order/head caps and code/config override are real. The3590byte/117file/0claim observation is for source-review proof under a prospective full-tree setup, not task6's exact packet.\n- **MEDIUM; confidence1.00 — deployed macro:366–375,414–445; entrypoint:1175–1182:** displayed REJECT can be normalized/downgraded from primitives; P is rounded to2decimals, not10%completion. The implementation-omission directive is a generic scope-reduction template, not an identified missing feature or instruction to implement16findings/H.\n- **MEDIUM; confidence1.00 — recovery bundle:180–191,496–517; artifact41:628–659; artifact47:566–569:** exercised verification and genuine failing-before assertions already exist. Investigation success is distinct from correcting every discovered defect; unchanged reruns add no relevant amendment.\n- **MEDIUM; confidence1.00 — recovery bundle:1418–1432; handoff:3,44; execution prompt:58:** task6 is still described as unattempted and only source-review as newly rejected. These statements became stale after a46e8cb1 and require report correction.\n- **HIGH; confidence.99 — deployed entrypoint:1539–1549,1574–1585,1664–1684,1718–1727; recovery bundle:1133–1187:** history restoration/debt loss remains a real restart hazard; UI confirmation branches cover rejected block/drop, not an exposed done-override surface. Ask answers and payload flags cannot supply that authority.\n\n## Confidence\n0.97 for the source-confirmed plumbing/safety findings and recommended next action. Causal attribution of the particular P=.10/REDUCTION remains unproven.\n\n## Open questions\n\n- Explicit user authorization for the bounded privacy source/test/doc correction and, separately, managed runtime activation is absent.\n- A supported trusted obligation/debt-preserving activation/resume arrangement has not been demonstrated; do not substitute restart or report JSON for it.\n\nNo API/native/test/build/lint/formatter or production edits were performed by this advisor. Existing receipts were inspected, not rerun.",
+  "activationSafetyAdvisor": "## Verdict\nrevise\n\n**Do not activate F16 alone.** Its evidence repair does not preserve rejection debt across restart. Current authority permits investigation/reporting—not production edits, deployment, restart or another native attempt. This blocks activation, **not every unfinished task**.\n\n## Recommendation\n\nThe recorded dry-run is **311 baseline files, not 311 writes**: seven global entries are NOOP; production overwrites are only entrypoint/collector/cook-expert, plus one new test module and documentation (`artifact://134:1–3`). It neither intentionally migrates native state nor repairs lifecycle defects. Source equality is neither required for review acceptance nor sufficient for safe activation.\n\n**Parent immediately:** incorporate task6 rejection `a46e8cb1` into the handoff/ledger; preserve receipts `e824e6e7`, `7c331054`, `d309dc2a` and all20 unfinished obligations. Existing “task6 unattempted” wording is stale.\n\n**Recommended authorization:** workspace-only automatic master1→2→3, followed by a release checkpoint. Dependency-ordered owners:\n1. Contract/history executor: validated native-phase restoration and host-owned, incarnation-bound obligation/debt projection—including existing task2/task6 failures. Invalidate transient approvals, never unresolved debt. Unprovable historical bindings remain explicit unresolved prerequisites; report JSON cannot authenticate them.\n2. Evidence executor: frozen original criteria, applicable test receipts, truthful deltas and separately authorized mutation provenance. Preserve task6’s verification-only/no-verification-asset-change acceptance. F16 remains intact.\n3. Authority executor: consume composed decisions and preserve exact-target consent/result binding. Parent owns shared-file integration.\n\nThis reuses planned interfaces rather than creating an ad-hoc debt importer. Before live release, also complete the **bounded phase4 read/environment/compensation protections exercised by that release path**; master1–3 alone are not deployment acceptance. H and all sixteen findings are not prerequisites for accepting this review.\n\n**Release conditions:** parent inspects actual changes, runs complete affected modules and changed-path smoke, and returns fresh evidence for independent review. Separately, thant authorizes the frozen managed action set, target verification and supported operator restart. Resume must demonstrate preserved3/23 native state/debt, loaded origins and exact-target prepared-evidence fidelity with competition retained. No wildcard, proxy or fallback changes.\n\nOnly then reevaluate original Gate1/Gate2 native `done` for **“Run bun test, affected-module checks and isolated changed-path smoke to discriminate root-cause hypotheses without changing verification assets.”** Require its matching successful native result. Task2 needs its own proof/review/commit. Restart cannot cure either rejection.\n\n## Ranked options\n\n1. **9/10: Authorize source-only master1–3.** Coherent repair; broader source changes, no immediate native closure or activation permission.\n2. **7/10: Authorize a narrowly bounded recovery package covering the requirements above, then separately authorize activation.** Smaller footprint; interface duplication/incomplete migration risk requires review.\n3. **6/10: Retain read-only scope.** No new runtime risk; all unfinished acceptance remains owned and pending.\n4. **0/10: F16-only sync/restart.** Demonstrated debt-loss risk; supervision or matching hashes cannot satisfy the preservation contract.\n\n## Findings\n\n- **HIGH, confidence1.00 — F10:** `typesafe-planner.ts:1563–1573`; deployed equivalent`:1539–1549`: false `customPhases` masks valid native results. Restoration can lose the canonical unfinished view.\n- **MEDIUM, confidence1.00 — SEC04:** `typesafe-planner.ts:1598–1609,1742–1751,2298–2301`: lifecycle clears rejection maps; rejected-block consent depends on those maps. This weakens authorization, not automatic successful completion.\n- **HIGH, confidence.99 — F16 is insufficient:** `typesafe-planner.ts:1775–1787,1833`; `src/evidence-collector.ts:130–134`: receipt loss and product-path rubric selection remain. Their causality for P=.10 is **[INFERENCE]**, not established missing implementation.\n- **HIGH, confidence1.00 — Authority omission:** `typesafe-planner.ts:1845–1856` accepts the macro sub-result rather than composed disposition.\n- **HIGH, confidence.99 — Managed-release residual:** `tools/sync-baseline.cjs:247–268,341,366` can overwrite external rollback edits, inherits verifier environment and releases the lock unconditionally. Dry-run exercises none of those failure paths; coverage C32 records this debt.\n- **MEDIUM, confidence1.00 — Stale recovery record:** `recovery-handoff.md:44`/evidence JSON`:1421` say pending-unattempted; session JSONL`:1552–1554` records task6 Gate2 REJECT/P=.10/REDUCTION, no commit.\n\n## Confidence\n0.97. Read-only source/receipt review; no commands, tests, network, edits or activation performed.\n\n## Open questions\nNone for this decision. Source and later release authority remain thant’s explicit choices.",
+  "currentImplementationAuthorization": {
+    "observedAt": "2026-10-19T05:05:49.490Z",
+    "sourceExecutionScope": "Cook toàn bộ — chỉ workspace",
+    "sourcePlan": "plans/261019-research-to-cook-execution/plan.md",
+    "activationAuthority": "Cho managed release có điều kiện",
+    "conditions": [
+      "Complete affected checks and changed-path smoke",
+      "Fresh independent Advisor",
+      "Only existing runtime target and declared managed entries",
+      "Never alter proxy, global config, credentials or native authorization",
+      "Restart only through supported mechanisms preserving actual obligations and rejection debt",
+      "Benchmark human gold/spend and native approvals are not fabricated"
+    ],
+    "source": "Actual user selections returned by functions.ask; carried verbatim in retained conversation summary",
+    "nativeOverride": false,
+    "deployed": false
+  },
+  "planStartGuardObservation": {
+    "command": "node C:/Users/thant/.claude/skills/ck-plan/scripts/plan-cli.cjs check 1 --start",
+    "outcome": "Rejected before execution as plan closure",
+    "meaning": "Actual non-closure start misclassified; no CLI phase status changed",
+    "historyMismatch": "Rejection includes mapping task, but actual native result d309dc2a marks it completed",
+    "actualNativeState": "3 completed /23 total /20 open; do not reopen or reset",
+    "next": "Fix source command semantics and host-history projection; no retry through unsafe deployed completion gate"
+  }
+}

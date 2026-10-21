@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "corpus": {
+    "manifest": "cohort-manifest.json",
+    "cutoffUtc": "2026-10-18T08:12:11.928658Z",
+    "selectedFiles": 2,
+    "stableFiles": 2,
+    "physicalRecords": 1198,
+    "parsedRecords": 1198,
+    "parseErrors": 0,
+    "recognizedEvaluationEvents": 0,
+    "duplicateEvents": 0,
+    "unresolvedEvents": 0
+  },
+  "populations": {
+    "nativeGate1": { "events": 0, "numeric": 0, "missingOrInvalid": 0 },
+    "nativeGate2": { "events": 0, "numeric": 0, "missingOrInvalid": 0 },
+    "advisor": { "events": 0, "numeric": 0, "missingOrInvalid": 0 },
+    "verification": { "events": 0, "numeric": 0, "missingOrInvalid": 0 },
+    "other": { "events": 0, "numeric": 0, "missingOrInvalid": 0 }
+  },
+  "scoreDistributions": [],
+  "operationalLow": {
+    "definition": "Only classify a numeric primitive when that event explicitly persists both threshold and comparison; default current source uses > at 0.50 and >= for configured thresholds.",
+    "classified": 0,
+    "unknownThresholdOrComparison": 0,
+    "descriptiveBins": []
+  },
+  "attemptsAndReports": {
+    "rejectedAttempts": 0,
+    "uniqueTaskAliases": 0,
+    "scoreBearingReports": 0,
+    "humanOverrides": 0,
+    "note": "No recognized historical observations; attempts, reports, and unique tasks are not inferred from message prose."
+  },
+  "pairs": {
+    "directComparable": 0,
+    "directDisagreements": 0,
+    "directDisagreementRate": null,
+    "directDisagreementRateDisplay": "N/A (zero direct comparable-pair denominator)",
+    "contextual": 0,
+    "unmatched": 0,
+    "advisorStages": { "preJev": 0, "postJev": 0, "unknown": 0 }
+  },
+  "runtimeAttribution": {
+    "known": false,
+    "reason": "No persisted runtime-origin record or recognized evaluation event was present in the frozen corpus. Local workspace hashes identify source snapshots only."
+  },
+  "limitations": [
+    "Zero recognized events is not proof that no historical evaluation occurred.",
+    "No direct pair or calibration claim can be made without persisted comparable outputs and independently labeled outcomes.",
+    "Current source mechanisms do not establish historical runtime behavior."
+  ]
+}

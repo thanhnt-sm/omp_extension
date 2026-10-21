@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-19",
+  "scope": "Planning validation, not implementation/model/native approval",
+  "phaseContracts": [
+    {
+      "phase": 1,
+      "path": "plans/261019-research-to-cook-execution/phase-01-reconcile-obligations-and-freeze-verification-contracts.md",
+      "metadataMatches": true,
+      "dependenciesMatch": true,
+      "missingSections": [],
+      "scaffoldFound": false
+    },
+    {
+      "phase": 2,
+      "path": "plans/261019-research-to-cook-execution/phase-02-repair-task-evidence-and-receipt-fidelity.md",
+      "metadataMatches": true,
+      "dependenciesMatch": true,
+      "missingSections": [],
+      "scaffoldFound": false
+    },
+    {
+      "phase": 3,
+      "path": "plans/261019-research-to-cook-execution/phase-03-enforce-authority-lifecycle-and-actionable-recovery.md",
+      "metadataMatches": true,
+      "dependenciesMatch": true,
+      "missingSections": [],
+      "scaffoldFound": false
+    },
+    {
+      "phase": 4,
+      "path": "plans/261019-research-to-cook-execution/phase-04-complete-secret-process-and-filesystem-isolation.md",
+      "metadataMatches": true,
+      "dependenciesMatch": true,
+      "missingSections": [],
+      "scaffoldFound": false
+    },
+    {
+      "phase": 5,
+      "path": "plans/261019-research-to-cook-execution/phase-05-consolidate-debate-and-input-boundary-policies.md",
+      "metadataMatches": true,
+      "dependenciesMatch": true,
+      "missingSections": [],
+      "scaffoldFound": false
+    },
+    {
+      "phase": 6,
+      "path": "plans/261019-research-to-cook-execution/phase-06-finish-bounded-transport-and-trusted-tool-policies.md",
+      "metadataMatches": true,
+      "dependenciesMatch": true,
+      "missingSections": [],
+      "scaffoldFound": false
+    },
+    {
+      "phase": 7,
+      "path": "plans/261019-research-to-cook-execution/phase-07-implement-atomic-jev-and-real-advisor-synthesis.md",
+      "metadataMatches": true,
+      "dependenciesMatch": true,
+      "missingSections": [],
+      "scaffoldFound": false
+    },
+    {
+      "phase": 8,
+      "path": "plans/261019-research-to-cook-execution/phase-08-run-paired-evaluation-and-decide-adoption.md",
+      "metadataMatches": true,
+      "dependenciesMatch": true,
+      "missingSections": [],
+      "scaffoldFound": false
+    },
+    {
+      "phase": 9,
+      "path": "plans/261019-research-to-cook-execution/phase-09-migrate-all-consumers-and-verify-integration.md",
+      "metadataMatches": true,
+      "dependenciesMatch": true,
+      "missingSections": [],
+      "scaffoldFound": false
+    },
+    {
+      "phase": 10,
+      "path": "plans/261019-research-to-cook-execution/phase-10-promote-authorized-runtime-and-close-legacy-plans.md",
+      "metadataMatches": true,
+      "dependenciesMatch": true,
+      "missingSections": [],
+      "scaffoldFound": false
+    }
+  ],
+  "coverage": {
+    "legacyPlans": 33,
+    "legacyPhaseFiles": 83,
+    "researchRecommendations": 35,
+    "securityFindings": 6,
+    "masterPhases": 10
+  },
+  "unassignedRecommendations": 0,
+  "cli": {
+    "master": "pending;10Pending;blockedBynone;blocksatomic",
+    "atomic": "pending;3Pending;blockedBymaster",
+    "activePlan": "CK_SESSION_ID absent; absolute-path handoff, no persistent state"
+  },
+  "native": {
+    "observedAtUtc": "2026-10-19",
+    "total": 23,
+    "completed": 3,
+    "open": 20,
+    "blocked": 0,
+    "source": "Actual native todo view after fresh source-review rejection",
+    "limits": "Only the source-review target received a new failed done attempt; other19remain independently pending/unattempted, not blanket blocked or assumed activation-dependent."
+  },
+  "prospectiveDeliveryEvidence": "plans/reports/261019-source-review-delivery-evidence.json",
+  "freshAdvisor": {
+    "verdict": "proceed_with_report_and_automatic_source_handoff",
+    "confidence": 0.97,
+    "nativeApproval": false,
+    "nativeRetryAuthorized": false
+  },
+  "journal": "docs/journals/2026-10-19-jev-atomic-direction-and-handoff.md",
+  "sourceSuiteRerunForDocs": false,
+  "deployRestart": false,
+  "cookExecuted": false
+}

@@ -95,3 +95,8 @@ The requirement is to guarantee within the `omp_extension` project that the `TYP
    - Implement a depth limiter (max depth 5) in `scrub(x: any)`. If depth exceeds threshold, truncate/redact sub-trees.
 3. **Refactor**:
    - Benchmark sanitized payloads to guarantee zero-token Gate 1 latency (<150ms).
+
+## Execution reconciliation — 2026-10-19
+
+Accepted C23/C24 is still real implementation work: [master phase4/9](../261019-research-to-cook-execution/plan.md) owns central environment allowlisting, exact-key bounded EGC scrub and fail-closed egress. [Coverage](../reports/261019-research-to-cook-coverage.json) retains all three accepted findings. Do not substitute clone-and-delete env, credential rotation or claim completion from this transfer.
+

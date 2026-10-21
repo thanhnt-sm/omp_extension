@@ -49,6 +49,99 @@ function Show-PointerRepairGuide {
   Write-Host "No BOM, comments, or extra statements. One final newline is allowed."
 }
 
+$policyScript = Join-Path (Split-Path -Parent $toolsDirectory) "src\typesafe-child-env.cjs"
+$nodeCommand = Get-Command node -CommandType Application -ErrorAction Stop | Select-Object -First 1
+$nodeExecutable = [IO.Path]::GetFullPath($nodeCommand.Source)
+if (-not [IO.Path]::IsPathRooted($nodeExecutable) -or -not (Test-Path -LiteralPath $policyScript -PathType Leaf)) {
+  throw "A resolved Node executable and the shared child policy are required."
+}
+
+function New-ChildStartInfo([string]$executable, [string[]]$arguments) {
+  $info = New-Object Diagnostics.ProcessStartInfo
+  $info.FileName = $executable
+  $info.UseShellExecute = $false
+  $info.EnvironmentVariables.Clear()
+  # Windows PowerShell's .NET lacks ArgumentList. Quote each argument by the CRT rules.
+  $quoted = foreach ($argument in $arguments) {
+    '"' + [regex]::Replace([regex]::Replace($argument, '(\\*)"', '$1$1\"'), '(\\+)$', '$1$1') + '"'
+  }
+  $info.Arguments = $quoted -join " "
+  return $info
+}
+
+function Get-ChildPolicy([string]$purpose) {
+  $info = New-ChildStartInfo $nodeExecutable @($policyScript, "--policy-json", $purpose)
+  $info.RedirectStandardOutput = $true
+  $info.RedirectStandardError = $true
+  $process = New-Object Diagnostics.Process
+  $process.StartInfo = $info
+  try {
+    if (-not $process.Start()) { throw "Policy bootstrap failed." }
+    $text = $process.StandardOutput.ReadToEnd()
+    $errorText = $process.StandardError.ReadToEnd()
+    $process.WaitForExit()
+    if ($process.ExitCode -ne 0 -or $errorText -or $text.Length -gt 16384) { throw "Policy bootstrap rejected." }
+    $policy = $text | ConvertFrom-Json
+    $fields = @($policy.PSObject.Properties.Name | Sort-Object)
+    $expectedFields = @("version", "purpose", "names", "required", "absolutePaths", "executableNames", "secretNames", "fixed", "maxValueBytes") | Sort-Object
+    if (($fields -join ",") -ne ($expectedFields -join ",") -or $policy.version -ne 1 -or $policy.purpose -cne $purpose -or $policy.maxValueBytes -ne 32768) {
+      throw "Invalid shared policy."
+    }
+    foreach ($name in @($policy.names) + @($policy.required) + @($policy.absolutePaths) + @($policy.executableNames) + @($policy.secretNames)) {
+      if ($name -isnot [string] -or $name -cnotmatch '^[A-Za-z][A-Za-z0-9_]*$') { throw "Invalid policy name." }
+    }
+    if (@($policy.names | Group-Object { $_.ToUpperInvariant() } | Where-Object Count -gt 1).Count) { throw "Duplicate policy name." }
+    foreach ($name in @($policy.required) + @($policy.absolutePaths) + @($policy.executableNames)) {
+      if ($policy.names -cnotcontains $name) { throw "Invalid policy constraint." }
+    }
+    return $policy
+  } finally { $process.Dispose() }
+}
+
+function Set-ChildPolicyEnvironment($info, [string]$purpose) {
+  $policy = Get-ChildPolicy $purpose
+  $source = New-Object 'Collections.Generic.Dictionary[string,string]' ([StringComparer]::OrdinalIgnoreCase)
+  foreach ($entry in [Environment]::GetEnvironmentVariables().GetEnumerator()) {
+    $name = [string]$entry.Key
+    $value = [string]$entry.Value
+    if ($source.ContainsKey($name) -and $source[$name] -cne $value) { throw "Child environment rejected: CASE_COLLISION" }
+    $source[$name] = $value
+  }
+  $secrets = @()
+  foreach ($name in $policy.secretNames) {
+    if ($source.ContainsKey($name) -and $source[$name]) { $secrets += $source[$name]; if ($source[$name].Trim()) { $secrets += $source[$name].Trim() } }
+  }
+  foreach ($name in $policy.names) {
+    if (-not $source.ContainsKey($name) -or -not $source[$name]) { continue }
+    $value = $source[$name]
+    if ($value.Contains([string][char]0) -or [Text.Encoding]::UTF8.GetByteCount($value) -gt $policy.maxValueBytes) { throw "Child environment rejected: UNSAFE_ALLOWED_VALUE" }
+    foreach ($secret in $secrets) { if ($value.Contains($secret)) { throw "Child environment rejected: UNSAFE_ALLOWED_VALUE" } }
+    if ($policy.absolutePaths -ccontains $name) {
+      if ($value -notmatch '^(?:[A-Za-z]:[\\/]|\\\\[^\\/]+[\\/][^\\/]+)' -or $value -match '[\r\n]') { throw "Child environment rejected: INVALID_DEPLOYMENT_PATH" }
+    }
+    if (($policy.executableNames -ccontains $name) -and $value -notmatch '^(?:[A-Za-z]:[\\/]|\\\\[^\\/]+[\\/][^\\/]+|[A-Za-z0-9_.-]+$)') { throw "Child environment rejected: INVALID_EXECUTABLE" }
+    $info.EnvironmentVariables[$name] = $value
+  }
+  foreach ($name in $policy.required) { if (-not $info.EnvironmentVariables[$name]) { throw "Child environment rejected: MISSING_REQUIRED_OS_VALUE" } }
+  foreach ($property in $policy.fixed.PSObject.Properties) {
+    if ($property.Name -cnotmatch '^[A-Za-z][A-Za-z0-9_]*$' -or $property.Value -isnot [string]) { throw "Invalid fixed policy value." }
+    foreach ($secret in $secrets) { if ($property.Value.Contains($secret)) { throw "Child environment rejected: UNSAFE_ALLOWED_VALUE" } }
+    $info.EnvironmentVariables[$property.Name] = $property.Value
+  }
+}
+
+function Invoke-PolicyChild([string]$purpose, [string]$executable, [string[]]$arguments) {
+  $info = New-ChildStartInfo $executable $arguments
+  Set-ChildPolicyEnvironment $info $purpose
+  $process = New-Object Diagnostics.Process
+  $process.StartInfo = $info
+  try {
+    if (-not $process.Start()) { throw "Child launch failed." }
+    $process.WaitForExit()
+    return $process.ExitCode
+  } finally { $process.Dispose() }
+}
+
 function Invoke-Sync([switch]$ReadOnly) {
   $arguments = @($syncScript)
   if ($ReadOnly) {
@@ -58,10 +151,8 @@ function Invoke-Sync([switch]$ReadOnly) {
     $arguments += "--bootstrap"
   }
 
-  & node @arguments
-  if ($LASTEXITCODE -ne 0) {
-    throw "sync-baseline failed with exit code $LASTEXITCODE"
-  }
+  $exitCode = Invoke-PolicyChild "deployment-sync" $nodeExecutable $arguments
+  if ($exitCode -ne 0) { exit $exitCode }
 }
 
 if (-not (Test-Path -LiteralPath $syncScript -PathType Leaf)) {
@@ -73,6 +164,9 @@ if ($env:OMP_SKIP_VERIFY_TESTS -eq "1") {
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
   throw "Node.js is required but was not found on PATH."
 }
+# Validate all forwarded values before displaying paths or considering the optional editor.
+$validatedLaunch = New-ChildStartInfo $nodeExecutable @($syncScript)
+Set-ChildPolicyEnvironment $validatedLaunch "deployment-sync"
 
 Write-Section "OMP global promotion helper"
 Write-Host "Workspace deployment entry point: $syncScript"
@@ -106,7 +200,9 @@ if (-not (Test-ImmutablePointer)) {
   } else {
     Write-Host "[>] Notepad will open the proxy. Replace its entire content with the statement printed above, save, then close Notepad."
   }
-  Start-Process -FilePath "notepad.exe" -ArgumentList $pointerPath -Wait
+  $editor = Join-Path ([Environment]::GetFolderPath("Windows")) "System32\notepad.exe"
+  $editorExitCode = Invoke-PolicyChild "pointer-editor" $editor @($pointerPath)
+  if ($editorExitCode -ne 0) { exit $editorExitCode }
   if (-not (Test-ImmutablePointer)) {
     throw "Proxy remains invalid. No deployment was attempted."
   }

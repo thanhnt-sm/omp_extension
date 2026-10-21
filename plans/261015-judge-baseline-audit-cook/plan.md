@@ -52,3 +52,11 @@ This audit replaces only overlapping synthetic `ops[]`, singleton, and pre-resul
 | 5 | [P4 Heuristics and intent](./phase-05-p4-heuristics-and-intent.md) | Completed |
 | 6 | [P5 Recovery transaction](./phase-06-p5-recovery-transaction.md) | Completed |
 | 7 | [P6 Runtime promotion](./phase-07-p6-runtime-promotion.md) | Source proof complete; runtime promotion pending |
+
+## Scope coordination — todo recovery follow-on
+`../261018-jev-session-forensics/plan.md` Phases 4–5 specify current-native todo recovery fixes and task-scoped completion evidence. Preserve this audit's call-ID/hash/generation/revision staging and authoritative-result commit guarantees. Its recovery spec supplements P3 behavior; it does not reopen completed audit phases or clear P6's external immutable-proxy/runtime-proof prerequisite. No new blocking dependency is imposed: independent implementation is possible, but any later promotion must verify the integrated candidate and restarted runtime, not reuse earlier smoke evidence for changed code.
+
+## Execution reconciliation — 2026-10-19
+
+Residual C05/C11/C12/C13/C14/C15/C23/C24/C25/C26/C32 ownership: [consolidated master](../261019-research-to-cook-execution/plan.md), with [source-evidenced dispositions](../reports/261019-research-to-cook-coverage.json). Preserve real factory/transport/native/deployment protections; implement specific remaining security/evidence/authority gaps. Historical pointer failure is stale, not a planning/source prerequisite; actual authorized runtime/UI proof remains distinct.
+

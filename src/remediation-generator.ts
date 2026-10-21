@@ -13,8 +13,9 @@ export function generateRemediationBlock(params: RemediationDirective): string {
   const dynamicActionItems = [...params.actionItems];
   const dynamicConstraints = [...params.immutableConstraints];
 
-  // Synthesize dynamic action items based on failure reasons
-  for (const reason of params.failureReasons) {
+  // Only actual semantic/deterministic rejections can imply implementation repairs.
+  const implementationFailure = !params.outcome || params.outcome.status === "REJECTED";
+  for (const reason of implementationFailure ? params.failureReasons : []) {
     if (reason.toLowerCase().includes("test suite failed") || reason.toLowerCase().includes("test failure")) {
       const fileMatch = reason.match(/([a-zA-Z0-9_-]+\.test\.ts)/i);
       if (fileMatch) {
@@ -30,7 +31,7 @@ export function generateRemediationBlock(params: RemediationDirective): string {
     }
   }
 
-  if (params.testEvasion) {
+  if (implementationFailure && params.testEvasion) {
     dynamicActionItems.push("Review removed coverage or meaningful behavior before re-attempting completion.");
     dynamicConstraints.push("Do not delete existing assertions or test blocks.");
   }
@@ -49,6 +50,7 @@ export function generateRemediationBlock(params: RemediationDirective): string {
 
   return `<remediation>
   <instruction>${escapeXml(params.instruction)}</instruction>
+  <result_kind>${params.outcome?.status ?? "REJECTED"}</result_kind>
 ${taskTag}${criteriaTag}  <immutable_constraints>
 ${constraintsXml}
   </immutable_constraints>
@@ -66,7 +68,6 @@ export interface PlanDeltaParams {
   reasons: string[];
   nextActions: string[];
   suggestedTasks?: string[];
-  humanAuthorized?: boolean;
 }
 
 export function synthesizePlanDelta(

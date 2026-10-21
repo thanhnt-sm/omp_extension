@@ -34,3 +34,8 @@ End-to-end architectural and implementation overhaul (`ADR-20261015`) resolving 
 - [ ] Zero `0.80`, `0.30`, or `0.70` threshold walls or messages remain in `src/verification-gate.ts`, `src/cook-expert-judge.ts`, `src/plan-evaluator.ts`, or `typesafe-planner.ts`.
 - [ ] `extractCriteriaFromPlan`, `constructGateQuestions`, `sanitizeStateForTypeSafe`, `summarizeUnifiedDiff`, `collectConversationContext`, and `truncatePayloadState` deliver clean, task-scoped state and valid dict `criteria` to TypeSafe System One (`jev-latest`).
 - [ ] All unit and integration test suites pass (`bun test` exit code 0) and baseline is synchronized via `node tools/sync-baseline.cjs`.
+
+## Execution reconciliation — 2026-10-19
+
+Residual C02/C04/C08/C09/C10/C11/C18 ownership: [consolidated master](../261019-research-to-cook-execution/plan.md), with [source-evidenced dispositions](../reports/261019-research-to-cook-coverage.json). Completed index rows conflict with four pending children and observed source gaps; they are not proof. Finish independent real reasoning, canonical evidence/primitive/authority and actual reports without threshold lowering or universal-midpoint claims.
+

@@ -5,7 +5,8 @@ const crypto = require("crypto");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { execFileSync } = require("child_process");
+const { buildChildEnvironment, execFileChildSync, createVerificationHome } = require("../src/typesafe-child-env.cjs");
+const { readWorkspaceFile } = require("../src/typesafe-evidence-file.cjs");
 
 const ROOT_FILES = ["typesafe-planner.ts", "package.json", ".gitignore"];
 const REQUIRED_RUNTIME_FILES = [
@@ -14,8 +15,14 @@ const REQUIRED_RUNTIME_FILES = [
   "typesafe-redact.cjs",
   "typesafe-redact-patterns.cjs",
   "typesafe-policy-client.cjs",
+  "typesafe-child-env.cjs",
+  "typesafe-evidence-file.cjs",
 ];
 const RECURSIVE_ROOTS = ["agents", ".omp/agents", "docs", "src", "tests", "plans", "scripts", "tools"];
+const PRIVATE_EVALUATION_ROOTS = [
+  "plans/261019-jev-atomic-review/evaluation",
+  "plans/261019-jev-atomic-review/reports/paired",
+];
 const MANIFEST_NAME = ".sync-manifest.json";
 const JOURNAL_NAME = ".sync-journal.json";
 const MANIFEST_SCHEMA_VERSION = 1;
@@ -34,7 +41,12 @@ const ALLOWED_GLOBAL_COPIES = [
 const ALLOWED_GLOBAL_DESTINATIONS = new Set(ALLOWED_GLOBAL_COPIES.map(([root, relativePath]) => `${root}:${relativePath}`));
 
 function fail(message) { throw new Error(message); }
-function sha256File(filePath) { return crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex"); }
+function readImage(filePath) { return readWorkspaceFile(path.dirname(filePath), path.basename(filePath), { maxBytes: 64 * 1024 * 1024 }); }
+function sha256File(filePath) { return readImage(filePath).sha256; }
+function imageMetadata(image) { return image ? { sha256: image.sha256, identity: image.identity } : null; }
+function equalImage(left, right) { return left === null || right === null ? left === right : left.sha256 === right.sha256 && JSON.stringify(left.identity) === JSON.stringify(right.identity); }
+function currentImage(filePath) { try { return imageMetadata(readImage(filePath)); } catch (error) { if (error.code === "FILE_MISSING") return null; throw error; } }
+function assertImage(filePath, expected) { if (!equalImage(currentImage(filePath), expected)) fail("managed file identity changed"); }
 function normalizeForComparison(value) { const normalized = path.normalize(value); return process.platform === "win32" ? normalized.toLowerCase() : normalized; }
 function isSameOrNested(candidate, root) { const relative = path.relative(root, candidate); return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative)); }
 function isSafeRelative(relativePath) {
@@ -77,12 +89,23 @@ function assertTreeSafe(directory, label) {
     if (stat.isDirectory()) assertTreeSafe(entryPath, label);
   }
 }
+function isPackagedSource(relativePath) {
+  const normalized = relativePath.replace(/\\/g, "/");
+  const comparison = process.platform === "win32" ? normalized.toLowerCase() : normalized;
+  if (PRIVATE_EVALUATION_ROOTS.some((root) => comparison === root || comparison.startsWith(`${root}/`))) return false;
+  // Runtime imports use the real direct helper modules, not copied data or generated runs.
+  if (comparison.startsWith("tools/jev-paired-")) return /^tools\/jev-paired-[^/]+\.ts$/.test(comparison) && !/(?:\.(?:test|spec)|[-.]fixtures?)\.ts$/.test(comparison);
+  return true;
+}
 function listRegularFiles(directory, relativePrefix = "") {
-  if (!fs.existsSync(directory)) return [];
-  assertTreeSafe(directory, `source directory ${directory}`); const files = [];
+  try { fs.lstatSync(directory); } catch (error) { if (error && error.code === "ENOENT") return []; throw error; }
+  assertRealDirectory(directory, `source directory ${directory}`); const files = [];
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     const entryPath = path.join(directory, entry.name); const relativePath = relativePrefix ? `${relativePrefix}/${entry.name}` : entry.name;
-    if (entry.isDirectory()) files.push(...listRegularFiles(entryPath, relativePath)); else if (entry.isFile()) files.push(relativePath);
+    if (!isPackagedSource(relativePath)) continue;
+    const stat = fs.lstatSync(entryPath);
+    if (stat.isSymbolicLink()) fail("packaged source contains a symbolic link or junction");
+    if (stat.isDirectory()) files.push(...listRegularFiles(entryPath, relativePath)); else if (stat.isFile()) files.push(relativePath);
   }
   return files;
 }
@@ -95,7 +118,7 @@ function buildInventory(workspaceDir) {
   return [...discovered].sort();
 }
 function assertStrictPointer(pointerPath, targetDir) {
-  assertRegularFile(pointerPath, "OMP extension pointer"); const content = fs.readFileSync(pointerPath);
+  assertRegularFile(pointerPath, "OMP extension pointer"); const content = readImage(pointerPath).bytes;
   if (content.includes(0)) fail("OMP extension pointer must not contain null bytes");
   if (content.length >= 3 && content[0] === 0xef && content[1] === 0xbb && content[2] === 0xbf) fail("OMP extension pointer must not start with a BOM");
   const expected = `export { default } from "${path.join(targetDir, "typesafe-planner.ts").replace(/\\/g, "/")}";`;
@@ -146,7 +169,7 @@ function validateManifest(value, roots) {
 function readManifest(targetDir, roots) {
   const manifestPath = path.join(targetDir, MANIFEST_NAME); if (!fs.existsSync(manifestPath)) return validateManifest(null, roots);
   assertRegularFile(manifestPath, "sync manifest", { rejectHardlinks: true });
-  try { return validateManifest(JSON.parse(fs.readFileSync(manifestPath, "utf8")), roots); } catch (error) { fail(`sync manifest is malformed: ${error instanceof Error ? error.message : String(error)}`); }
+  try { return validateManifest(JSON.parse(readImage(manifestPath).bytes.toString("utf8")), roots); } catch { fail("sync manifest is malformed or unavailable"); }
 }
 function buildDesiredEntries(workspaceDir, inventory) {
   const entries = inventory.map((relativePath) => ({ root: ROOT_TARGET, relativePath, source: path.join(workspaceDir, relativePath) }));
@@ -171,64 +194,122 @@ function preflight(config) {
 }
 function createPlan(preflightPlan, config) {
   const manifestPath = path.join(preflightPlan.targetDir, MANIFEST_NAME);
+  const manifestImage = currentImage(manifestPath);
   if (config.bootstrap && fs.existsSync(manifestPath)) {
     fail("bootstrap is allowed only when the target has no sync manifest");
   }
   const previous = readManifest(preflightPlan.targetDir, preflightPlan.roots); const priorByKey = new Map(previous.entries.map((entry) => [manifestKey(entry.root, entry.relativePath), entry]));
   const desiredKeys = new Set(); const actions = []; const conflicts = [];
   for (const desired of preflightPlan.desired) {
-    const key = manifestKey(desired.root, desired.relativePath); desiredKeys.add(key); const destination = rootDestination(preflightPlan.roots, desired.root, desired.relativePath); const sourceHash = sha256File(desired.source); const prior = priorByKey.get(key);
-    if (!fs.existsSync(destination)) actions.push({ action: "CREATE", ...desired, destination, sourceHash });
-    else { assertDestinationSafety(destination); const currentHash = sha256File(destination);
-      if (currentHash === sourceHash) actions.push({ action: "NOOP", ...desired, destination, sourceHash });
-      else if (prior && prior.deployedHash === currentHash) actions.push({ action: "OVERWRITE", ...desired, destination, sourceHash, priorHash: currentHash });
-      else if (config.bootstrap) actions.push({ action: "OVERWRITE", ...desired, destination, sourceHash, priorHash: currentHash, bootstrap: true });
+    const key = manifestKey(desired.root, desired.relativePath); desiredKeys.add(key); const destination = rootDestination(preflightPlan.roots, desired.root, desired.relativePath); const sourceImage = imageMetadata(readImage(desired.source)); const sourceHash = sourceImage.sha256; const prior = priorByKey.get(key);
+    desired.sourceImage = sourceImage;
+    if (!fs.existsSync(destination)) actions.push({ action: "CREATE", ...desired, destination, sourceHash, destinationImage: null });
+    else { assertDestinationSafety(destination); const destinationImage = currentImage(destination); const currentHash = destinationImage.sha256;
+      if (currentHash === sourceHash) actions.push({ action: "NOOP", ...desired, destination, sourceHash, destinationImage });
+      else if (prior && prior.deployedHash === currentHash) actions.push({ action: "OVERWRITE", ...desired, destination, sourceHash, priorHash: currentHash, destinationImage });
+      else if (config.bootstrap) actions.push({ action: "OVERWRITE", ...desired, destination, sourceHash, priorHash: currentHash, destinationImage, bootstrap: true });
       else conflicts.push(`${desired.root}/${desired.relativePath}`);
     }
   }
   for (const prior of previous.entries) if (!desiredKeys.has(manifestKey(prior.root, prior.relativePath))) {
     const destination = rootDestination(preflightPlan.roots, prior.root, prior.relativePath);
     if (!fs.existsSync(destination)) actions.push({ action: "NOOP_PRUNED", root: prior.root, relativePath: prior.relativePath, destination, priorHash: prior.deployedHash });
-    else { assertDestinationSafety(destination); const currentHash = sha256File(destination);
-      if (currentHash === prior.deployedHash) actions.push({ action: "PRUNE", root: prior.root, relativePath: prior.relativePath, destination, priorHash: currentHash }); else conflicts.push(`${prior.root}/${prior.relativePath}`);
+    else { assertDestinationSafety(destination); const destinationImage = currentImage(destination); const currentHash = destinationImage.sha256;
+      if (currentHash === prior.deployedHash) actions.push({ action: "PRUNE", root: prior.root, relativePath: prior.relativePath, destination, priorHash: currentHash, destinationImage }); else conflicts.push(`${prior.root}/${prior.relativePath}`);
     }
   }
   if (conflicts.length) fail(`managed deployment conflicts: ${conflicts.sort().join(", ")}`);
   const entries = actions.filter((action) => !action.action.startsWith("NOOP")).filter((action) => action.action !== "PRUNE").map((action) => ({ root: action.root, relativePath: action.relativePath, deployedHash: action.sourceHash }));
   for (const action of actions) if (action.action === "NOOP") entries.push({ root: action.root, relativePath: action.relativePath, deployedHash: action.sourceHash });
-  return { ...preflightPlan, previous, actions, manifest: validateManifest({ schemaVersion: MANIFEST_SCHEMA_VERSION, entries }, preflightPlan.roots) };
+  assertImage(manifestPath, manifestImage);
+  for (const action of actions) {
+    action.destinationParents = captureParents(action.destination);
+    if (action.source) action.sourceParents = captureParents(action.source);
+  }
+  return { ...preflightPlan, previous, actions, manifestImage, manifestParents: captureParents(manifestPath), manifest: validateManifest({ schemaVersion: MANIFEST_SCHEMA_VERSION, entries }, preflightPlan.roots) };
 }
 function acquireLock(plan) {
   const lockPath = path.join(path.dirname(plan.targetDir), `.omp-sync-${path.basename(plan.targetDir)}.lock`); assertNoExistingLinks(lockPath, "deployment lock");
   if (isSameOrNested(lockPath, plan.targetDir) || isSameOrNested(lockPath, plan.workspaceDir) || isSameOrNested(lockPath, plan.backupDir)) fail("deployment lock overlaps a managed root");
-  try { return { path: lockPath, fd: fs.openSync(lockPath, "wx", 0o600) }; } catch (error) { if (error && error.code === "EEXIST") fail(`deployment lock already exists: ${lockPath}; operator recovery is required`); throw error; }
+  let fd;
+  try {
+    fd = fs.openSync(lockPath, "wx", 0o600);
+    fs.writeFileSync(fd, crypto.randomBytes(24).toString("hex")); fs.fsyncSync(fd);
+    const image = currentImage(lockPath); const descriptor = fs.fstatSync(fd, { bigint: true });
+    if (!image || Object.entries(image.identity).some(([key, value]) => String(descriptor[key]) !== value)) fail("deployment lock identity changed");
+    return { path: lockPath, fd, image, parents: captureParents(lockPath) };
+  } catch (error) { if (fd !== undefined) fs.closeSync(fd); if (error && error.code === "EEXIST") fail(`deployment lock already exists: ${lockPath}; operator recovery is required`); throw error; }
 }
-function releaseLock(lock) { if (!lock) return; try { fs.closeSync(lock.fd); } finally { try { fs.unlinkSync(lock.path); } catch {} } }
+function ownsLock(lock) {
+  try {
+    assertParents(lock.parents);
+    const descriptor = fs.fstatSync(lock.fd, { bigint: true });
+    return Object.entries(lock.image.identity).every(([key, value]) => String(descriptor[key]) === value) && equalImage(currentImage(lock.path), lock.image);
+  } catch { return false; }
+}
+function releaseLock(lock, retain = false) {
+  if (!lock) return;
+  try { if (!retain && ownsLock(lock)) fs.unlinkSync(lock.path); } finally { fs.closeSync(lock.fd); }
+}
 function assertBackupParentSecure(backupDir) {
   const parent = path.dirname(backupDir); if (process.platform !== "win32") { if ((fs.statSync(parent).mode & 0o022) !== 0) fail(`backup parent must not be group/world writable: ${parent}`); return; }
-  const acl = execFileSync("icacls", [parent], { encoding: "utf8", windowsHide: true });
+  const acl = execFileChildSync("deployment-acl", "icacls", [parent], { encoding: "utf8", windowsHide: true });
   if (/Everyone:.*\((?:F|M|W)\)/i.test(acl)) fail(`backup parent has permissive inherited ACL: ${parent}`);
 }
 function mkdirSecure(directory) { fs.mkdirSync(directory, { recursive: true, mode: 0o700 }); if (process.platform !== "win32") fs.chmodSync(directory, 0o700); }
-function writeJsonAtomic(filePath, value) { const temp = `${filePath}.${process.pid}.${crypto.randomBytes(4).toString("hex")}.tmp`; fs.writeFileSync(temp, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 }); fs.renameSync(temp, filePath); }
+function writeOwnedFile(filePath, bytes, mode, expectedHash) {
+  const fd = fs.openSync(filePath, "wx", mode);
+  let produced;
+  try {
+    fs.writeFileSync(fd, bytes); fs.fsyncSync(fd);
+    const descriptor = fs.fstatSync(fd, { bigint: true }); const image = currentImage(filePath);
+    if (!image || image.sha256 !== expectedHash || Object.entries(image.identity).some(([key, value]) => String(descriptor[key]) !== value)) fail("owned staging identity changed");
+    const after = fs.fstatSync(fd, { bigint: true });
+    if (Object.entries(image.identity).some(([key, value]) => String(after[key]) !== value)) fail("owned descriptor identity changed");
+    produced = image;
+  } finally { fs.closeSync(fd); }
+  // Windows may finalize write timestamps on close; provenance still requires our exact node.
+  const closed = currentImage(filePath);
+  if (!closed || closed.sha256 !== produced.sha256 || ["dev", "ino", "mode", "nlink", "size", "birthtimeNs"].some((key) => closed.identity[key] !== produced.identity[key])) fail("closed staging identity changed");
+  return closed;
+}
+function samePromotedImage(image, staged) {
+  return image && staged && image.sha256 === staged.sha256 && ["dev", "ino", "mode", "nlink", "size", "mtimeNs", "birthtimeNs"].every((key) => image.identity[key] === staged.identity[key]);
+}
+function writeJsonAtomic(filePath, value, guard) {
+  const temp = `${filePath}.${process.pid}.${crypto.randomBytes(8).toString("hex")}.tmp`;
+  const bytes = Buffer.from(`${JSON.stringify(value, null, 2)}\n`);
+  const staged = writeOwnedFile(temp, bytes, 0o600, sha256Text(bytes));
+  guard(); assertImage(temp, staged);
+  fs.renameSync(temp, filePath);
+  const promoted = currentImage(filePath);
+  if (!samePromotedImage(promoted, staged)) fail("journal promotion identity changed");
+  return promoted;
+}
 function fault(point) { if (process.env.OMP_FAULT_INJECT === point) fail(`fault injected at ${point}`); }
 function stageFiles(plan) {
   const stageDir = fs.mkdtempSync(path.join(os.tmpdir(), "omp-sync-stage-")); const staged = new Map();
+  const staging = { stageDir, staged, parents: captureParents(path.join(stageDir, "entry")) };
   try { for (const action of plan.actions) if (action.action === "CREATE" || action.action === "OVERWRITE") {
-    const stagePath = path.join(stageDir, String(staged.size)); fs.copyFileSync(action.source, stagePath); if (sha256File(stagePath) !== action.sourceHash) fail(`staging hash mismatch: ${action.source}`); staged.set(action.destination, stagePath);
-  } return { stageDir, staged }; } catch (error) { fs.rmSync(stageDir, { recursive: true, force: true }); throw error; }
+    assertParents(action.sourceParents);
+    assertParents(staging.parents);
+    const image = readImage(action.source);
+    if (!equalImage(imageMetadata(image), action.sourceImage)) fail("source changed before staging");
+    const stagePath = path.join(stageDir, String(staged.size));
+    const stageImage = writeOwnedFile(stagePath, image.bytes, 0o600, image.sha256);
+    staged.set(action.destination, { path: stagePath, image: stageImage });
+  } return staging; } catch (error) { cleanupStaging(staging); throw error; }
 }
-function capturePreimage(destination, backupDir, ordinal) {
+function capturePreimage(destination, backupDir, ordinal, expected) {
   const backupPath = path.join(backupDir, "preimages", String(ordinal));
-  const priorExists = fs.existsSync(destination);
-  if (!priorExists) return { priorExists: false, backupPath: null, priorHash: null };
-  assertDestinationSafety(destination);
+  const image = currentImage(destination);
+  if (expected !== undefined && !equalImage(image, expected)) fail("destination changed before backup");
+  if (!image) return { priorExists: false, backupPath: null, priorHash: null, preimage: null, backupImage: null };
+  const accepted = readImage(destination);
+  if (!equalImage(imageMetadata(accepted), image)) fail("preimage changed during backup");
   mkdirSecure(path.dirname(backupPath));
-  fs.copyFileSync(destination, backupPath);
-  const priorHash = sha256File(destination);
-  if (sha256File(backupPath) !== priorHash) fail(`backup hash mismatch: ${destination}`);
-  if (process.platform !== "win32") fs.chmodSync(backupPath, 0o600);
-  return { priorExists: true, backupPath, priorHash };
+  const backupImage = writeOwnedFile(backupPath, accepted.bytes, 0o600, accepted.sha256);
+  return { priorExists: true, backupPath, priorHash: accepted.sha256, preimage: image, backupImage, backupParents: captureParents(backupPath) };
 }
 function plannedDirectories(destination, root) {
   const parent = path.dirname(destination);
@@ -244,125 +325,209 @@ function plannedDirectories(destination, root) {
 function createDirectories(directories) {
   for (const directory of directories) fs.mkdirSync(directory, { mode: 0o700 });
 }
-function restoreEntry(entry, unresolved) {
-  const exists = fs.existsSync(entry.destination);
-  try {
-    if (entry.priorExists) {
-      if (exists && sha256File(entry.destination) === entry.priorHash) return;
-      if (entry.action === "PRUNE" && exists) {
-        unresolved.push(entry.destination);
-        return;
-      }
-      mkdirSecure(path.dirname(entry.destination));
-      fs.copyFileSync(entry.backupPath, entry.destination);
-      if (sha256File(entry.destination) !== entry.priorHash) throw new Error("restored hash mismatch");
-    } else if (exists) {
-      if (entry.newHash && sha256File(entry.destination) !== entry.newHash && !entry.applied) {
-        unresolved.push(entry.destination);
-        return;
-      }
-      fs.unlinkSync(entry.destination);
-    }
-    for (const directory of [...entry.createdDirectories].reverse()) { try { fs.rmdirSync(directory); } catch {} }
-  } catch { unresolved.push(entry.destination); }
+function directoryIdentity(directory) {
+  assertRealDirectory(directory, "transaction directory");
+  const stat = fs.lstatSync(directory, { bigint: true });
+  if (stat.ino === 0n) fail("directory identity unavailable");
+  return { dev: String(stat.dev), ino: String(stat.ino), mode: String(stat.mode) };
 }
-function rollback(journal, journalPath) {
+function sameDirectory(directory, expected) { try { return JSON.stringify(directoryIdentity(directory)) === JSON.stringify(expected); } catch { return false; } }
+function captureParents(filePath) {
+  const parents = []; let cursor = path.dirname(filePath);
+  while (true) {
+    if (fs.existsSync(cursor)) parents.push({ path: cursor, identity: directoryIdentity(cursor) });
+    const next = path.dirname(cursor); if (next === cursor) break; cursor = next;
+  }
+  return parents;
+}
+function assertParents(parents) { for (const entry of parents) if (!sameDirectory(entry.path, entry.identity)) fail("transaction parent identity changed"); }
+function cleanupStaging(staging) {
+  try {
+    assertParents(staging.parents);
+    for (const staged of staging.staged.values()) { try { assertImage(staged.path, staged.image); fs.unlinkSync(staged.path); } catch {} }
+    fs.rmdirSync(staging.stageDir);
+  } catch {}
+}
+function ownedWrite(entry, bytes, persist) {
+  assertParents(entry.parentChain);
+  const parentChain = captureParents(entry.destination);
+  assertParents(entry.parentChain);
+  entry.parentChain = parentChain;
+  persist();
+  const temporary = path.join(path.dirname(entry.destination), `.omp-sync-write-${crypto.randomBytes(12).toString("hex")}`);
+  const stagedImage = writeOwnedFile(temporary, bytes, entry.preimage ? Number(entry.preimage.identity.mode) & 0o777 : 0o600, entry.newHash);
+  entry.staging = { path: temporary, image: stagedImage };
+  persist();
+  assertParents(entry.parentChain);
+  assertImage(temporary, entry.staging.image);
+  assertImage(entry.destination, entry.preimage);
+  fs.renameSync(temporary, entry.destination);
+  entry.postimage = currentImage(entry.destination);
+  if (!samePromotedImage(entry.postimage, entry.staging.image)) fail("promoted file identity changed");
+  persist();
+}
+function restoreEntry(entry, unresolved, backupOwned) {
+  try {
+    assertParents(entry.parentChain);
+    const observed = currentImage(entry.destination);
+    if ((entry.priorExists && equalImage(observed, entry.preimage)) || (!entry.postimageKnown && equalImage(observed, entry.preimage)) || (entry.restoredImage && equalImage(observed, entry.restoredImage))) return;
+    if (!entry.postimageKnown || !equalImage(observed, entry.postimage)) {
+      unresolved.push({ path: entry.destination, reason: "POSTIMAGE_NOT_OWNED", expected: entry.postimage || null, observed }); return;
+    }
+    if (entry.priorExists) {
+      if (!backupOwned()) throw new Error("BACKUP_DIRECTORY_CHANGED");
+      assertParents(entry.backupParents);
+      const backup = readImage(entry.backupPath);
+      if (!equalImage(imageMetadata(backup), entry.backupImage) || backup.sha256 !== entry.priorHash) throw new Error("BACKUP_IDENTITY_CHANGED");
+      const temporary = path.join(path.dirname(entry.destination), `.omp-sync-restore-${crypto.randomBytes(12).toString("hex")}`);
+      const stagedImage = writeOwnedFile(temporary, backup.bytes, Number(entry.preimage.identity.mode) & 0o777, backup.sha256);
+      assertParents(entry.parentChain); assertParents(entry.backupParents);
+      assertImage(temporary, stagedImage);
+      assertImage(entry.destination, observed);
+      fs.renameSync(temporary, entry.destination);
+      entry.restoredImage = currentImage(entry.destination);
+      if (!samePromotedImage(entry.restoredImage, stagedImage)) throw new Error("RESTORE_HASH_CHANGED");
+    } else if (observed) {
+      assertParents(entry.parentChain);
+      assertImage(entry.destination, entry.postimage);
+      fs.unlinkSync(entry.destination);
+      entry.restoredImage = null;
+    }
+  } catch (error) {
+    unresolved.push({ path: entry.destination, reason: ["BACKUP_DIRECTORY_CHANGED", "BACKUP_IDENTITY_CHANGED", "RESTORE_HASH_CHANGED"].includes(error.message) ? error.message : "RESTORE_IDENTITY_UNAVAILABLE" });
+  }
+}
+function rollback(journal, persist, backupOwned, lock) {
   const unresolved = []; let injected = false;
   const entries = [...journal.entries];
   if (journal.manifest && journal.manifest.intent) entries.push(journal.manifest);
   for (const entry of entries.reverse()) {
     if (!entry.intent) continue;
-    restoreEntry(entry, unresolved);
+    restoreEntry(entry, unresolved, backupOwned);
     if (!injected && process.env.OMP_FAULT_INJECT === "during_rollback") {
-      unresolved.push(entry.destination);
-      injected = true;
+      unresolved.push({ path: entry.destination, reason: "INJECTED_ROLLBACK_FAILURE" }); injected = true;
     }
   }
+  for (const entry of journal.unchanged) {
+    try { assertParents(entry.parents); assertImage(entry.destination, entry.image); }
+    catch { unresolved.push({ path: entry.destination, reason: "UNCHANGED_PATH_CHANGED", expected: entry.image }); }
+  }
+  if (!ownsLock(lock)) unresolved.push({ path: lock.path, reason: "LOCK_IDENTITY_CHANGED" });
+  if (!backupOwned()) unresolved.push({ path: journal.backupDir, reason: "BACKUP_DIRECTORY_CHANGED" });
   journal.status = unresolved.length ? "rollback_incomplete" : "recovered";
-  journal.unresolved = [...new Set(unresolved)].sort();
-  writeJsonAtomic(journalPath, journal);
+  journal.unresolved = unresolved;
+  try { persist(); } catch {
+    unresolved.push({ path: journal.journalPath, reason: "JOURNAL_IDENTITY_CHANGED" });
+    journal.status = "rollback_incomplete";
+    // Preserve an interfering journal; retain our recovery record in an exclusive sibling.
+    const recoveryPath = `${journal.backupDir}.recovery-${crypto.randomBytes(12).toString("hex")}.json`;
+    journal.recoveryJournalPath = recoveryPath;
+    try {
+      assertParents(journal.recoveryParents);
+      fs.writeFileSync(recoveryPath, `${JSON.stringify(journal, null, 2)}\n`, { flag: "wx", mode: 0o600 });
+    } catch {
+      unresolved.push({ path: recoveryPath, reason: "RECOVERY_JOURNAL_UNAVAILABLE" });
+      // The error must still be RECOVERY_INCOMPLETE and retain the owned lock.
+    }
+  }
   return journal.unresolved;
 }
-function applyTransaction(plan, config) {
+function applyTransaction(plan, config, lock) {
   assertBackupParentSecure(plan.backupDir);
-  mkdirSecure(plan.backupDir);
+  fs.mkdirSync(plan.backupDir, { mode: 0o700 });
+  const backupIdentity = directoryIdentity(plan.backupDir);
+  const backupParents = captureParents(path.join(plan.backupDir, "entry"));
+  const backupOwned = () => { try { assertParents(backupParents); return sameDirectory(plan.backupDir, backupIdentity); } catch { return false; } };
   const journalPath = path.join(plan.backupDir, JOURNAL_NAME);
   const staging = stageFiles(plan);
   const changes = plan.actions.filter((action) => action.action === "CREATE" || action.action === "OVERWRITE" || action.action === "PRUNE");
   const manifestPath = path.join(plan.targetDir, MANIFEST_NAME);
-  const journal = { schemaVersion: 1, status: "intent", entries: [], manifest: null, unresolved: [] };
-  let journalPersisted = false;
+  const journal = { schemaVersion: 1, status: "intent", backupDir: plan.backupDir, journalPath, recoveryParents: captureParents(plan.backupDir), lock: { path: lock.path, image: lock.image }, entries: [], manifest: null, unresolved: [] };
+  journal.unchanged = plan.actions.filter((action) => action.action.startsWith("NOOP")).map((action) => ({ destination: action.destination, parents: action.destinationParents, image: action.destinationImage || null }));
+  let journalPersisted = false; let journalImage = null;
+  const persist = () => {
+    if (!backupOwned()) fail("backup directory identity changed");
+    assertImage(journalPath, journalImage);
+    journalImage = writeJsonAtomic(journalPath, journal, () => {
+      if (!backupOwned()) fail("backup directory identity changed");
+      assertImage(journalPath, journalImage);
+    });
+  };
   try {
     changes.forEach((action, index) => {
-      const image = capturePreimage(action.destination, plan.backupDir, index);
-      journal.entries.push({ destination: action.destination, root: action.root, relativePath: action.relativePath, action: action.action, ...image, newHash: action.sourceHash || null, createdDirectories: [], intent: false, applied: false });
+      assertParents(action.destinationParents);
+      const image = capturePreimage(action.destination, plan.backupDir, index, action.destinationImage);
+      journal.entries.push({ destination: action.destination, parentChain: action.destinationParents, root: action.root, relativePath: action.relativePath, action: action.action, ...image, newHash: action.sourceHash || null, postimage: null, postimageKnown: false, createdDirectories: [], intent: false, applied: false });
     });
-    journal.manifest = { destination: manifestPath, ...capturePreimage(manifestPath, plan.backupDir, changes.length), newHash: sha256Text(`${JSON.stringify(plan.manifest, null, 2)}\n`), createdDirectories: [], intent: false, applied: false };
-    writeJsonAtomic(journalPath, journal);
-    journalPersisted = true;
+    assertParents(plan.manifestParents);
+    journal.manifest = { destination: manifestPath, parentChain: plan.manifestParents, action: "MANIFEST", ...capturePreimage(manifestPath, plan.backupDir, changes.length, plan.manifestImage), newHash: sha256Text(`${JSON.stringify(plan.manifest, null, 2)}\n`), postimage: null, postimageKnown: false, createdDirectories: [], intent: false, applied: false };
+    persist(); journalPersisted = true;
     for (let index = 0; index < changes.length; index += 1) {
-      const action = changes[index];
-      const entry = journal.entries[index];
+      const action = changes[index]; const entry = journal.entries[index];
       if (action.action !== "PRUNE") entry.createdDirectories = plannedDirectories(action.destination, plan.roots[action.root]);
-      entry.intent = true;
-      writeJsonAtomic(journalPath, journal);
+      entry.intent = true; persist();
+      assertImage(entry.destination, entry.preimage);
       if (action.action === "PRUNE") {
-        if (!fs.existsSync(action.destination) || sha256File(action.destination) !== entry.priorHash) fail(`destination changed before prune: ${action.destination}`);
-        fs.unlinkSync(action.destination);
+        fs.unlinkSync(action.destination); entry.postimage = null;
       } else {
-        const currentHash = fs.existsSync(action.destination) ? sha256File(action.destination) : null;
-        if (currentHash !== entry.priorHash) fail(`destination changed before write: ${action.destination}`);
         createDirectories(entry.createdDirectories);
-        fs.copyFileSync(staging.staged.get(action.destination), action.destination);
-        fault("after_copy_write");
-        if (sha256File(action.destination) !== entry.newHash) fail(`destination hash mismatch: ${action.destination}`);
+        const staged = staging.staged.get(action.destination); const accepted = readImage(staged.path);
+        assertParents(staging.parents);
+        if (!equalImage(imageMetadata(accepted), staged.image)) fail("staging identity changed");
+        ownedWrite(entry, accepted.bytes, persist);
       }
-      entry.applied = true;
-      writeJsonAtomic(journalPath, journal);
-      if (action.root === ROOT_TARGET) fault("after_target_copy");
-      else fault("after_global_write");
+      entry.postimageKnown = true; persist();
+      if (action.action !== "PRUNE") fault("after_copy_write");
+      entry.applied = true; persist();
+      if (action.root === ROOT_TARGET) fault("after_target_copy"); else fault("after_global_write");
       if (action.action === "PRUNE") fault("after_prune");
     }
     journal.manifest.createdDirectories = plannedDirectories(manifestPath, plan.targetDir);
-    journal.manifest.intent = true;
-    writeJsonAtomic(journalPath, journal);
+    journal.manifest.intent = true; persist();
     createDirectories(journal.manifest.createdDirectories);
-    writeJsonAtomic(manifestPath, plan.manifest);
+    ownedWrite(journal.manifest, Buffer.from(`${JSON.stringify(plan.manifest, null, 2)}\n`), persist);
+    journal.manifest.postimageKnown = true; persist();
     fault("after_manifest_write");
-    if (sha256File(manifestPath) !== journal.manifest.newHash) fail("sync manifest hash mismatch");
-    journal.manifest.applied = true;
-    writeJsonAtomic(journalPath, journal);
+    journal.manifest.applied = true; persist();
     fault("before_verify");
-    if (config.skipVerifyTests) {
-      journal.status = "deployed_unverified";
-      writeJsonAtomic(journalPath, journal);
-      return "DEPLOYED_UNVERIFIED";
+    if (!config.skipVerifyTests) {
+      const home = createVerificationHome();
+      try { home.execFileSync("deployment-verify", config.bunBin, ["test"], { cwd: plan.targetDir, stdio: "inherit" }); }
+      finally { home.cleanup(); }
     }
-    execFileSync(config.bunBin, ["test"], { cwd: plan.targetDir, stdio: "inherit", env: { ...process.env, OMP_SKIP_VERIFY_TESTS: "" } });
-    journal.status = "verified";
-    writeJsonAtomic(journalPath, journal);
-    return "DEPLOYED_VERIFIED";
+    if (!ownsLock(lock)) fail("deployment lock identity changed");
+    // Verification cannot silently mutate managed postimages or recovery preimages.
+    for (const entry of [...journal.entries, journal.manifest]) {
+      assertParents(entry.parentChain);
+      assertImage(entry.destination, entry.postimage);
+      if (entry.backupImage) { assertParents(entry.backupParents); assertImage(entry.backupPath, entry.backupImage); }
+    }
+    for (const entry of journal.unchanged) { assertParents(entry.parents); assertImage(entry.destination, entry.image); }
+    journal.status = config.skipVerifyTests ? "deployed_unverified" : "verified"; persist();
+    return config.skipVerifyTests ? "DEPLOYED_UNVERIFIED" : "DEPLOYED_VERIFIED";
   } catch (error) {
     if (!journalPersisted) {
       const wrapped = new Error(`BACKUP_INCOMPLETE: ${error instanceof Error ? error.message : String(error)}`);
-      wrapped.exitCode = 1;
-      throw wrapped;
+      wrapped.exitCode = 1; throw wrapped;
     }
-    const unresolved = rollback(journal, journalPath);
-    const status = unresolved.length ? "RECOVERY_INCOMPLETE" : "RECOVERED";
-    const wrapped = new Error(`${status}: ${error instanceof Error ? error.message : String(error)}${unresolved.length ? `; unresolved: ${unresolved.join(", ")}` : ""}`);
-    wrapped.exitCode = unresolved.length ? 2 : 1;
-    throw wrapped;
+    const unresolved = rollback(journal, persist, backupOwned, lock);
+    const details = unresolved.length ? `; reasons: ${[...new Set(unresolved.map((entry) => entry.reason))].join(", ")}; recovery evidence: ${journal.recoveryJournalPath || journalPath}` : "";
+    const wrapped = new Error(`${unresolved.length ? "RECOVERY_INCOMPLETE" : "RECOVERED"}: ${error instanceof Error ? error.message : String(error)}${details}`);
+    wrapped.exitCode = unresolved.length ? 2 : 1; throw wrapped;
   } finally {
-    fs.rmSync(staging.stageDir, { recursive: true, force: true });
+    cleanupStaging(staging);
   }
 }
 function sha256Text(text) { return crypto.createHash("sha256").update(text).digest("hex"); }
 function main() {
-  const { dryRun, bootstrap } = parseArgs(process.argv.slice(2)); const workspaceDir = process.env.OMP_WORKSPACE_DIR ? path.resolve(process.env.OMP_WORKSPACE_DIR) : path.resolve(__dirname, ".."); const homeDir = process.env.OMP_HOME_DIR ? path.resolve(process.env.OMP_HOME_DIR) : os.homedir(); const targetDir = process.env.OMP_TARGET_DIR ? path.resolve(process.env.OMP_TARGET_DIR) : path.normalize("C:/Users/thant/Projects/omp_extension"); const pointerPath = process.env.OMP_EXTENSION_POINTER ? path.resolve(process.env.OMP_EXTENSION_POINTER) : path.join(homeDir, ".omp", "agent", "extensions", "typesafe-planner.ts");
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-"); const backupDir = process.env.OMP_BACKUP_DIR ? path.resolve(process.env.OMP_BACKUP_DIR) : path.join(path.dirname(targetDir), `${path.basename(targetDir)}_backup_${timestamp}`); const config = { workspaceDir, targetDir, homeDir, pointerPath, backupDir, bunBin: process.env.OMP_BUN_BIN || "bun", skipVerifyTests: process.env.OMP_SKIP_VERIFY_TESTS === "1", bootstrap };
+  const allowed = buildChildEnvironment("deployment-sync");
+  const { dryRun, bootstrap } = parseArgs(process.argv.slice(2)); const workspaceDir = allowed.OMP_WORKSPACE_DIR || path.resolve(__dirname, ".."); const homeDir = allowed.OMP_HOME_DIR || os.homedir(); const targetDir = allowed.OMP_TARGET_DIR || path.normalize("C:/Users/thant/Projects/omp_extension"); const pointerPath = allowed.OMP_EXTENSION_POINTER || path.join(homeDir, ".omp", "agent", "extensions", "typesafe-planner.ts");
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-"); const backupDir = allowed.OMP_BACKUP_DIR || path.join(path.dirname(targetDir), `${path.basename(targetDir)}_backup_${timestamp}`); const config = { workspaceDir, targetDir, homeDir, pointerPath, backupDir, bunBin: allowed.OMP_BUN_BIN || "bun", skipVerifyTests: process.env.OMP_SKIP_VERIFY_TESTS === "1", bootstrap };
   const preflightPlan = preflight(config); const initialPlan = createPlan(preflightPlan, config); console.log(`Preflight succeeded for ${initialPlan.inventory.length} baseline files.`); console.log(`Managed actions: ${initialPlan.actions.map((action) => `${action.bootstrap ? "BOOTSTRAP_OVERWRITE" : action.action}:${action.root}/${action.relativePath}`).join(", ") || "none"}`);
   if (dryRun) { console.log("Dry run completed; no lock, backup, staging, journal, or filesystem mutation was performed."); return; }
-  let lock; try { lock = acquireLock(initialPlan); const plan = createPlan(preflight(config), config); const status = applyTransaction(plan, config); console.log(`${status}. Backup and journal retained: ${plan.backupDir}`); } finally { releaseLock(lock); }
+  let lock; let retainLock = false;
+  try { lock = acquireLock(initialPlan); const plan = createPlan(preflight(config), config); const status = applyTransaction(plan, config, lock); console.log(`${status}. Backup and journal retained: ${plan.backupDir}`); }
+  catch (error) { retainLock = error.exitCode === 2; throw error; }
+  finally { releaseLock(lock, retainLock); }
 }
 try { main(); } catch (error) { console.error(`[ERROR] ${error instanceof Error ? error.message : String(error)}`); process.exitCode = error && error.exitCode === 2 ? 2 : 1; }

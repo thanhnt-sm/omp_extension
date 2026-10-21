@@ -18,3 +18,8 @@ Document the technical root cause of the consecutive `TypeSafe: ONLINE` and `Typ
 - [x] Đánh giá đa chiều ck:predict về phương án bọc catch cho prompt injection: 5-persona pre-analysis report evaluating the .catch(() => {}) scoping fix.
 - [x] Giải thích cơ chế Pre-flight Health Probe duy nhất 1 lần khi session_start: Explain single-shot event-driven probe with zero polling daemons.
 - [x] Deliverable: Technical journal at docs/journals/2026-10-07-health-probe-dual-notification-analysis.md.
+
+## Execution reconciliation — 2026-10-19
+
+Residual C31/C35 ownership: [consolidated master](../261019-research-to-cook-execution/plan.md), with [source-evidenced dispositions](../reports/261019-research-to-cook-coverage.json). Preserve the completed diagnostic; narrowly repair delivery-versus-transport classification where the current source still differs. No broad health daemon or repeated unchanged failure confirmation.
+

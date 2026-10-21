@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "manifest": "D:\\100.Software\\Github\\omp_extension\\plans\\261018-jev-session-forensics\\reports\\cohort-manifest.json",
+  "files": [
+    {
+      "workspace": "workspace-13",
+      "sessionId": "01a12b03-a472-75cc-bdf6-c7f81b1f4c20",
+      "status": "stable",
+      "physicalRecords": 302,
+      "parsedRecords": 302,
+      "parseErrors": 0,
+      "events": 0,
+      "duplicates": 0
+    },
+    {
+      "workspace": "workspace-14",
+      "sessionId": "01a120cd-56e1-75e9-8a83-c715bc2d7c2d",
+      "status": "stable",
+      "physicalRecords": 896,
+      "parsedRecords": 896,
+      "parseErrors": 0,
+      "events": 0,
+      "duplicates": 0
+    }
+  ],
+  "accounting": {
+    "selectedFiles": 2,
+    "stableFiles": 2,
+    "unstableFiles": 0,
+    "physicalRecords": 1198,
+    "parsedRecords": 1198,
+    "parseErrors": 0,
+    "includedEvents": 0,
+    "duplicateEvents": 0,
+    "unresolvedEvents": 0
+  },
+  "routeTotals": {},
+  "parseErrorLedger": [],
+  "duplicateLedger": []
+}

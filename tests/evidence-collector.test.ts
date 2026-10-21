@@ -1,4 +1,5 @@
 import { execSync } from "node:child_process";
+import { createRequire } from "node:module";
 import fs from "node:fs/promises";
 import { describe, expect, test } from "bun:test";
 import os from "node:os";
@@ -8,15 +9,54 @@ import {
   collectTaskEvidence,
   executeTestCommand,
   extractCriteriaFromPlan,
-  sanitizeEnvironment,
   SecurityViolationError,
   captureWorkspaceSnapshot,
   diffSnapshots,
   isPlanCliStub,
+  validateEvidenceFreshness,
+  hasProductCodeChanges,
 } from "../src/evidence-collector";
 import { collectDeliverableArtifacts } from "../typesafe-planner";
+import type { TaskContract } from "../src/types/verification";
+const { buildChildEnvironment } = createRequire(import.meta.url)("../src/typesafe-child-env.cjs");
 
 describe("Phase 1: Deterministic Evidence Collector & Claude Isolation", () => {
+  test("an unchanged valid task baseline excludes unrelated protected WIP", async () => {
+    const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "typesafe-empty-baseline-"));
+    try {
+      execSync("git init", { cwd, stdio: "ignore" });
+      await fs.mkdir(path.join(cwd, ".claude"));
+      await fs.writeFile(path.join(cwd, ".claude", "settings.json"), '{"preexisting":true}');
+      const baseline = await captureWorkspaceSnapshot(cwd);
+      const evidence = await collectTaskEvidence({ cwd, baseline });
+      expect(evidence.diffScope).toBe("task-baseline");
+      expect(evidence.changedFiles).toEqual([]);
+      expect(evidence.gitStatus).toBe("");
+      expect(evidence.gitDiff).toBe("");
+    } finally {
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  test("missing or truncated baseline never labels recent commits as task scoped", async () => {
+    const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "typesafe-fallback-scope-"));
+    try {
+      execSync('git init && git config user.name Test && git config user.email test@example.com', { cwd, stdio: "ignore" });
+      await fs.writeFile(path.join(cwd, "report.md"), "initial");
+      execSync("git add . && git commit -m initial", { cwd, stdio: "ignore" });
+      await fs.writeFile(path.join(cwd, "report.md"), "second");
+      execSync("git add . && git commit -m second", { cwd, stdio: "ignore" });
+      for (const baseline of [undefined, { files: new Map<string, string>(), truncated: true }]) {
+        const evidence = await collectTaskEvidence({ cwd, baseline });
+        expect(evidence.diffScope).toBe("full-working-tree");
+        expect(evidence.changedFiles).toEqual([]);
+        expect(evidence.counterevidence).toContain("No host-owned task baseline: current worktree is advisory, not task-relative proof.");
+        if (baseline) expect(evidence.omissions?.some((item) => item.reason === "HISTORICAL_PREIMAGE_REQUIRED")).toBe(true);
+      }
+    } finally {
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
+  });
   test("assertPathIsClaudeSafe throws SecurityViolationError for ~/.claude paths", () => {
     const claudeDir = path.join(os.homedir(), ".claude", "settings.json");
     expect(() => assertPathIsClaudeSafe(claudeDir)).toThrow(SecurityViolationError);
@@ -33,22 +73,15 @@ describe("Phase 1: Deterministic Evidence Collector & Claude Isolation", () => {
     expect(() => assertPathIsClaudeSafe(normalPath)).not.toThrow();
   });
 
-  test("sanitizeEnvironment strips all ANTHROPIC_ and CLAUDE_ environment variables", () => {
-    const dirtyEnv = {
-      PATH: "/usr/bin",
-      NODE_ENV: "test",
-      ANTHROPIC_API_KEY: "sk-ant-test-key",
-      CLAUDE_CODE_TOKEN: "claude-token-val",
-      ANTHROPIC_BASE_URL: "https://api.anthropic.com",
-      TYPESAFE_API_KEY: "valid-typesafe-key",
-    };
-
-    const cleanEnv = sanitizeEnvironment(dirtyEnv);
-    expect(cleanEnv.PATH).toBe("/usr/bin");
-    expect(cleanEnv.TYPESAFE_API_KEY).toBe("valid-typesafe-key");
-    expect(cleanEnv.ANTHROPIC_API_KEY).toBeUndefined();
-    expect(cleanEnv.CLAUDE_CODE_TOKEN).toBeUndefined();
-    expect(cleanEnv.ANTHROPIC_BASE_URL).toBeUndefined();
+  test("central verification environment omits arbitrary hooks and all provider credentials", () => {
+    const cleanEnv = buildChildEnvironment("verification", {
+      PATH: process.env.PATH, SystemRoot: process.env.SystemRoot,
+      ANTHROPIC_API_KEY: "provider-sentinel", CLAUDE_CODE_TOKEN: "private-sentinel",
+      TYPESAFE_API_KEY: "typesafe-sentinel", NODE_OPTIONS: "--require malicious",
+      HTTP_PROXY: "http://unsafe", FOREIGN_CONFIGURATION: "unsafe-but-not-secret",
+    });
+    expect(cleanEnv.PATH).toBe(process.env.PATH);
+    for (const name of ["ANTHROPIC_API_KEY", "CLAUDE_CODE_TOKEN", "TYPESAFE_API_KEY", "NODE_OPTIONS", "HTTP_PROXY", "FOREIGN_CONFIGURATION"]) expect(cleanEnv[name]).toBeUndefined();
   });
 
   test("extractCriteriaFromPlan parses task and acceptance criteria from markdown", () => {
@@ -328,5 +361,199 @@ describe("Phase 1: Deterministic Evidence Collector & Claude Isolation", () => {
     );
     expect(result.exitCode).toBe(130);
     expect(result.output).toContain("aborted");
+  });
+});
+
+function evidenceContract(kind: TaskContract["taskKind"] = "implementation"): TaskContract {
+  const source = { path: "plan.md", digest: "approved-source", startLine: 1, endLine: 2, text: "Preserve every task-relative change and relevant proof." };
+  const user = { sessionId: "session", entryId: "user-entry", digest: "original-request", kind: "user_request" as const };
+  return {
+    schemaVersion: 1, contractId: "contract", revision: 1, revisionId: "revision", incarnationId: "incarnation",
+    creation: { sessionId: "session", branchId: "branch", entryId: "native-result", callId: "native-call" },
+    target: { phase: "Evidence", phaseOrdinal: 0, content: "Evaluate evidence", ordinal: 0 }, taskKind: kind,
+    allowedMutationScope: { paths: ["src/**", "report.md", "check.cjs"], operations: ["read", "modify", "create", "delete", "execute"] },
+    approvedSource: { kind: "plan", path: "plan.md", digest: source.digest, approval: user, spans: [source] },
+    originalUserRequest: user, amendments: [], criteria: [{ id: "criterion-1", kind: "acceptance", text: source.text, source }],
+    approvedCommandIds: [], parentRequirements: [], policyDigest: "policy",
+  };
+}
+
+describe("Task-relative snapshot fidelity", () => {
+  test("a missing non-Git workspace is unavailable rather than a clean all-deleted snapshot", async () => {
+    const parent = await fs.mkdtemp(path.join(os.tmpdir(), "typesafe-missing-root-"));
+    try {
+      const cwd = path.join(parent, "absent");
+      const contract = evidenceContract("research");
+      const baseline = await captureWorkspaceSnapshot(cwd, { contract });
+      expect(baseline.complete).toBe(false);
+      expect(baseline.omissions?.some((item) => item.required)).toBe(true);
+      const evidence = await collectTaskEvidence({ cwd, contract, baseline });
+      expect(evidence.evidenceStatus).toBe("EVIDENCE_REQUIRED");
+      expect(evidence.cleanWorkingTree).toBe(false);
+    } finally { await fs.rm(parent, { recursive: true, force: true }); }
+  });
+
+  test("an unborn valid baseline covers the first complete commit interval without invented history", async () => {
+    const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "typesafe-unborn-interval-"));
+    try {
+      execSync("git init && git config user.name Test && git config user.email test@example.com", { cwd, stdio: "ignore" });
+      const contract = evidenceContract("research");
+      const baseline = await captureWorkspaceSnapshot(cwd, { contract });
+      expect(baseline.headSha).toBeUndefined();
+      expect(baseline.complete).toBe(true);
+      await fs.writeFile(path.join(cwd, "report.md"), "first actual task commit\n");
+      execSync("git add . && git commit -qm first", { cwd, stdio: "ignore" });
+      await fs.appendFile(path.join(cwd, "report.md"), "second actual task commit\n");
+      execSync("git add . && git commit -qm second", { cwd, stdio: "ignore" });
+      const evidence = await collectTaskEvidence({ cwd, contract, baseline });
+      expect(evidence.commitInterval?.from).toBeUndefined();
+      expect(evidence.commitInterval?.commits).toHaveLength(2);
+      expect(evidence.commitInterval?.patch).toContain("+first actual task commit");
+      expect(evidence.changedFiles).toEqual(["report.md"]);
+      expect(evidence.evidenceStatus).toBe("READY");
+    } finally { await fs.rm(cwd, { recursive: true, force: true }); }
+  });
+
+  test("historical missing preimages and byte budgets are mandatory omissions, never fabricated clean proof", async () => {
+    const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "typesafe-preimage-budget-"));
+    try {
+      execSync("git init", { cwd, stdio: "ignore" });
+      const contract = evidenceContract();
+      await fs.mkdir(path.join(cwd, "src"));
+      await fs.writeFile(path.join(cwd, "src", "large.ts"), "x".repeat(1024 * 1024 + 1));
+      const snapshot = await captureWorkspaceSnapshot(cwd, { contract });
+      expect(snapshot.complete).toBe(false);
+      expect(snapshot.omissions?.some((item) => item.path === "src/large.ts" && item.required)).toBe(true);
+      const oldBaseline = { files: new Map([["src/large.ts", "historical-hash-only"]]), truncated: false };
+      const evidence = await collectTaskEvidence({ cwd, contract, baseline: oldBaseline });
+      expect(evidence.evidenceStatus).toBe("EVIDENCE_REQUIRED");
+      expect(evidence.omissions?.some((item) => item.reason === "HISTORICAL_PREIMAGE_REQUIRED")).toBe(true);
+      expect(evidence.cleanWorkingTree).toBe(false);
+    } finally { await fs.rm(cwd, { recursive: true, force: true }); }
+  });
+  test("dirty same-file WIP stays out of endpoint patch while both task commits remain", async () => {
+    const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "typesafe-task-interval-"));
+    try {
+      execSync("git init && git config user.name Test && git config user.email test@example.com", { cwd, stdio: "ignore" });
+      await fs.mkdir(path.join(cwd, "src"));
+      await fs.writeFile(path.join(cwd, "src", "service.ts"), "export const preexisting = 0;\nexport const first = 0;\nexport const second = 0;\n");
+      execSync("git add . && git commit -qm initial", { cwd, stdio: "ignore" });
+      await fs.writeFile(path.join(cwd, "src", "service.ts"), "export const preexisting = 7;\nexport const first = 0;\nexport const second = 0;\n");
+      const contract = evidenceContract();
+      const baseline = await captureWorkspaceSnapshot(cwd, { contract });
+      await fs.writeFile(path.join(cwd, "src", "service.ts"), "export const preexisting = 7;\nexport const first = 1;\nexport const second = 0;\n");
+      execSync("git add . && git commit -qm first", { cwd, stdio: "ignore" });
+      await fs.writeFile(path.join(cwd, "src", "service.ts"), "export const preexisting = 7;\nexport const first = 1;\nexport const second = 2;\n");
+      execSync("git add . && git commit -qm second", { cwd, stdio: "ignore" });
+      const evidence = await collectTaskEvidence({ cwd, contract, baseline });
+      expect(evidence.gitDiff).toContain("+export const first = 1;");
+      expect(evidence.gitDiff).toContain("+export const second = 2;");
+      expect(evidence.gitDiff).not.toContain("+export const preexisting = 7;");
+      expect(evidence.commitInterval?.commits).toHaveLength(2);
+      expect(evidence.commitInterval?.patch).toContain("+export const first = 1;");
+      expect(evidence.sourceEvidence?.[0].content).toContain("preexisting = 7");
+      expect(evidence.evidenceStatus).toBe("READY");
+    } finally { await fs.rm(cwd, { recursive: true, force: true }); }
+  });
+
+  test("deletion, untracked removal, quoted Unicode rename endpoints and binary content survive", async () => {
+    const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "typesafe-task-boundaries-"));
+    try {
+      execSync("git init && git config user.name Test && git config user.email test@example.com", { cwd, stdio: "ignore" });
+      await fs.mkdir(path.join(cwd, "src"));
+      await fs.writeFile(path.join(cwd, "src", "cũ name.ts"), "export const renamed = true;\n");
+      await fs.writeFile(path.join(cwd, "src", "deleted.ts"), "export const removed = true;\n");
+      await fs.writeFile(path.join(cwd, "src", "binary.dat"), Buffer.from([0, 1, 2, 3]));
+      execSync("git add . && git commit -qm initial", { cwd, stdio: "ignore" });
+      await fs.writeFile(path.join(cwd, "src", "temporary.txt"), "pre-task untracked bytes");
+      const baseline = await captureWorkspaceSnapshot(cwd);
+      await fs.rename(path.join(cwd, "src", "cũ name.ts"), path.join(cwd, "src", "mới name.ts"));
+      await fs.unlink(path.join(cwd, "src", "deleted.ts"));
+      await fs.unlink(path.join(cwd, "src", "temporary.txt"));
+      await fs.writeFile(path.join(cwd, "src", "binary.dat"), Buffer.from([0, 1, 8, 9]));
+      const evidence = await collectTaskEvidence({ cwd, baseline });
+      for (const file of ["src/cũ name.ts", "src/mới name.ts", "src/deleted.ts", "src/temporary.txt", "src/binary.dat"]) expect(evidence.changedFiles).toContain(file);
+      expect(evidence.gitDiff).toContain("-export const removed = true;");
+      expect(evidence.gitDiff).toContain("pre-task untracked bytes");
+      expect(evidence.gitDiff).toContain("GIT binary patch");
+      expect(evidence.omissions).toEqual([]);
+    } finally { await fs.rm(cwd, { recursive: true, force: true }); }
+  });
+
+  test("a command changing a second tracked file is collected after the command and invalidates later freshness", async () => {
+    const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "typesafe-post-command-"));
+    try {
+      execSync("git init && git config user.name Test && git config user.email test@example.com", { cwd, stdio: "ignore" });
+      await fs.mkdir(path.join(cwd, "src"));
+      await fs.writeFile(path.join(cwd, "src", "first.ts"), "old\n");
+      await fs.writeFile(path.join(cwd, "src", "second.ts"), "old\n");
+      await fs.writeFile(path.join(cwd, "check.cjs"), "require('node:fs').writeFileSync('src/second.ts', 'test mutation\\n');");
+      execSync("git add . && git commit -qm initial", { cwd, stdio: "ignore" });
+      const baseline = await captureWorkspaceSnapshot(cwd);
+      await fs.writeFile(path.join(cwd, "src", "first.ts"), "task change\n");
+      const earlierSnapshot = await captureWorkspaceSnapshot(cwd);
+      const evidence = await collectTaskEvidence({ cwd, baseline, afterSnapshot: earlierSnapshot, testCommand: `"${process.execPath}" check.cjs` });
+      expect(evidence.changedFiles).toEqual(["src/first.ts", "src/second.ts"]);
+      expect(evidence.gitDiff).toContain("+test mutation");
+      await fs.writeFile(path.join(cwd, "src", "late.ts"), "late mutation\n");
+      expect((await validateEvidenceFreshness(evidence, cwd)).ok).toBe(false);
+    } finally { await fs.rm(cwd, { recursive: true, force: true }); }
+  });
+
+  test("genuine non-Git research uses scoped artifacts without invented commands or clean Git claims", async () => {
+    const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "typesafe-nongit-research-"));
+    try {
+      const contract = evidenceContract("research");
+      await fs.mkdir(path.join(cwd, ".claude"));
+      await fs.writeFile(path.join(cwd, ".claude", "private.txt"), "Unrelated private pre-task non-Git prose");
+      const baseline = await captureWorkspaceSnapshot(cwd, { contract });
+      await fs.writeFile(path.join(cwd, "report.md"), "Actual research with tail proof.");
+      const evidence = await collectTaskEvidence({ cwd, contract, baseline });
+      expect(JSON.stringify(evidence)).not.toContain("Unrelated private pre-task non-Git prose");
+      expect(evidence.snapshot?.mode).toBe("non-git");
+      expect(evidence.cleanWorkingTree).toBe(false);
+      expect(evidence.testExitCode).toBeNull();
+      expect(evidence.testOutput).toBe("");
+      expect(evidence.sourceEvidence?.find((item) => item.path === "report.md")?.content).toContain("tail proof");
+      expect(evidence.criteria).toEqual(contract.criteria.map((criterion) => criterion.text));
+      expect(evidence.evidenceStatus).toBe("READY");
+      expect(hasProductCodeChanges(" M src/inspected.ts", "Review source", contract)).toBe(false);
+    } finally { await fs.rm(cwd, { recursive: true, force: true }); }
+  });
+
+  test("unsafe hardlinked snapshot and untracked proof never become accepted content or a clean empty tree", async () => {
+    const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "typesafe-unsafe-snapshot-"));
+    const external = await fs.mkdtemp(path.join(os.tmpdir(), "typesafe-private-bytes-"));
+    try {
+      execSync("git init", { cwd, stdio: "ignore" });
+      await fs.writeFile(path.join(external, "private.txt"), "ordinary confidential external sentinel");
+      const baseline = await captureWorkspaceSnapshot(cwd);
+      await fs.link(path.join(external, "private.txt"), path.join(cwd, "report.md"));
+      for (const options of [{ cwd, baseline }, { cwd }]) {
+        const evidence = await collectTaskEvidence(options);
+        expect(evidence.evidenceStatus).toBe("EVIDENCE_REQUIRED");
+        expect(evidence.cleanWorkingTree).toBe(false);
+        expect(evidence.snapshot?.files.has("report.md")).toBe(false);
+        expect(JSON.stringify(evidence)).not.toContain("ordinary confidential external sentinel");
+        expect(evidence.omissions?.some((item) => item.kind === "security")).toBe(true);
+      }
+    } finally { await fs.rm(cwd, { recursive: true, force: true }); await fs.rm(external, { recursive: true, force: true }); }
+  });
+
+  test("same-text task incarnation cannot borrow a baseline, and unsafe criterion reads are explicit", async () => {
+    const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "typesafe-foreign-baseline-"));
+    const external = await fs.mkdtemp(path.join(os.tmpdir(), "typesafe-private-plan-"));
+    try {
+      execSync("git init", { cwd, stdio: "ignore" });
+      const first = evidenceContract("review"); const baseline = await captureWorkspaceSnapshot(cwd, { contract: first });
+      const next = { ...first, incarnationId: "reappended-incarnation" };
+      expect((await collectTaskEvidence({ cwd, contract: next, baseline })).evidenceStatus).toBe("EVIDENCE_REQUIRED");
+      await fs.writeFile(path.join(external, "plan.md"), "- [ ] confidential other-task criterion");
+      await fs.link(path.join(external, "plan.md"), path.join(cwd, "plan.md"));
+      const evidence = await collectTaskEvidence({ cwd, planPath: path.join(cwd, "plan.md") });
+      expect(evidence.criteria).toEqual([]);
+      expect(evidence.omissions?.some((item) => item.reason === "CRITERIA_SOURCE_UNAVAILABLE")).toBe(true);
+      expect(JSON.stringify(evidence)).not.toContain("confidential other-task criterion");
+    } finally { await fs.rm(cwd, { recursive: true, force: true }); await fs.rm(external, { recursive: true, force: true }); }
   });
 });

@@ -178,6 +178,83 @@ describe("Phase 3: Session Pre-Flight Health Probe", () => {
     });
   });
 
+  test("session startup tolerates hosts without sendMessage", async () => {
+    let sessionStartHandler: ((event: unknown, ctx: unknown) => Promise<void>) | undefined;
+    const mockPi = {
+      zod: {
+        object: (x: unknown) => x,
+        union: (x: unknown) => x,
+        string: () => ({ optional: () => "string", min: () => "string" }),
+        number: () => ({ optional: () => "number" }),
+        record: (x: unknown) => x,
+        enum: (x: unknown) => x,
+        unknown: () => ({ optional: () => "unknown" }),
+        array: (x: unknown) => ({ min: () => x, optional: () => x }),
+      },
+      on: (event: string, handler: (event: unknown, ctx: unknown) => Promise<void>) => {
+        if (event === "session_start") sessionStartHandler = handler;
+      },
+      registerTool: () => {},
+    };
+
+    registerHealthExtension(mockPi as unknown as Parameters<typeof registerExtension>[0]);
+    await withScopedEnv({ TYPESAFE_API_KEY: undefined }, async () => {
+      await expect(sessionStartHandler!({}, { cwd: process.cwd() })).resolves.toBeUndefined();
+    });
+  });
+
+  test("session startup tolerates a synchronous sendMessage result", async () => {
+    let sessionStartHandler: ((event: unknown, ctx: unknown) => Promise<void>) | undefined;
+    const mockPi = {
+      zod: {
+        object: (x: unknown) => x,
+        union: (x: unknown) => x,
+        string: () => ({ optional: () => "string", min: () => "string" }),
+        number: () => ({ optional: () => "number" }),
+        record: (x: unknown) => x,
+        enum: (x: unknown) => x,
+        unknown: () => ({ optional: () => "unknown" }),
+        array: (x: unknown) => ({ min: () => x, optional: () => x }),
+      },
+      on: (event: string, handler: (event: unknown, ctx: unknown) => Promise<void>) => {
+        if (event === "session_start") sessionStartHandler = handler;
+      },
+      sendMessage: () => undefined,
+      registerTool: () => {},
+    };
+
+    registerHealthExtension(mockPi as unknown as Parameters<typeof registerExtension>[0]);
+    await withScopedEnv({ TYPESAFE_API_KEY: undefined }, async () => {
+      await expect(sessionStartHandler!({}, { cwd: process.cwd() })).resolves.toBeUndefined();
+    });
+  });
+
+  test("session startup tolerates a rejected sendMessage result", async () => {
+    let sessionStartHandler: ((event: unknown, ctx: unknown) => Promise<void>) | undefined;
+    const mockPi = {
+      zod: {
+        object: (x: unknown) => x,
+        union: (x: unknown) => x,
+        string: () => ({ optional: () => "string", min: () => "string" }),
+        number: () => ({ optional: () => "number" }),
+        record: (x: unknown) => x,
+        enum: (x: unknown) => x,
+        unknown: () => ({ optional: () => "unknown" }),
+        array: (x: unknown) => ({ min: () => x, optional: () => x }),
+      },
+      on: (event: string, handler: (event: unknown, ctx: unknown) => Promise<void>) => {
+        if (event === "session_start") sessionStartHandler = handler;
+      },
+      sendMessage: () => Promise.reject(new Error("message transport unavailable")),
+      registerTool: () => {},
+    };
+
+    registerHealthExtension(mockPi as unknown as Parameters<typeof registerExtension>[0]);
+    await withScopedEnv({ TYPESAFE_API_KEY: undefined }, async () => {
+      await expect(sessionStartHandler!({}, { cwd: process.cwd() })).resolves.toBeUndefined();
+    });
+  });
+
   test("401 probe failure on session_start emits auth warning with display: true", async () => {
     let sessionStartHandler: ((event: unknown, ctx: unknown) => Promise<void>) | undefined;
     const sentMessages: SentMessage[] = [];

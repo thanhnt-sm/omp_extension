@@ -1,7 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import registerExtension, {
-  type DebateJudgeClient,
-} from "../typesafe-planner";
+import registerExtension from "../typesafe-planner";
 
 describe("Phase 2 Client Integration: evaluateDebate on extension judge client", () => {
   test("createExtensionJudgeClient implements evaluateDebate method", async () => {

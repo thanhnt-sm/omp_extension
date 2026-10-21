@@ -76,3 +76,7 @@ The agent currently stops and prompts the user for decisions too frequently, lea
 ## Assumptions & contingencies
 - **Assumption**: The `todo` list state can be programmatically read before session closure. If not, we will maintain an internal state sync map in the extension.
 - **Contingency**: If the TypeSafe API is completely unreachable, the system will fall back to asking the user (current behavior) rather than infinitely retrying.
+
+## Execution reconciliation — 2026-10-19
+
+Residual C10/C11/C12/C15/C35 ownership: [consolidated master](../261019-research-to-cook-execution/plan.md), with [source-evidenced dispositions](../reports/261019-research-to-cook-coverage.json). Retire clear-todo-on-failure/reset bypass and universal numeric-threshold claims. Preserve original obligations/debt and require Advisor-led scoped remediation plus fresh authoritative native evaluation, not passive blocking.

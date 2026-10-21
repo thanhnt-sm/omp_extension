@@ -7,7 +7,7 @@ effort: "4h"
 branch: master
 tags: [typesafe, todo-drop, judge-fidelity, egc, ratchet]
 blockedBy: []
-blocks: [261012-judge-threshold-lifecycle-alignment]
+blocks: []
 created: 2026-10-12
 ---
 
@@ -365,3 +365,11 @@ cwd `D:/100.Software/Github/omp_extension`, shell env `BUN_ENV=test` as existing
 - If `ctx.sessionManager` is absent in the `tool_call` ctx at runtime, `collectConversationContext` returns empty strings and the fields read `"unavailable"`.
   - Additionally register `pi.on("input", …)` only if smoke shows it empty. Not planned now.
 - If `ctx.ui.confirm` is absent on the `tool_call` ctx, undecided cases reject with the NEXT ACTIONS text (fail-closed). Report this in the final summary.
+
+## Scope coordination — todo recovery follow-on
+`../261018-jev-session-forensics/plan.md` Phases 4–5 now own the narrow current-native recovery regressions: AUTO_APPROVE incorrectly falling through to UI, rejected block lacking human-confirmation recovery, and task-scoped non-code completion/boundary false positives. Use its native transaction TDD rather than reapplying the synthetic/singleton-era implementation described above. Broader pending work and this plan's status/dependencies remain unchanged. This is shared-scope ownership, not an output dependency or a claim that the recovery is implemented.
+
+## Execution reconciliation — 2026-10-19
+
+Residual C04/C05/C06/C08/C12/C13/C14/C18 ownership: [consolidated master](../261019-research-to-cook-execution/plan.md), with [source-evidenced dispositions](../reports/261019-research-to-cook-coverage.json). Its phase1–3/7/9/10 contracts replace this plan's five empty phase stubs; never execute their boilerplate. Remove the obsolete whole-plan threshold dependency in both directions. Existing implemented cancellation/native transaction behavior remains preserved; no blanket completion.
+

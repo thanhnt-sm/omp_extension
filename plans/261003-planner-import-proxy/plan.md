@@ -25,3 +25,7 @@ Instead of brittle regex patching or copying files, we will use the **Proxy Patt
 - [x] **Test Suite**: Run `bun test tests/e2e-workflow.test.ts` to ensure 100% PASS.
 - [x] **Proxy Load Test**: Execute a Node/Bun script that imports the proxy from `~/.omp/...` to confirm the `Cannot find module` error is permanently resolved.
 - [x] **Zero Duplication**: Verify the `src/` directory is not copied or inlined, maintaining the architectural constraint.
+
+## Execution reconciliation — 2026-10-19
+
+Residual C25/C32/C35 ownership: [consolidated master](../261019-research-to-cook-execution/plan.md), with [source-evidenced dispositions](../reports/261019-research-to-cook-coverage.json). Preserve implemented behavior; never recreate or edit the immutable global proxy. Do not replay the historical tmp relocation; remaining activation uses only explicitly authorized managed sync/restart.

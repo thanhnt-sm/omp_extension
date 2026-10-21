@@ -1,0 +1,12 @@
+{
+  "consumer-9": "dev",
+  "consumer-5": "dev",
+  "consumer-4": "dev",
+  "consumer-8": "dev",
+  "consumer-6": "dev",
+  "consumer-3": "dev",
+  "consumer-0": "calibration",
+  "consumer-7": "calibration",
+  "consumer-2": "holdout",
+  "consumer-1": "holdout"
+}

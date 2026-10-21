@@ -50,3 +50,7 @@ The user verified that the `typesafe` allowlist update in `.ck.json` was safe, b
 ## Assumptions & contingencies
 - **Assumption:** The TypeSafe System One API supports up to 20 parallel questions within the 32KB payload limit without timing out or rejecting the request.
 - **Contingency:** If the API rejects 20 questions or latency spikes unacceptably, we will lower `MAX_QUESTIONS` to 10 and implement client-side chunking (batching) inside `typesafe_rerank` to send two parallel HTTP requests of 10 instead.
+
+## Execution reconciliation — 2026-10-19
+
+Residual C26/C28/C31 ownership: [consolidated master](../261019-research-to-cook-execution/plan.md), with [source-evidenced dispositions](../reports/261019-research-to-cook-coverage.json). Existing tools remain implemented; finish the explicit bounded-fanout/policy/health residuals, not a replacement orchestrator. This link is not implementation or runtime proof.

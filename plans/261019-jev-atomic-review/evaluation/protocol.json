@@ -1,0 +1,203 @@
+{
+  "schemaVersion": 1,
+  "kind": "model_benchmark",
+  "state": "prerequisite_pending",
+  "expectedPolicyIdentity": null,
+  "pendingInputs": [
+    {
+      "owner": "repository/data-spend owner",
+      "action": "Supply permission-cleared sanitized whole-parent snapshots and host-verifiable bounded spend and quota authorization.",
+      "releaseCondition": "Export approval receipts and actual provider spend authorization verified by the trusted host, not a JSON authorized flag."
+    },
+    {
+      "owner": "evaluation custodian",
+      "action": "Declare target scope, positive supported overall/stratum groups, exact models, actual Root M comparator, trusted raw-noul H operating points, policies/prompts/prices, quota, absolute deadline and seed before outputs.",
+      "releaseCondition": "All applicable declarations and both operating-point digests, frozen source snapshots, independent provenance and grouped 60/20/20 holdouts validate before any model output."
+    },
+    {
+      "owner": "two independent human labelers and independent adjudicator",
+      "action": "Independently and blindly label original obligations/evidence, provide a distinct third adjudicator and actual provenance/blinding receipts; no labels are supplied to either model arm.",
+      "releaseCondition": "Human A/B identities differ and a distinct adjudicator is authenticated by the actual data owner; gold is fixed before outputs, never created by models or fixtures."
+    },
+    {
+      "owner": "actual Root runtime and accounting custodian",
+      "action": "Load the approved source candidate, obtain typesafe_eval_host identity, freeze its actual public session/key/epoch and loaded-factory identity, and configure normal trusted host credentials/account enforcement plus actual all-attempt metadata. Use CLI benchmark -> Root authorize/prepare -> actual returned native task -> Root collect -> original CLI resume.",
+      "releaseCondition": "The shipped protected native bridge executes actual independent M/H episodes with current corpus/source/policy facts and genuine native settlements. Unknown usage/model/cash stays null with reasons; no old key is swapped or observed cohort resampled after outputs."
+    }
+  ],
+  "seed": "",
+  "decisionRule": "strict-corpus-dominance-v1",
+  "targetScope": "",
+  "minimumGroups": 0,
+  "strata": [],
+  "metricGates": [],
+  "files": {
+    "corpus": "corpus.jsonl",
+    "labels": "labels.jsonl",
+    "splits": "splits.json",
+    "prices": "prices.json"
+  },
+  "models": {
+    "jev": "",
+    "advisorProvider": "",
+    "advisorModel": ""
+  },
+  "frozenConfiguration": {
+    "policy": {
+      "path": "",
+      "sha256": ""
+    },
+    "prompts": {
+      "path": "",
+      "sha256": ""
+    },
+    "packetSelection": {
+      "path": "",
+      "sha256": ""
+    },
+    "implementation": {
+      "path": "",
+      "sha256": ""
+    }
+  },
+  "predicateDecisionPolicy": null,
+  "nativeHost": null,
+  "approvalPolicy": null,
+  "controlRule": "matched_repaired_M_frozen_approval_policy_not_claimed_optimal",
+  "limits": {
+    "concurrency": 1,
+    "maxQuestions": 128,
+    "maxBodyBytes": 32768,
+    "maxEpisodes": null,
+    "maxRunMs": null,
+    "deadlineAt": null
+  },
+  "accounting": {
+    "ownership": "independent_arms",
+    "latency": "admission_to_terminal_including_queue",
+    "admission": "trusted_root_prepare",
+    "quantile": "nearest_rank",
+    "cacheConditions": "Must be frozen by custodian before inference; no shared cross-arm outcome cache.",
+    "cooldownConditions": "Canonical transport owns retries and cooldown; runner adds no retries."
+  },
+  "canonicalSelection": "declared_before_outputs",
+  "splitRatio": [
+    60,
+    20,
+    20
+  ],
+  "holdoutUnit": "project",
+  "spend": null,
+  "implementationInvariants": null,
+  "scenarioCoverage": {
+    "U1": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#U1"
+    },
+    "U2": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#U2"
+    },
+    "U3": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#U3"
+    },
+    "I1": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#I1"
+    },
+    "I2": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#I2"
+    },
+    "I3": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#I3"
+    },
+    "T1": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#T1"
+    },
+    "T2": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#T2"
+    },
+    "T3": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#T3"
+    },
+    "S1": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#S1"
+    },
+    "S2": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#S2"
+    },
+    "S3": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#S3"
+    },
+    "ST1": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#ST1"
+    },
+    "ST2": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#ST2"
+    },
+    "ST3": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#ST3"
+    },
+    "E1": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#E1"
+    },
+    "E2": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#E2"
+    },
+    "E3": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#E3"
+    },
+    "ER1": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#ER1"
+    },
+    "ER2": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#ER2"
+    },
+    "ER3": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#ER3"
+    },
+    "A1": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#A1"
+    },
+    "A2": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#A2"
+    },
+    "A3": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#A3"
+    },
+    "D1": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#D1"
+    },
+    "D2": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#D2"
+    },
+    "D3": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#D3"
+    },
+    "IT1": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#IT1"
+    },
+    "IT2": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#IT2"
+    },
+    "IT3": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#IT3"
+    },
+    "C1": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#C1"
+    },
+    "C2": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#C2"
+    },
+    "C3": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#C3"
+    },
+    "B1": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#B1"
+    },
+    "B2": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#B2"
+    },
+    "B3": {
+      "assertion": "tests/jev-paired-evaluation.test.ts#B3"
+    }
+  },
+  "ablations": []
+}

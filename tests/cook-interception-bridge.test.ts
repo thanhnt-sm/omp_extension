@@ -1,398 +1,205 @@
 import { describe, expect, test } from "bun:test";
-import registerExtension from "../typesafe-planner";
+import registerExtension, { type CanonicalTodoPhase } from "../typesafe-planner";
+import type { HostHistoryEntry } from "../src/host-history";
+import type { AdvisorHostToolInfo } from "../src/advisor-host-types";
 
-interface MockToolDefinition {
-  name: string;
-  description: string;
-  parameters: {
-    safeParse: (val: unknown) => { success: boolean; data?: unknown; error?: unknown };
-  };
-  execute: (id: string, params: unknown, signal?: AbortSignal, ctx?: unknown) => Promise<unknown>;
+type Host = Parameters<typeof registerExtension>[0];
+type Handler = Parameters<Host["on"]>[1];
+interface RegisteredTool {
+  execute(id: string, params: unknown, signal?: AbortSignal, update?: unknown, context?: unknown): Promise<unknown>;
 }
 
-interface MockEvent {
-  tool?: string;
-  name?: string;
-  toolName?: string;
-  params?: Record<string, unknown>;
-  args?: Record<string, unknown>;
-  input?: Record<string, unknown>;
-  cancel?: (reason: string) => void;
-}
-
-function createZodMock() {
-  const schema = {
-    safeParse: (val: unknown) => {
-      if (val && typeof val === "object") {
-        const obj = val as Record<string, unknown>;
-        if (
-          obj.role === "scope_arbiter" ||
-          obj.role === "drift_guard" ||
-          obj.role === "risk_security_triage" ||
-          obj.role === "advisor" ||
-          obj.role === "ck:advisor"
-        ) {
-          return { success: true, data: val };
-        }
-      }
-      return { success: false, error: new Error("Invalid role") };
-    },
-    optional: () => schema,
-  };
-
-  return {
-    object: (shape?: Record<string, { safeParse?: (v: unknown) => { success: boolean } }>) => ({
-      ...schema,
-      safeParse: (val: unknown) => {
-        if (val && typeof val === "object") {
-          const obj = val as Record<string, unknown>;
-          if (shape?.role?.safeParse) {
-            return shape.role.safeParse(obj.role).success
-              ? { success: true, data: val }
-              : { success: false, error: new Error("Invalid role") };
-          }
-          return schema.safeParse(val);
-        }
-        return { success: false, error: new Error("Invalid object") };
-      },
-    }),
-    union: () => schema,
-    string: () => schema,
-    number: () => schema,
-    record: () => schema,
-    enum: (vals: string[]) => ({
-      ...schema,
-      safeParse: (val: unknown) => {
-        return typeof val === "string" && vals.includes(val)
-          ? { success: true, data: val }
-          : { success: false, error: new Error("Enum mismatch") };
-      },
-    }),
-    unknown: () => schema,
-    array: () => ({
-      ...schema,
-      min: () => schema,
-    }),
-  };
-}
-
-describe("Phase 3: OMP Extension Interception Bridge", () => {
-  function createMockPi() {
-    const tools: Record<string, MockToolDefinition> = {};
-    const handlers: Record<string, Array<(event: unknown, ctx: unknown) => Promise<void>>> = {};
-    const messages: unknown[] = [];
-
-    const mockPi = {
-      zod: createZodMock(),
-      registerTool(def: MockToolDefinition) {
-        tools[def.name] = def;
-      },
-      on(event: string, handler: (event: unknown, ctx: unknown) => Promise<void>) {
-        if (!handlers[event]) handlers[event] = [];
-        handlers[event].push(handler);
-      },
-      async sendMessage(msg: unknown) {
-        messages.push(msg);
-      },
-    };
-
-    const state = registerExtension(mockPi as unknown as Parameters<typeof registerExtension>[0]);
-
-    return { tools, handlers, messages, state };
+function bridge() {
+  const handlers = new Map<string, Handler[]>();
+  const entries: HostHistoryEntry[] = [];
+  const messages: unknown[] = [];
+  const tools: Record<string, RegisteredTool> = {};
+  const active = ["todo", "task", "read", "grep", "glob"];
+  const infos: AdvisorHostToolInfo[] = active.map(name => ({ name, description: `Native ${name}`,
+    parameters: { type: "object" }, sourceInfo: { source: "builtin", path: `<builtin:${name}>` } }));
+  const pendingTools: AdvisorHostToolInfo[] = [];
+  const schema = { optional: () => schema, min: () => schema };
+  let started = false;
+  let nativeCalls = 0;
+  function append(value: Omit<HostHistoryEntry, "id" | "parentId">) {
+    const entry = { ...value, id: `bridge-${entries.length + 1}`, parentId: entries.at(-1)?.id ?? null };
+    entries.push(entry);
+    return entry;
   }
-
-  test("registers typesafe_expert_review tool with proper schema", () => {
-    const { tools } = createMockPi();
-    expect(tools.typesafe_expert_review).toBeDefined();
-    expect(tools.typesafe_expert_review.description).toContain("expert");
-
-    const schema = tools.typesafe_expert_review.parameters;
-    const parsed = schema.safeParse({
-      role: "scope_arbiter",
-      context: "Drafting plan",
-    });
-    expect(parsed.success).toBe(true);
-  });
-
-  test("typesafe_expert_review validates valid roles and rejects invalid roles", () => {
-    const { tools } = createMockPi();
-    const schema = tools.typesafe_expert_review.parameters;
-
-    expect(schema.safeParse({ role: "drift_guard", context: "diff" }).success).toBe(true);
-    expect(schema.safeParse({ role: "risk_security_triage", context: "triage" }).success).toBe(true);
-    expect(schema.safeParse({ role: "advisor", context: "decision" }).success).toBe(true);
-    expect(schema.safeParse({ role: "ck:advisor", context: "decision" }).success).toBe(true);
-    expect(schema.safeParse({ role: "invalid_role", context: "diff" }).success).toBe(false);
-  });
-
-  test("intercepts write and edit tools targeting todo.json (Direct File Bypass Defense)", async () => {
-    const { handlers } = createMockPi();
-    const interceptor = handlers.tool_call?.[0];
-    expect(interceptor).toBeDefined();
-
-    let cancelledReason: string | undefined;
-    const writeEvent: MockEvent = {
-      tool: "write",
-      params: { path: "todo.json", content: "{\"tasks\": []}" },
-      cancel: (r: string) => {
-        cancelledReason = r;
-      },
-    };
-
-    try {
-      await interceptor!(writeEvent, {});
-    } catch {
-      // expected error on cancel
-    }
-
-    expect(cancelledReason).toBeDefined();
-    expect(cancelledReason).toContain("Direct file modification of todo.json is prohibited");
-
-    let editCancelledReason: string | undefined;
-    const editEvent: MockEvent = {
-      tool: "edit",
-      params: { path: ".todo.json", input: "..." },
-      cancel: (r: string) => {
-        editCancelledReason = r;
-      },
-    };
-
-    try {
-      await interceptor!(editEvent, {});
-    } catch {}
-
-    expect(editCancelledReason).toBeDefined();
-    expect(editCancelledReason).toContain("Direct file modification of todo.json is prohibited");
-  });
-
-  test("allows non-todo write operations to pass without interruption", async () => {
-    const { handlers } = createMockPi();
-    const interceptor = handlers.tool_call![0];
-
-    let cancelled = false;
-    const safeEvent: MockEvent = {
-      tool: "write",
-      params: { path: "src/index.ts", content: "export const x = 1;" },
-      cancel: () => {
-        cancelled = true;
-      },
-    };
-
-    await interceptor(safeEvent, {});
-    expect(cancelled).toBe(false);
-  });
-
-  test("fast-paths non-completion todo operations (op: view, op: start)", async () => {
-    const { handlers } = createMockPi();
-    const interceptor = handlers.tool_call![0];
-
-    let cancelled = false;
-    const viewEvent: MockEvent = {
-      tool: "todo",
-      params: { op: "view" },
-      cancel: () => {
-        cancelled = true;
-      },
-    };
-
-    await interceptor(viewEvent, {});
-    expect(cancelled).toBe(false);
-  });
-
-  test("intercepts todo done and executes Gate 1 micro-check, rejecting failing tests", async () => {
-    const { handlers, state } = createMockPi();
-    const interceptor = handlers.tool_call![0];
-    state.phases = [{ name: "P", tasks: [{ content: "Failing test task", status: "pending" }] }];
-
-    let cancelledReason: string | undefined;
-    const doneEvent: MockEvent & { toolCallId: string } = {
-      tool: "todo",
-      toolCallId: "failing-test-task",
-      params: {
-        op: "done",
-        task: "Failing test task",
-        testCommand: "bun -e \"process.exit(1)\"",
-      },
-      cancel: (reason: string) => {
-        cancelledReason = reason;
-      },
-    };
-
-    try {
-      await interceptor(doneEvent, { cwd: process.cwd() });
-    } catch {
-      // expected rejection
-    }
-
-    expect(cancelledReason).toBeDefined();
-    expect(cancelledReason).toContain("Gate 1 Micro-Check");
-  });
-
-  test("intercepts ask tool, automatically evaluates decision with TypeSafe, and attaches verdict to human prompt", async () => {
-    const { handlers } = createMockPi();
-    const interceptor = handlers.tool_call![0];
-
-    const originalFetch = globalThis.fetch;
-    const calls: { url: string; body: Record<string, unknown> }[] = [];
-    globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
-      const body = JSON.parse(init?.body?.toString() || "{}");
-      calls.push({ url: url.toString(), body });
-      return new Response(
-        JSON.stringify({
-          answers: {
-            risk_posture: { score: 1.0, confidence: 1.0 },
-            decision_clarity: { noul: 0.95 },
-          },
-        })
-      );
-    }) as unknown as typeof fetch;
-
-    try {
-      const askParams = {
-        i: "Database selection",
-        questions: [
-          {
-            id: "db",
-            header: "Database?",
-            question: "Choose a database for storage",
-            options: [{ label: "SQLite" }, { label: "Postgres" }],
-          },
-        ],
-      };
-
-      let cancelled = false;
-      const askEvent: MockEvent = {
-        tool: "ask",
-        params: askParams,
-        cancel: () => {
-          cancelled = true;
-        },
-      };
-
-      await interceptor(askEvent, { cwd: process.cwd() });
-      expect(cancelled).toBe(false);
-      expect(calls.length).toBe(1);
-      expect(calls[0].url).toContain("/v1/systemone");
-      expect(askParams.questions[0].question).toContain("🛡️ [TypeSafe System One Verdict]");
-      expect(askParams.questions[0].question).toContain("Risk: Low (1.0/3)");
-      expect(askParams.questions[0].header).toContain("[Low Risk]");
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
-  });
-
-  test("handles ask tool gracefully when TypeSafe is unconfigured or offline (fail-open to human)", async () => {
-    const { handlers } = createMockPi();
-    const interceptor = handlers.tool_call![0];
-
-    const originalKey = process.env.TYPESAFE_API_KEY;
-    delete process.env.TYPESAFE_API_KEY;
-
-    try {
-      const askParams = {
-        i: "Proceed without key",
-        questions: [
-          {
-            id: "proceed",
-            question: "Do you want to proceed?",
-          },
-        ],
-      };
-
-      let cancelled = false;
-      const askEvent: MockEvent = {
-        tool: "ask",
-        params: askParams,
-        cancel: () => {
-          cancelled = true;
-        },
-      };
-
-      await interceptor(askEvent, { cwd: process.cwd() });
-      expect(cancelled).toBe(false);
-      expect(askParams.questions[0].question).toContain("TypeSafe System One: Evaluation offline");
-    } finally {
-      if (originalKey === undefined) {
-        delete process.env.TYPESAFE_API_KEY;
-      } else {
-        process.env.TYPESAFE_API_KEY = originalKey;
+  const host: Host & { events: object; appendEntry(customType: string, data: unknown): void;
+    getAllTools(): AdvisorHostToolInfo[]; getActiveTools(): string[]; setActiveTools(names: string[]): Promise<void> } = {
+    events: {},
+    zod: {
+      object: () => schema, union: () => schema, string: () => schema, number: () => schema,
+      record: () => schema, enum: () => schema, unknown: () => schema, array: () => schema,
+    },
+    on(name, handler) { handlers.set(name, [...handlers.get(name) ?? [], handler]); },
+    registerTool(definition) {
+      tools[definition.name] = definition as unknown as RegisteredTool;
+      const source = definition as unknown as { sourcePath?: string };
+      const info = { name: definition.name, description: definition.description, parameters: definition.parameters,
+        sourceInfo: { source: "extension", path: source.sourcePath ?? "" } };
+      if (started) pendingTools.push(info); else infos.push(info);
+    },
+    async sendMessage(message) { messages.push(message); },
+    appendEntry(customType, data) { append({ type: "custom", customType, data: structuredClone(data) }); },
+    getAllTools() { if (!started) throw new Error("SDK tools unavailable during load"); return [...infos]; },
+    getActiveTools: () => [...active],
+    async setActiveTools(names) {
+      for (const info of pendingTools) {
+        const index = infos.findIndex(value => value.name === info.name);
+        if (index < 0) infos.push(info); else infos[index] = info;
       }
+      pendingTools.length = 0;
+      active.splice(0, active.length, ...names);
+    },
+  };
+  const state = registerExtension(host, { env: { TYPESAFE_API_KEY: "" } });
+  function call(id: string, input: Record<string, unknown>) {
+    append({ type: "message", message: { role: "assistant", content: [{ type: "toolCall", id, name: "todo", arguments: structuredClone(input) }] } });
+  }
+  function result(id: string, op: string, phases: CanonicalTodoPhase[]) {
+    return append({ type: "message", message: { role: "toolResult", toolName: "todo", toolCallId: id,
+      details: { op, phases: structuredClone(phases) } } });
+  }
+  const manager = { getSessionId: () => "bridge-session", getBranch: () => entries,
+    getEntry: (id: string) => entries.find(entry => entry.id === id),
+    getSessionFile: () => "bridge-session.jsonl", getHeader: () => ({}) };
+  const context = { cwd: process.cwd(), sessionManager: manager, agent: { kind: "main", id: "Main", name: "Main" },
+    abort() { throw new Error("Unexpected parent abort"); } };
+  async function emit(name: string, event: unknown = {}) {
+    const values: unknown[] = [];
+    const registered = handlers.get(name);
+    expect(registered?.length).toBeGreaterThan(0);
+    for (const handler of registered ?? []) values.push(await handler(event, context));
+    return values.find(value => value !== undefined);
+  }
+  async function initialize() {
+    append({ type: "message", message: { role: "user", content: "Implement both parser obligations and preserve their verification criteria." } });
+    call("seed", { op: "init", list: [{ phase: "Parser", items: ["Parse valid input", "Reject malformed input"] }] });
+    result("seed", "init", INITIAL);
+    started = true;
+    await emit("session_start");
+  }
+  async function executeTodo(id: string, input: Record<string, unknown>, phases: CanonicalTodoPhase[] = STARTED) {
+    expect(tools.todo).toBeDefined();
+    return tools.todo!.execute(id, input, undefined, undefined, { ...context,
+      async invokeTool(actual: unknown) {
+        nativeCalls++;
+        expect(actual).toEqual(input);
+        return { content: [], details: { op: input.op, phases: structuredClone(phases) } };
+      },
+    });
+  }
+  return { state, entries, messages, call, result, emit, initialize, executeTodo, nativeCalls: () => nativeCalls };
+}
+
+// Independent SDK effects, not generated by the production transition validator.
+const INITIAL: CanonicalTodoPhase[] = [{ name: "Parser", tasks: [
+  { content: "Parse valid input", status: "in_progress" },
+  { content: "Reject malformed input", status: "pending" },
+] }];
+const STARTED: CanonicalTodoPhase[] = [{ name: "Parser", tasks: [
+  { content: "Parse valid input", status: "pending" },
+  { content: "Reject malformed input", status: "in_progress" },
+] }];
+
+function expectBlocked(value: unknown) {
+  expect(value).toMatchObject({ block: true, reason: expect.any(String) });
+  if (!value || typeof value !== "object" || !("reason" in value)) throw new Error("Missing SDK block reason");
+  expect(String(value.reason).length).toBeGreaterThan(0);
+}
+
+describe("OMP interception bridge SDK return contract", () => {
+  test("write and edit return blocks for native todo storage without invoking legacy cancellation", async () => {
+    const fixture = bridge();
+    let cancellationCalls = 0;
+    for (const [toolName, file] of [["write", "todo.json"], ["edit", "nested/.todo.json"], ["write", "C:\\workspace\\todo.json"]]) {
+      const outcome = await fixture.emit("tool_call", { toolName, input: { path: file, content: "{}" }, cancel() { cancellationCalls++; } });
+      expectBlocked(outcome);
     }
+    expect(cancellationCalls).toBe(0);
+    expect(fixture.state.stagedCalls.size).toBe(0);
   });
 
-  test("handles ask tool gracefully when TypeSafe returns evaluation error", async () => {
-    const { handlers } = createMockPi();
-    const interceptor = handlers.tool_call![0];
-
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async () => {
-      return new Response(JSON.stringify({ error: "internal_server_error" }), { status: 500 });
-    }) as unknown as typeof fetch;
-
-    try {
-      const askParams = {
-        i: "Database selection with error",
-        questions: [{ id: "db", question: "Pick a DB" }],
-      };
-
-      let cancelled = false;
-      const askEvent: MockEvent = {
-        tool: "ask",
-        params: askParams,
-        cancel: () => {
-          cancelled = true;
-        },
-      };
-
-      await interceptor(askEvent, { cwd: process.cwd() });
-      expect(cancelled).toBe(false);
-      expect(askParams.questions[0].question).toContain("TypeSafe System One: Evaluation unavailable");
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+  test("ordinary writes and native view pass without changing lifecycle state", async () => {
+    const fixture = bridge();
+    await fixture.initialize();
+    expect(await fixture.emit("tool_call", { toolName: "write", input: { path: "src/parser.ts", content: "export const parse = JSON.parse;" } })).toBeUndefined();
+    expect(await fixture.emit("tool_call", { toolName: "todo", toolCallId: "view", input: { op: "view" } })).toBeUndefined();
+    expect(fixture.state.phases).toEqual(INITIAL);
+    expect(fixture.state.stagedCalls.size).toBe(0);
   });
 
-  test("typesafe_advisor and typesafe_expert_review(role: 'ck:advisor') return concrete decision recommendation", async () => {
-    const { tools } = createMockPi();
-    expect(tools.typesafe_advisor).toBeDefined();
+  test("native done without a sealed review blocks before running verification or changing todo", async () => {
+    const fixture = bridge();
+    await fixture.initialize();
+    const input = { op: "done", task: "Parse valid input" };
+    fixture.call("unreviewed", input);
+    expect(await fixture.emit("tool_call", { toolName: "todo", toolCallId: "unreviewed", input })).toBeUndefined();
+    expect(fixture.state.stagedCalls.size).toBe(0);
+    expect(await fixture.executeTodo("unreviewed", input)).toMatchObject({ isError: true });
+    expect(fixture.nativeCalls()).toBe(0);
+    expect(fixture.state.phases).toEqual(INITIAL);
+    expect(fixture.state.stagedCalls.size).toBe(0);
+    expect(fixture.state.committedCallTombstones.size).toBe(0);
+  });
 
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async () => {
-      return new Response(
-        JSON.stringify({
-          answers: {
-            risk_posture: { score: 0.5, confidence: 0.9 },
-            decision_clarity: { noul: 0.95 },
-            recommended_option: { choice: "SQLite", confidence: 0.92 },
-          },
-        })
-      );
-    }) as unknown as typeof fetch;
-
-    try {
-      const res1 = (await tools.typesafe_expert_review.execute("call_adv_1", {
-        role: "ck:advisor",
-        context: {
-          decision: "approach",
-          question: "Choose database engine",
-          options: [{ label: "SQLite" }, { label: "Postgres" }],
-        },
-      })) as { details: { ckVerdict: string; recommendedOption: string; report: string } };
-
-      expect(res1.details.ckVerdict).toBe("proceed");
-      expect(res1.details.recommendedOption).toBe("SQLite");
-      expect(res1.details.report).toContain("## Verdict\nproceed");
-
-      const res2 = (await tools.typesafe_advisor.execute("call_adv_2", {
-        decision: "approach",
-        question: "Choose storage",
-        options: ["SQLite", "Postgres"],
-      })) as { details: { ckVerdict: string; recommendedOption: string } };
-
-      expect(res2.details.ckVerdict).toBe("proceed");
-      expect(res2.details.recommendedOption).toBe("SQLite");
-    } finally {
-      globalThis.fetch = originalFetch;
+  test("native completion rejects extension-only execution and requirements fields", async () => {
+    const fixture = bridge();
+    await fixture.initialize();
+    for (const metadata of [{ testCommand: "not-an-approved-command" }, { requirements: ["Agent supplied replacement criterion"] }, { ops: [{ op: "done", task: "Reject malformed input" }] }]) {
+      expectBlocked(await fixture.emit("tool_call", { toolName: "todo", toolCallId: `invalid-${Object.keys(metadata)[0]}`,
+        input: { op: "done", task: "Parse valid input", ...metadata } }));
     }
+    expect(fixture.state.stagedCalls.size).toBe(0);
+    expect(fixture.state.phases).toEqual(INITIAL);
+  });
+
+  test("native start waits for the persisted matching Core result, not middleware observation", async () => {
+    const fixture = bridge();
+    await fixture.initialize();
+    const input = { op: "start", task: "Reject malformed input" };
+    fixture.call("start-second", input);
+    expect(await fixture.emit("tool_call", { toolName: "todo", toolCallId: "start-second", input })).toBeUndefined();
+    expect(fixture.state.stagedCalls.size).toBe(0);
+    await fixture.executeTodo("start-second", input);
+    expect(fixture.nativeCalls()).toBe(1);
+    expect(fixture.state.stagedCalls.has("start-second")).toBe(true);
+    await fixture.emit("tool_result", { toolName: "todo", toolCallId: "start-second", isError: false, details: { op: "start", phases: STARTED } });
+    expect(fixture.state.phases).toEqual(INITIAL);
+    expect(fixture.state.stagedCalls.has("start-second")).toBe(true);
+    fixture.result("start-second", "start", STARTED);
+    await fixture.emit("message_end");
+    expect(fixture.state.phases).toEqual(STARTED);
+    expect(fixture.state.stagedCalls.has("start-second")).toBe(false);
+    expect(fixture.state.committedCallTombstones.has("start-second")).toBe(true);
+  });
+
+  test("an observed but not yet persisted Core result survives an ordinary turn boundary", async () => {
+    const fixture = bridge();
+    await fixture.initialize();
+    const input = { op: "start", task: "Reject malformed input" };
+    fixture.call("delayed-result", input);
+    expect(await fixture.emit("tool_call", { toolName: "todo", toolCallId: "delayed-result", input })).toBeUndefined();
+    expect(fixture.state.stagedCalls.size).toBe(0);
+    await fixture.executeTodo("delayed-result", input);
+    expect(fixture.nativeCalls()).toBe(1);
+    await fixture.emit("tool_result", { toolName: "todo", toolCallId: "delayed-result", details: { op: "start", phases: STARTED } });
+    await fixture.emit("turn_end");
+    expect(fixture.state.stagedCalls.has("delayed-result")).toBe(true);
+    expect(fixture.state.phases).toEqual(INITIAL);
+    fixture.result("delayed-result", "start", STARTED);
+    await fixture.emit("before_agent_start");
+    expect(fixture.state.phases).toEqual(STARTED);
+    expect(fixture.state.stagedCalls.size).toBe(0);
+    expect(fixture.state.committedCallTombstones.has("delayed-result")).toBe(true);
+  });
+
+  test("closing a plan is blocked while a native obligation remains active", async () => {
+    const fixture = bridge();
+    await fixture.initialize();
+    expectBlocked(await fixture.emit("tool_call", { toolName: "write", input: { path: "plans/parser/plan.md", content: "---\nstatus: completed\n---" } }));
+    expect(fixture.state.phases).toEqual(INITIAL);
   });
 });

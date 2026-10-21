@@ -6,7 +6,7 @@ priority: P1
 effort: "1-2d"
 branch: master
 tags: [typesafe, jev, threshold, todo-lifecycle, fail-closed]
-blockedBy: [261012-todo-drop-judge-fidelity, 261013-bicameral-judge-consensus]
+blockedBy: []
 blocks: []
 created: 2026-10-12
 ---
@@ -99,3 +99,8 @@ Implementation MUST start through `/ck:cook D:/100.Software/Github/omp_extension
 - Direct smoke exercise: NaN, Infinity, -1, 1.1, and a thrown transport request reject as unavailable; 0.44 rejects and 0.95 approves with `no_drift`/`HOLD`. This is controlled local evidence, not a live API evaluation.
 - The historical 0.44 / scope_creep / EXPANSION result does not establish its cause. Wrong plan selection, missing test evidence, and cached-code causality remain unverified hypotheses without the original request/log.
 - The 0.80 policy remains unchanged. Restart reloads deployed extension code; it does not guarantee Gate 2 approval. The original six tasks remain blocked, not completed.
+
+## Execution reconciliation — 2026-10-19
+
+Residual C09/C10/C11/C12/C13/C17/C18 ownership: [consolidated master](../261019-research-to-cook-execution/plan.md), with [source-evidenced dispositions](../reports/261019-research-to-cook-coverage.json). Former whole-plan drop/consensus prerequisites are replaced by master phase1–3 canonical outputs; their reverse edges are removed as well. Do not require unrelated old backlogs or restore/lower universal thresholds. Original acceptance remains open until actual proof.
+
