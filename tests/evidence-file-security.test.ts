@@ -139,14 +139,33 @@ test("guarded listing rejects deterministic directory replacement before returni
   } finally { rmSync(f.base, { recursive: true, force: true }); }
 });
 
-test("external and internal final-file symlinks are rejected by the real OS boundary", () => {
+// Real capability probe: creating a file symlink needs developer mode/admin on Windows (EPERM otherwise).
+function fileSymlinksAvailable(): boolean {
+  const base = mkdtempSync(path.join(os.tmpdir(), "symlink-probe-"));
+  try { writeFileSync(path.join(base, "target"), "x"); symlinkSync(path.join(base, "target"), path.join(base, "link"), "file"); return true; }
+  catch (error) { if (error instanceof Error && "code" in error && (error.code === "EPERM" || error.code === "EACCES")) return false; throw error; }
+  finally { rmSync(base, { recursive: true, force: true }); }
+}
+test.skipIf(!fileSymlinksAvailable())("external and internal final-file symlinks are rejected by the real OS boundary", () => {
   const f = fixture();
   try {
     writeFileSync(path.join(f.root, "allowed"), "legitimate");
-    // EPERM denotes unavailable OS link coverage, not a passing lexical substitute.
     symlinkSync(path.join(f.external, "private.txt"), path.join(f.root, "external-link"), "file");
     symlinkSync(path.join(f.root, "allowed"), path.join(f.root, "internal-link"), "file");
     for (const name of ["external-link", "internal-link"]) expect(rejection(f.root, name).kind).toBe("security");
+  } finally { rmSync(f.base, { recursive: true, force: true }); }
+});
+
+// Always-available reparse coverage where file symlinks are not creatable: a directory junction/symlink named as the final component.
+test("final-component directory links to external and internal targets are rejected without exposing contents", () => {
+  const f = fixture();
+  try {
+    mkdirSync(path.join(f.root, "inside")); writeFileSync(path.join(f.root, "inside", "allowed"), "legitimate");
+    const kind = process.platform === "win32" ? "junction" : "dir";
+    symlinkSync(f.external, path.join(f.root, "external-dir-link"), kind);
+    symlinkSync(path.join(f.root, "inside"), path.join(f.root, "internal-dir-link"), kind);
+    for (const name of ["external-dir-link", "internal-dir-link"]) expect(rejection(f.root, name).kind).toBe("security");
+    for (const name of ["external-dir-link/private.txt", "internal-dir-link/allowed"]) expect(rejection(f.root, name).kind).toBe("security");
   } finally { rmSync(f.base, { recursive: true, force: true }); }
 });
 

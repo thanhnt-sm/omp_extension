@@ -10,6 +10,10 @@ const forbidden = ["TYPESAFE_API_KEY", "ANTHROPIC_API_KEY", "CLAUDE_TOKEN", "AWS
 
 test("real child receives minimal policy rather than provider, hook, proxy, home or arbitrary variables", () => {
   const source = hostSource(Object.fromEntries(forbidden.map((name) => [name, "sentinel-private-config"])));
+  for (const purpose of ["verification", "egc-setup"] as const) {
+    const built = policy.buildChildEnvironment(purpose, source);
+    for (const name of forbidden) if (name !== "GIT_CONFIG_COUNT") expect(Object.hasOwn(built, name), `${purpose}:${name}`).toBe(false);
+  }
   const probe = `const names=${JSON.stringify(forbidden)}; console.log(JSON.stringify(names.map(name=>process.env[name]==='sentinel-private-config')))`;
   for (const purpose of ["verification", "egc-setup", "evidence-git", "deployment-acl", "deployment-verify", "pointer-editor"] as const) {
     const result = policy.execFileChildSync(purpose, process.execPath, ["-e", probe], { encoding: "utf8", source });

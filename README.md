@@ -8,23 +8,17 @@ An advanced quality, security, and verification extension for [oh-my-pi (omp)](h
 
 ```mermaid
 flowchart TD
-    TodoDone[Agent calls 'todo done' / Subagent completion] --> Gate1{Gate 1: Micro-Check<br/>Local & Deterministic &lt;150ms}
-    Gate1 -->|Fail: test failed, assertion deleted, .claude touched| Cancel1[Immediate Rejection]
-    Gate1 -->|Pass| Gate2{Gate 2: Macro-Check<br/>Semantic TypeSafe Evaluation}
-    Gate2 -->|P &lt; 0.70 or Drift / Scope Reduction| Cancel2[Rejection with Remediation Diff]
-    Gate2 -->|P &gt;= 0.70 and No Drift| Approve[Task Completed]
+    Bind[Bind original task contract] --> Collect[Collect task-relative evidence]
+    Collect --> Review[Prepare semantic and Advisor receipts]
+    Review --> Stage[Preflight validates authority and freshness]
+    Stage --> Native[Host executes exact native todo operation]
+    Native -->|Matching successful result| Commit[Commit lifecycle and reports]
+    Native -->|Failure, stale, or unavailable| Hold[Keep obligation and debt open]
 ```
 
-### 1. Dual-Cadence Verification Gate
-* **Gate 1 (Local Deterministic Micro-Check, <150ms, 0 tokens):**
-  * Checks working tree status, Git porcelain state, and test exit codes (`0`).
-  * Catches test assertion deletions (anti-gaming defense).
-  * Claude Boundary Isolation: Rejects any attempt to touch or modify files under `~/.claude` or `.claude.json`.
-* **Gate 2 (Semantic Macro-Check via TypeSafe System One):**
-  * Collects ground-truth OS evidence (`TaskEvidenceCollector`: git diff, status, test logs).
-  * Evaluates `meets_criteria` (Noul: $P \ge 0.70$).
-  * Detects `architectural_drift` (`no_drift`, `unapproved_deviation`, `scope_creep`, `other`).
-  * Evaluates `scope_mode` (`HOLD`, `EXPANSION`, `REDUCTION`). Unauthorized `REDUCTION` is strictly rejected.
+* **Evidence and semantic review:** The extension binds review to the original task contract and task-relative evidence. Deterministic checks, semantic judgments, Advisor assessment and human lifecycle authorization remain separate; only the matching successful native result commits completion.
+* **Configured approval policy:** The host-owned `TYPESAFE_AUTO_APPROVAL_THRESHOLD` is captured when the policy is created. Do not infer an approval threshold from historical documentation or change it to make a case pass.
+* **Privacy and process isolation:** Evidence paths are checked against protected locations, child processes receive purpose-specific environments, and cancellation is tied to owned processes. These controls do not claim an OS sandbox or prove deployment/runtime activation.
 
 ### 2. Tri-Role Expert Evaluators (`typesafe_expert_review`)
 On-demand expert evaluation tool exposed to the agent:
@@ -34,7 +28,7 @@ On-demand expert evaluation tool exposed to the agent:
 
 ### 3. File & Code Integrity Shield
 * Intercepts `write` and `edit` tool calls targeting protected TypeSafe infrastructure files (`typesafe-planner.ts`, `models.yml`, and shared kit modules).
-* Requires explicit operator override (`allowJudgeModification: true`) to prevent accidental or adversarial self-modification.
+* Intercepts infrastructure-sensitive writes and edits and requires an authenticated host-owned source mutation grant bound to the exact contract, path and operation. Environment variables and payload flags do not grant this authority.
 
 ### 4. Dynamic Auth Recovery & Health Watchdog
 * Token-hash-aware self-healing: automatically recovers from temporary 401s when `TYPESAFE_API_KEY` is rotated, without requiring an OMP process restart.
@@ -66,11 +60,11 @@ On-demand expert evaluation tool exposed to the agent:
 In your OMP extensions folder (`~/.omp/agent/extensions/typesafe-planner.ts`), proxy to this repository:
 
 ```typescript
-export { default } from "/path/to/Projects/omp_extension/typesafe-planner.ts";
+export { default } from "D:/100.Software/Github/omp_extension/typesafe-planner.ts";
 ```
 
 ### 3. Running Tests
-The extension includes a 100% deterministic test suite covering unit tests, adversarial security attacks, and E2E interception:
+The suite covers unit, adversarial security and integration paths using controlled transport fixtures. Record the exact source revision, platform and Bun version with any result; a green run is not a live model-quality or deployed-runtime proof.
 
 ```bash
 bun test

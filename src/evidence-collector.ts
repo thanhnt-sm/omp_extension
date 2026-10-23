@@ -133,9 +133,11 @@ export async function executeTestCommand(command: string, cwd: string, timeoutMs
       if (settled || forced) return;
       forced = result; forcedSuffix = suffix;
       if (!child) { finish(result, suffix); return; }
-      if (process.platform === "win32" && child.pid) {
+      if (child.pid && process.platform === "win32") {
         try { spawnChild("evidence-git", "taskkill", ["/pid", String(child.pid), "/t", "/f"], { stdio: "ignore" }); }
         catch { child.kill(); }
+      } else if (child.pid && process.platform !== "win32") {
+        try { process.kill(-child.pid, "SIGKILL"); } catch { child.kill("SIGKILL"); }
       } else child.kill();
     };
     const abort = () => terminate({ exitCode: 130, aborted: true }, "\n[Command aborted]");
@@ -145,7 +147,7 @@ export async function executeTestCommand(command: string, cwd: string, timeoutMs
       if (remaining > 0) { const accepted = chunk.subarray(0, remaining); chunks.push(accepted); outputBytes += accepted.length; }
     };
     try {
-      child = home ? home.spawn("verification", command, [], { cwd, shell: true, stdio: ["ignore", "pipe", "pipe"] }) : spawnChild("evidence-git", command, [], { cwd, shell: true, stdio: ["ignore", "pipe", "pipe"] });
+      child = home ? home.spawn("verification", command, [], { cwd, shell: true, detached: process.platform !== "win32", stdio: ["ignore", "pipe", "pipe"] }) : spawnChild("evidence-git", command, [], { cwd, shell: true, detached: process.platform !== "win32", stdio: ["ignore", "pipe", "pipe"] });
       child!.stdout!.on("data", append); child!.stderr!.on("data", append);
       child!.on("close", (code, terminationSignal) => {
         let environmentVerified = true;

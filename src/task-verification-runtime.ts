@@ -130,8 +130,9 @@ export function createTaskVerificationRuntime(options: TaskVerificationRuntimeOp
     if (!deterministic.passed) state.outcome = deterministic.outcome ?? { status: "REJECTED", criterionIds: [], reasons: deterministic.reasons };
     else {
       const assessment = await evaluateMonolithicTask(options, context, record, source, failures.filter(failure => failure.status === "REJECTED" && failure.semanticDispatch).length + 1);
-      state.results = Object.freeze([assessment.result]);
-      if (!await current(context, state)) state.outcome = { status: "EVIDENCE_REQUIRED", missingCriterionIds: contract.criteria.map(criterion => criterion.id), reasons: ["Task source/tree/test/contract changed during review; the returned assessment cannot authorize its replacement."] };
+      const stale = !await current(context, state);
+      state.results = Object.freeze([stale ? { ...assessment.result, approved: false } : assessment.result]);
+      if (stale) state.outcome = { status: "EVIDENCE_REQUIRED", missingCriterionIds: contract.criteria.map(criterion => criterion.id), reasons: ["Task source/tree/test/contract changed during review; the returned assessment cannot authorize its replacement."] };
       else await compose(context, state);
     }
     return report(context, callId, state);

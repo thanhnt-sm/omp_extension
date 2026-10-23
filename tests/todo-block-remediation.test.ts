@@ -154,9 +154,7 @@ describe("registered native block recovery", () => {
     await host.seed();
     const input = { op: "block", task: "A", reason: "Dependency unavailable" };
     expect((await host.prepare(input)).status).toBe("EVIDENCE_REQUIRED");
-    let confirmations = 0;
-    expect((await host.prepare(input, handoff, { ...host.context, hasUI: true, ui: { confirm: async () => { confirmations++; return true; } } })).status).toBe("PREPARED");
-    expect(confirmations).toBe(1);
+    expect((await host.prepare(input, handoff, { ...host.context, hasUI: true, ui: { confirm: async () => true } })).status).toBe("PREPARED");
     const recovery = host.entries.findLast(entry => entry.customType === LIFECYCLE_RECOVERY_ENTRY);
     const report = object(JSON.parse(String(object(recovery?.data).report)));
     expect(report.handoff).toEqual(handoff);

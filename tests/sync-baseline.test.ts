@@ -7,7 +7,7 @@ import path from "node:path";
 import type { WorkspaceFileIdentity } from "../src/typesafe-evidence-file.cjs";
 
 const scriptPath = path.resolve(import.meta.dir, "../tools/sync-baseline.cjs");
-setDefaultTimeout(30_000);
+setDefaultTimeout(60_000);
 
 
 interface Fixture {

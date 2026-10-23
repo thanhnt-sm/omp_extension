@@ -1,4 +1,7 @@
 import { describe, expect, test, mock } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import registerExtension from "../typesafe-planner";
 import { withScopedEnv } from "./helpers/test-env-harness";
 
@@ -44,7 +47,11 @@ describe("Phase 2: Dynamic Auth Recovery and Key Watchdog", () => {
       },
     };
 
-    registerExtension(mockPi as unknown as Parameters<typeof registerExtension>[0]);
+    const home = mkdtempSync(path.join(os.tmpdir(), "auth-recovery-home-"));
+    mkdirSync(path.join(home, ".claude"), { recursive: true });
+    writeFileSync(path.join(home, ".claude", ".ck.json"), JSON.stringify({ typesafe: { projects: ["*", process.cwd()], excludeProjects: [] } }));
+    try {
+    registerExtension(mockPi as unknown as Parameters<typeof registerExtension>[0], { homeDir: home });
     const judgeTool = registeredTools.get("typesafe_judge");
     expect(judgeTool).toBeDefined();
 
@@ -68,7 +75,7 @@ describe("Phase 2: Dynamic Auth Recovery and Key Watchdog", () => {
 
       // First call -> reaches upstream, returns 401 unauthorized
       const result1 = await judgeTool!.execute("call1", params, undefined, undefined, { cwd: process.cwd() });
-      expect(result1.content[0].text).toBe("TypeSafe error: unauthorized");
+      expect(result1.content[0].text).toBe("TypeSafe error: http_401");
       expect(result1.isError).toBe(true);
       expect(fetchCallCount).toBe(1);
 
@@ -99,5 +106,6 @@ describe("Phase 2: Dynamic Auth Recovery and Key Watchdog", () => {
       expect(result3.content[0].text).not.toBe("TypeSafe disabled");
       expect(result3.content[0].text).toContain("0.95");
     });
+    } finally { rmSync(home, { recursive: true, force: true }); }
   });
 });

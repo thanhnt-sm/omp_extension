@@ -10,23 +10,17 @@
 ### 1.2 Installation
 Clone the repository and install dev dependencies:
 ```bash
-git clone https://github.com/can1357/omp_extension.git
+git clone https://github.com/thanhnt-sm/omp_extension.git
 cd omp_extension
 bun install
 ```
 
 ### 1.3 Running Tests
-Run the deterministic test suite:
+Run the repository suite from a clean, identified checkout:
 ```bash
 bun test
 ```
-To run specific subsystems:
-```bash
-bun test tests/typesafe-planner.test.ts     # Main extension interception
-bun test tests/verification-gate.test.ts    # Dual-cadence gates
-bun test tests/debate-evaluator.test.ts     # Multi-persona debate
-bun test tests/redteam-vulnerabilities.test.ts # Adversarial security suite
-```
+A result is meaningful only with its commit/worktree revision, operating system and Bun version. Passing local tests do not establish live model-quality, host UI, deployment, or loaded-runtime behavior.
 
 ---
 
@@ -93,23 +87,12 @@ This is an external operator-owned blocker, not a successful deployment or promo
 - **Lý do kỹ thuật:** Vì Node.js và Bun thực hiện in-memory caching cho các modules/extensions khi khởi chạy process. 
 - **Thao tác:** Sau khi chạy `sync-baseline.bat`, bạn **phải tắt và mở lại terminal/session của OMP** để runtime nạp phiên bản code mới nhất vừa đồng bộ.
 
-### 4.2 Cấu hình môi trường vận hành (Environment Setup)
-Đảm bảo các biến môi trường sau được cấu hình trước khi chạy OMP session:
+### 4.2 Configuring the runtime environment
+Set `TYPESAFE_API_KEY` before starting the OMP process when remote TypeSafe judgments are required. A new key can clear credential cooldown when the extension actually observes that new value; changing a parent shell does not alter the environment of an already-running process. Restart the host after changing its inherited environment.
 
-1. **`TYPESAFE_API_KEY` (Bắt buộc cho remote judgments):**
-   - Khóa API của TypeSafe System One dùng cho Gate 2 semantic checks và tri-role evaluations.
-   - PowerShell: `$env:TYPESAFE_API_KEY="sk-..."`
-   - Bash: `export TYPESAFE_API_KEY="sk-..."`
+For infrastructure source mutations, use only the authenticated host-owned, exact-scope grant workflow described above. No environment override or tool payload substitutes for that grant.
 
-2. **`TYPESAFE_PREDICT_MODEL` (Tùy chọn mô hình phân tích):**
-   - Ghi đè mô hình chuyên biệt cho vòng phân tích tranh biện Multi-Persona `ck:predict` (mặc định canonical: `"jev-latest"`).
-   - PowerShell: `$env:TYPESAFE_PREDICT_MODEL="jev-latest"`
-   - Bash: `export TYPESAFE_PREDICT_MODEL="jev-latest"`
-
-3. **`TYPESAFE_ALLOW_MODIFICATION` (Cấp quyền can thiệp hạ tầng):**
-   - Bắt buộc khi cần chỉnh sửa file hạ tầng của extension (`typesafe-planner.ts`, `src/debate-evaluator.ts`, `models.yml`) hoặc cần reset danh sách task (`todo(op="init")`).
-   - PowerShell: `$env:TYPESAFE_ALLOW_MODIFICATION="1"`
-   - Bash: `export TYPESAFE_ALLOW_MODIFICATION=1`
+**`TYPESAFE_PREDICT_MODEL`** may override the dedicated analysis model for the multi-persona predict loop (canonical default: `jev-latest`). Set it before starting the host.
 
 ---
 
@@ -123,16 +106,24 @@ This is an external operator-owned blocker, not a successful deployment or promo
 - **Cause:** Gate 1 or Gate 2 rejected `done`; failure/remediation debt remains attached to the task.
 - **Recovery:** Use the host UI to confirm blocking the exact task/phase target set. `block` records an obstacle but preserves the unfinished task and its debt. Later `unblock` or `start` does not authorize `done`; provide task-scoped evidence and obtain a valid matching native completion result.
 
-### 5.3 Key Rotation & Dynamic 401 Recovery
-- If the TypeSafe API key expires or is rotated:
-  1. Update `TYPESAFE_API_KEY` in your environment.
-  2. The extension automatically computes the SHA-256 token hash prefix, detects the new key, and flushes stale HTTP connections without requiring an OMP process restart.
+### 5.3 Credential rotation and recovery
+- Set the replacement `TYPESAFE_API_KEY` in the environment inherited by the OMP process and restart OMP so it observes the new value.
+- Credential cooldown is keyed to the observed key; transport recovery does not itself approve or reject a task. Re-run the same operation only after the service/key status is refreshed and the evidence remains current.
 
-### 5.4 Actionable Remediation Guidance on Blocked / Rejected Tasks
-- **Overview:** When a task operation (`todo done` or `todo drop`) is rejected by Gate 1 (Micro-Check) or Gate 2 (Macro-Check), TypeSafe Planner injects deterministic, machine-actionable instructions directly into the agent steering stream:
-  - **Gate 1 Test Failures:** Specifies the exact test command (`$ <testCommand>`) and exit code, instructing the agent to run the test suite locally to verify clean exit code 0 before retrying.
-  - **Gate 1 Test Evasion / Zero Evidence:** Forbids deleting or weakening assertions, requiring concrete code modifications or tests.
-  - **Gate 2 Scope Reductions:** Identifies omitted deliverables and planned criteria, directing in-place completion.
-  - **Gate 2 Architectural Drift:** Details drift dimensions and mandates confining modifications strictly to contracted task boundaries.
-  - **Infrastructure / Connectivity Outages:** Distinguishes external failures (`unavailable`) from code defects, instructing the agent not to modify codebase or tests evasively.
-  - **Prompt Injection Defense:** Dynamic XML entities (`&`, `<`, `>`, `"`) are automatically escaped in remediation blocks.
+### 5.4 Actionable remediation guidance on blocked or rejected tasks
+- **Overview:** A rejected `todo done`/`todo drop` records its actual outcome category and concrete next action. The planner injects only deterministic, machine-actionable guidance tied to the rejected operation.
+  - **Deterministic micro-check failure:** Names the failed test command/exit status and requires a real clean run; deleting or weakening assertions is not a fix.
+  - **Semantic or evidence shortfall:** Names the uncovered criterion or missing proof and requires actual completion/evidence, not a prose rewrite or scope reduction.
+  - **Lifecycle authority:** The exact-target lifecycle change needs the trusted host surface; retrying with model-supplied authorization flags is invalid.
+  - **Service unavailable:** Distinguishes transport outage from an implementation defect and does not create rejection debt or license source edits.
+  - **Prompt injection defense:** Dynamic entities are escaped before remediation text enters the steering stream.
+
+## 6. Source-Only Boundary Changes (2026-10-22)
+
+These were verified against the workspace source only; none is a live host or deployment claim.
+
+- **Process-tree cancellation:** POSIX verification commands are spawned as an owned process group and timeout/abort terminates the group. Windows tree termination remains the `taskkill /t /f` branch. POSIX behavior was not exercised in this Windows session.
+- **Advisor public envelope:** `authorizedFiles` and `evidenceRefs` are redacted as part of the final prompt. If any reference would change under redaction (for example a path containing the active credential), preparation fails with `advisor_public_reference_redaction_required` instead of publishing or silently rewriting the exact-SHA binding.
+- **Path privacy matching:** private path segments use a prototype-free lookup, so ordinary names such as `constructor` or `__proto__` are not falsely classified as private while `.env`, `.ssh`, `.claude` and session files still are.
+- **Lifecycle provenance:** the planner currently does not wire the lower-level automatic verified-drop callback, so this path is not enabled through the registered planner. If connected later, host-owned policy provenance must remain distinct from human confirmation and be verified end to end before enabling it.
+- **Limits:** real host UI, provider reasoning, deployed-runtime origin and Windows process-tree behavior need their own authorized evidence. Do not infer activation from workspace source changes.

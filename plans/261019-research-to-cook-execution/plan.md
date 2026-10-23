@@ -102,3 +102,85 @@ Task6's first done attempt also rejected (`a46e8cb1`, displayed code_change/REJE
 
 Fresh managed dry-run passed311baselinefiles with no mutation; seven global actions were NOOP and only three production files would overwrite. This is not311writes, not activation approval and not debt preservation. Independent activation review rejects F16-only restart: first implement/verify bound obligation/debt restoration, receipt/privacy/composed authority and release-path security under new source authorization, then obtain separate frozen-action deployment/restart authority. Existing source-only F16 approval does not authorize this larger package.
 
+## Current-State Re-Scope (2026-10-22)
+
+Commit `278f380` already contains real implementations of what phases 1–7 describe as "Create": `src/types/verification.ts`, `src/task-contract.ts`, `src/verification-receipt.ts`, `src/judge-evidence-packet.ts`, `src/atomic-judge.ts`, `src/advisor-protocol.ts`, `src/advisor-runtime.ts`, `src/typesafe-child-env.cjs`, `src/typesafe-evidence-file.cjs`, `tools/jev-paired-eval*.ts` and `plans/261019-jev-atomic-review/evaluation/*`.
+
+Therefore phases 1–7 are **verify-then-extend**, not create-from-scratch:
+
+1. Each phase starts by diffing its stated requirements against the current tree and records each item as `I` (already implemented — preserve), `P` (partial — finish), or `U` (missing — implement).
+2. A "Create:" bullet whose file already exists becomes "Extend (never recreate)"; overwriting an existing module is a defect, not progress.
+3. Every cited `file:line` anchor is re-resolved with a real reference search before editing. Anchors in this plan are historical discovery notes.
+4. Phase-8 and Phase-10 remain genuine remaining work (paired empirical run, authorized promotion).
+
+## Validation Log
+
+### Session 1 — 2026-10-22
+**Trigger:** `/ck-plan --validate ... --red-team` on the master handoff plan.
+**Questions asked:** 4
+
+#### Questions & Answers
+
+1. **[Scope]** Commit `278f380` already contains most "Create" targets. How should the plan be handled?
+   - Options: Re-scope phases 1–7 to verify/repair | Keep plan and cook serially | Keep only phases 8 and 10
+   - **Answer:** Re-scope phases 1–7 to verify/repair.
+   - **Rationale:** Prevents duplicate implementations, overwrite of tested modules, and review of already-completed work as if new.
+
+2. **[Risk]** 15 red-team findings were evidence-filtered (14 accepted, 1 rejected). Apply how?
+   - Options: Apply all 14 accepted | Only Critical+High (9) | Only the 3 Critical
+   - **Answer:** Apply all 14 accepted.
+   - **Rationale:** Medium findings (child-env secret set, file-too-large→EVIDENCE_REQUIRED, `[id]`-only identity, dispatch-digest reuse) are confirmed defects, not preferences.
+
+3. **[Scope]** Critical #3 (`sync-baseline` lock built from a stale plan) and High #9/#10 (advisor drain, Windows tree-kill) are real code defects, not plan defects. Handle how?
+   - Options: Record as phase requirements, fix during cook | Fix code now in this session | Record in report only
+   - **Answer:** Record as phase requirements, fix during cook.
+   - **Rationale:** Keeps this session inside plan validation scope; the defects are bound to phases so they cannot be lost.
+
+4. **[Scope]** After the plan is updated, what next?
+   - Options: Stop at the updated plan | Run `/ck:cook` immediately | Run paired evaluation only
+   - **Answer:** Stop at the updated plan.
+   - **Rationale:** The plan is the handoff artifact; execution is a separate authorized step.
+
+#### Confirmed Decisions
+- Phases 1–7 are verify-then-extend with explicit `I`/`P`/`U` reconciliation.
+- All 14 accepted red-team findings are recorded as phase requirements.
+- No source code is modified during plan validation.
+
+#### Impact on Phases
+- Phase 1: verify-then-extend precondition; consumer/caller re-enumeration.
+- Phase 2: F17 test anchor corrected to `tests/public-evidence-egress.test.ts`; verify existing coverage instead of replacing it.
+- Phase 3: EGC todo-input screening, uncontracted `allow` closure, `[id]` identity binding, stale anchors rewritten.
+- Phase 4: stale-plan lock defect, Windows tree-kill, residual-secret class, consumer list.
+- Phase 5: scope reduced to duplicate test modules.
+- Phase 6: EGC transport premise re-verified as already canonical; advisor drain bound; consumer list.
+- Phase 7: blocking frontmatter-vs-wire invariant, host-authorized scope invariant, dispatch digest.
+- Phase 8/9: strategy-selection dependency made explicit.
+
+## Red Team Review
+
+### Session — 2026-10-22
+**Findings:** 15 (14 accepted, 1 rejected)
+**Severity breakdown:** 3 Critical, 6 High, 6 Medium
+**Full report:** [redteam-261022-1814-research-to-cook-execution.md](../reports/redteam-261022-1814-research-to-cook-execution.md)
+
+| # | Finding | Severity | Disposition | Applied To |
+|---|---------|----------|-------------|------------|
+| 1 | Plan materially stale; all "Create" targets exist and are wired | Critical | Accept | plan.md Re-Scope; Phases 1–7 |
+| 2 | Stale `file:line` anchors presented as current | Critical | Accept | Phases 2, 3, 4, 6 |
+| 3 | `sync-baseline` lock derived from stale `initialPlan` | Critical | Accept | Phase 4 |
+| 4 | EGC protected-config scan only inside writer-tool branch | High | Accept | Phase 3 |
+| 5 | `uncontracted:"allow"` permits unfalsifiable completion | High | Accept | Phase 3 |
+| 6 | Phase-9 consumes Phase-8 strategy decision with `dependencies: [7]` | High | Accept | Phases 8, 9 |
+| 7 | Interface consumers under-enumerated | High | Accept | Phases 4, 6 |
+| 8 | Phase-5 re-migrates an already-consolidated debate path | High | Accept | Phase 5 |
+| 9 | Unbounded drain of abort-signalled operation in `advisor-native-budget.ts` | High | Accept | Phase 6 |
+| 10 | Windows cancellation kills `cmd.exe` wrapper, not the test tree | High | Accept | Phase 4 |
+| 11 | Advisor read scope relies on request-self-attested digest | High | Accept (Medium) | Phase 7 |
+| 12 | `advisorApplicabilityDigest` strips `dispatchId` | Medium | Accept | Phase 7 |
+| 13 | Child-env secret screen covers only the active key literal | Medium | Accept | Phase 4 |
+| 14 | Oversized required file maps to UNAVAILABLE, not EVIDENCE_REQUIRED | Medium | Accept | Phases 2, 3 |
+| 15 | `[id]`-shape-only native target identity | Medium | Accept | Phase 3 |
+| — | "250 ms per-attempt fetch timeout kills live JEV" | Critical | Reject | — |
+
+**Rejected rationale:** `timeoutMs: Math.min(250, remaining)` at `src/typesafe-api-client.cjs:549` is passed only into `cancelBodyBounded`; the real fetch timeout is `Math.min(timeoutMs, remaining)` in `withTimeout` at `:554`. No live-request abort path exists at 250 ms.
+

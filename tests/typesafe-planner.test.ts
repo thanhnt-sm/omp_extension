@@ -102,7 +102,7 @@ describe("Phase 5: Multi-Persona Pre-Analysis (ck:predict Integration)", () => {
       },
     };
 
-    registerExtension(mockPi as unknown as Parameters<typeof registerExtension>[0]);
+    registerExtension(mockPi as unknown as Parameters<typeof registerExtension>[0], { env: { TYPESAFE_API_KEY: "" } });
     expect(registeredTools.typesafe_elevate_plan).toBeDefined();
 
     // Verify execution invokes debate

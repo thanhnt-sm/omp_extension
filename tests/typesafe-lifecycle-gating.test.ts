@@ -294,6 +294,25 @@ describe("factory-owned native lifecycle", () => {
     expect(host.messages.filter(message => message.customType === "typesafe-task-report")).toHaveLength(1);
   });
 
+  test("a reused call id is refused while the first stage is pending, and nothing is committed", async () => {
+    const host = createHost();
+    await host.seed(true);
+    const input = { op: "drop", task: "A", reason: "Human-approved scope change." };
+    expect((await host.prepare(input)).status).toBe("PREPARED");
+    host.call("same", input);
+    expect(await host.native("same", input, [
+      { name: "P1", tasks: [{ content: "A", status: "abandoned" }, { content: "B", status: "in_progress" }] }, initial[1],
+    ])).toBeUndefined();
+    const tool = host.tools.get("todo");
+    if (!tool) throw new Error("Missing registered native todo wrapper");
+    let reached = 0;
+    const second = object(await tool.execute("same", input, undefined, undefined, { ...host.context, invokeTool: async () => { reached++; return { content: [] }; } }));
+    expect(second.isError).toBe(true);
+    expect(JSON.stringify(second)).toContain("todo_call_id_duplicate");
+    expect(reached).toBe(0);
+    expect(host.state.phases).toEqual(initial);
+  });
+
   test("a late persisted result cannot overwrite a newer native revision or clear its debt", async () => {
     const host = createHost();
     await host.seed(true);

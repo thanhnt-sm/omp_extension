@@ -156,7 +156,8 @@ describe("Canonical multi-persona advisory debate", () => {
       const body = JSON.parse(String(options?.body));
       expect(body.model).toBe("jev-latest");
       expect(Object.keys(body.questions)).toEqual(Object.keys(goodAnswers));
-      return new Response(JSON.stringify({ answers: goodAnswers, model: "observed-provider-revision", usage: { input_tokens: 10 } }), { status: 200 });
+      const wireAnswers = Object.fromEntries(Object.entries(goodAnswers).map(([key, answer]) => [key, { ...answer, confidence: 0.9 }]));
+      return new Response(JSON.stringify({ answers: wireAnswers, model: "observed-provider-revision", usage: { input_tokens: 10 } }), { status: 200 });
     }) as typeof fetch;
     try {
       const result = await runMultiPersonaDebate("Review src/auth.ts", undefined, { model: "jev-latest" });

@@ -99,17 +99,15 @@ function observeCredential(apiKey, state) {
     store.activeHash = hash;
     store.generation += 1;
   }
-  const token = { hash, generation: store.generation };
   let entry = store.entries.get(hash);
-  if (!entry || entry.generation !== token.generation) {
-    entry = { generation: token.generation, until: 0, status: 0, authFailed: false, alerted: false };
-    store.entries.set(hash, entry);
-  }
-  return { store, token, entry };
+  if (!entry) entry = { generation: store.generation, until: 0, status: 0, authFailed: false, alerted: false };
+  if (entry.generation !== store.generation) entry = { ...entry, generation: store.generation };
+  store.entries.set(hash, entry);
+  return { store, token: { hash, generation: entry.generation }, entry };
 }
 
 function isCurrentCredential(store, token) {
-  return store.activeHash === token.hash && store.generation === token.generation;
+  return store.entries.get(token.hash)?.generation === token.generation;
 }
 
 function resetRateLimitState(state = defaultRateLimitState) {
@@ -218,9 +216,9 @@ function validateQuestionCount(count, trustedLimits) {
 function projectPublicMessages(state) {
   if (!isPlainObject(state) || !Array.isArray(state.messages)) return state;
   const project = (entry) => {
-    if (!isPlainObject(entry)) return entry;
+    if (!isPlainObject(entry)) return null;
     const message = isPlainObject(entry.message) ? entry.message : entry;
-    if (!['assistant', 'tool', 'toolResult'].includes(message.role)) return entry;
+    if (!['assistant', 'tool', 'toolResult'].includes(message.role)) return null;
     const content = typeof message.content === 'string' ? message.content
       : Array.isArray(message.content) ? message.content.flatMap((block) => {
       if (!isPlainObject(block)) return [];
@@ -247,7 +245,7 @@ function projectPublicMessages(state) {
       type: entry.type, id: entry.id, parentId: entry.parentId, message: publicMessage,
     };
   };
-  return { ...state, messages: state.messages.map(project) };
+  return { ...state, messages: state.messages.map(project).filter(Boolean) };
 }
 
 function redactEvidenceState(state, options = {}) {
@@ -418,9 +416,13 @@ function defaultSleep(ms, signal, setTimeoutImpl = setTimeout, clearTimeoutImpl 
 }
 
 async function cancelBodyBounded(response, options = {}) {
-  const body = response && response.body;
+  let body;
+  try { body = response && response.body; } catch (_) { return; }
   if (!body || typeof body.cancel !== 'function') return;
-  const timeoutMs = Number.isFinite(options.timeoutMs) ? Math.max(0, options.timeoutMs) : 250;
+  const remaining = typeof options.remainingMs === 'function'
+    ? options.remainingMs()
+    : Number.isFinite(options.timeoutMs) ? Math.max(0, options.timeoutMs) : 250;
+  const timeoutMs = Math.max(0, remaining);
   const setTimer = options.setTimeoutImpl || setTimeout;
   const clearTimer = options.clearTimeoutImpl || clearTimeout;
   await new Promise((resolve) => {
@@ -546,7 +548,8 @@ async function requestWithRetry(options) {
       try {
         outcome = await withTimeout(
           performRequest(fetchImpl, apiKey, body, controller.signal, wallNow, {
-            timeoutMs: Math.min(250, Math.max(0, remaining)),
+            deadlineAt: Math.min(deadline, startedAtMs + timeoutMs),
+            nowImpl: now,
             setTimeoutImpl: setTimer,
             clearTimeoutImpl: clearTimer,
           }),
@@ -599,11 +602,21 @@ async function requestWithRetry(options) {
     ...(entry.until > now() ? { cooldownUntil: entry.until } : {}) };
 }
 
-async function performRequest(fetchImpl, apiKey, body, signal, wallNowImpl, cleanupOptions) {
+async function performRequest(fetchImpl, apiKey, body, signal, wallNowImpl, cleanupOptions = {}) {
   let response;
-  const cancelOnAbort = () => {
-    void cancelBodyBounded(response, cleanupOptions);
+  let cleanupPromise;
+  let cancellationRequested = false;
+  const remainingMs = () => {
+    if (typeof cleanupOptions.nowImpl !== 'function' || !Number.isFinite(cleanupOptions.deadlineAt)) return 250;
+    return Math.max(0, cleanupOptions.deadlineAt - cleanupOptions.nowImpl());
   };
+  const cancelResponseBody = () => {
+    cancellationRequested = true;
+    if (!response) return Promise.resolve();
+    if (!cleanupPromise) cleanupPromise = cancelBodyBounded(response, { ...cleanupOptions, remainingMs });
+    return cleanupPromise;
+  };
+  const cancelOnAbort = () => { void cancelResponseBody().catch(() => {}); };
   signal.addEventListener('abort', cancelOnAbort, { once: true });
   try {
     response = await fetchImpl(API_URL, {
@@ -612,24 +625,26 @@ async function performRequest(fetchImpl, apiKey, body, signal, wallNowImpl, clea
       body,
       signal,
     });
+    if (cancellationRequested) await cancelResponseBody();
     if (signal.aborted) {
-      await cancelBodyBounded(response, cleanupOptions);
+      await cancelResponseBody();
       throw abortError();
     }
     if (response.status === 401 || response.status === 403) {
-      await cancelBodyBounded(response, cleanupOptions);
+      await cancelResponseBody();
       return { kind: 'auth', status: response.status };
     }
     if (!response.ok) {
       const header = response.headers && typeof response.headers.get === 'function' ? response.headers.get('retry-after') : null;
       const retryAfterMs = parseRetryAfter(header, wallNowImpl());
-      await cancelBodyBounded(response, cleanupOptions);
+      await cancelResponseBody();
       return { kind: 'http_error', status: response.status, retryAfterMs };
     }
     try {
       return { kind: 'ok', status: response.status, data: await response.json() };
-    } catch (_) {
-      await cancelBodyBounded(response, cleanupOptions);
+    } catch (error) {
+      await cancelResponseBody();
+      if (signal.aborted) throw error;
       return { kind: 'bad_response', status: response.status };
     }
   } finally {

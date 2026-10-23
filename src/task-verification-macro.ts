@@ -1,13 +1,11 @@
 import { createEvidenceStateValidator, type JudgeEvidencePacket } from "./judge-evidence-packet";
 import { runPhaseMacroCheck, type MacroCheckResult } from "./cook-expert-judge";
 import { canonicalDigest } from "./task-contract-source";
-import { createEvidencePacketValidator, type JudgeEvidencePacket } from "./judge-evidence-packet";
 import type { TaskEvidenceRecord } from "./task-evidence-runtime";
 import type { FrozenContractSourceContext } from "./contract-runtime";
 import type { TaskVerificationRuntimeOptions } from "./task-verification-types";
 import type { PreparedRequestValidator } from "./payload-safety";
 
-interface CanonicalStateRedactor { redactEvidenceState(state: unknown, options: { apiKey?: string; homeDirs?: readonly string[] }): unknown }
 export interface MonolithicReviewResult { packet?: JudgeEvidencePacket; result: MacroCheckResult }
 
 /** M remains exactly one original-rubric task judgment, never an atomic/child-pass aggregate. */

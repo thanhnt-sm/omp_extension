@@ -27,15 +27,17 @@ A project-owned `typesafe_collect_evidence` tool may execute only verification c
 
 `EvidencePacket` uses named data fields, criterion/source spans, current content and counterevidence. A digest identifies bytes, not semantic correctness or permission. Preserve raw relevant proof rather than signature-only or LLM summaries; fail explicitly if mandatory evidence cannot fit. Keep vendor32MiB input limit distinct from this client's32KiB policy and the4940-byte artifact budget.
 
-Follow-up source evidence: deployed `collectConversationContext` includes assistant thinking; a synthetic-marker-only actual-helper/production-preparation probe retained it in both projected and prepared state with zero network/native operations. See `plans/reports/261019-private-context-export-evidence.json`. No historical private transmission is asserted. Replace the unsafe incidental thinking-inclusion expectation in `tests/bicameral-consensus.test.ts:416-458` with meaningful final-egress exclusion and positive public-evidence preservation; do not alter task6's existing diagnostic assertions to obtain approval.
+Follow-up source evidence: deployed `collectConversationContext` includes assistant thinking; a synthetic-marker-only actual-helper/production-preparation probe retained it in both projected and prepared state with zero network/native operations. See `plans/reports/261019-private-context-export-evidence.json`. No historical private transmission is asserted. The F17 public-only projection is already implemented and covered by `tests/public-evidence-egress.test.ts`; verify that test protects the invariant and extend it with thinking-only/mixed-block and final-serialization cases. Do not edit `tests/bicameral-consensus.test.ts` diagnostic assertions to obtain approval — that file now already asserts exclusion.
+
+**Oversized-evidence mapping (red-team #14):** a required file exceeding the read bound must surface as `EVIDENCE_REQUIRED` with the omission recorded, never as service `UNAVAILABLE`. `FILE_TOO_LARGE`/`FILE_UNAVAILABLE` currently collapse into a retry-flavoured outcome through `src/egc.ts:227`; classify mandatory-artifact size/read failures as evidence gaps and keep genuine transport failures as `UNAVAILABLE`.
 
 ## Related Code Files
 - Modify: `D:/100.Software/Github/omp_extension/src/evidence-collector.ts` — baseline/preimages, full commit interval, post-test collection, non-git evidence.
-- Create: `D:/100.Software/Github/omp_extension/src/verification-receipt.ts` — command/artifact receipt creation, binding and freshness validation.
-- Create: `D:/100.Software/Github/omp_extension/src/judge-evidence-packet.ts` — shared typed evidence projection and omission accounting.
+- Extend (exists — do not recreate): `D:/100.Software/Github/omp_extension/src/verification-receipt.ts` — command/artifact receipt creation, binding and freshness validation.
+- Extend (exists — do not recreate): `D:/100.Software/Github/omp_extension/src/judge-evidence-packet.ts` — shared typed evidence projection and omission accounting.
 - Modify: `D:/100.Software/Github/omp_extension/typesafe-planner.ts` — project evidence tool and native consumers; one integration owner.
 - Modify: `D:/100.Software/Github/omp_extension/src/verification-gate.ts`, `src/cook-expert-judge.ts`, `src/plan-evaluator.ts`, `src/payload-safety.ts` — shared applicability/preparation, no second semantic authority path.
-- Extend: `D:/100.Software/Github/omp_extension/tests/evidence-collector.test.ts`, `tests/judge-input-fidelity.test.ts`, `tests/payload-safety.test.ts`, `tests/task-artifact-routing.test.ts`, and focused new receipt behavior tests.
+- Extend: `D:/100.Software/Github/omp_extension/tests/evidence-collector.test.ts`, `tests/judge-input-fidelity.test.ts`, `tests/payload-safety.test.ts`, `tests/task-artifact-routing.test.ts`, `tests/public-evidence-egress.test.ts`, and focused new receipt behavior tests.
 
 ## Implementation Steps
 1. Inventory/export references and freeze the baseline/receipt shape from phase1. Bind task start to a real source snapshot; record provenance and ancestry. If an older baseline lacks bytes, report that specific gap—do not invent a new historical baseline or erase existing debt.

@@ -35,7 +35,7 @@ function reasoningFixture(verdict: AdvisorAssessment["verdict"] = "proceed"): Co
     parentIntegration: { status: "not_applicable", criterionIds: [], evidenceRefs: [] },
   };
   const body: Omit<AdvisorReceipt, "receiptId"> = {
-    schemaVersion: 1, requestId: "request", binding, bindingDigest: canonicalDigest(binding), snapshot,
+    schemaVersion: 1, requestId: "request", binding, bindingDigest: canonicalDigest(binding), snapshot, parentRequirementIds: [],
     assessment, assessmentDigest: canonicalDigest(assessment), authority: "task_bound",
     provenance: { parentToolCallId: "parent-call", itemIndex: 0, childId: "child", sessionEpoch: "epoch", terminalDigest: digest },
   };

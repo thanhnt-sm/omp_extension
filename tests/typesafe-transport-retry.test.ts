@@ -76,11 +76,96 @@ describe("TypeSafe bounded prepared-body transport", () => {
     expect(client.checkCredentialCooldown("A", { rateLimitState: state })).toBeNull();
   });
 
+  test("A to B to A preserves A cooldown while stale completions remain rejected", async () => {
+    const state = {};
+    await client.requestWithRetry({ apiKey: "A-cooldown", body: "{}", rateLimitState: state, maxAttempts: 1,
+      fetchImpl: async () => new Response("", { status: 429 }), nowImpl: () => 0 });
+    await client.requestWithRetry({ apiKey: "B-cooldown", body: "{}", rateLimitState: state, maxAttempts: 1,
+      fetchImpl: async () => new Response("", { status: 200 }) });
+    let calls = 0;
+    const aAgain = await client.requestWithRetry({ apiKey: "A-cooldown", body: "{}", rateLimitState: state,
+      fetchImpl: async () => { calls++; return new Response("", { status: 200 }); }, nowImpl: () => 1 });
+    expect(aAgain.cooldown).toBe(true);
+    expect(calls).toBe(0);
+    const isolated = {};
+    expect(client.checkCredentialCooldown("A-cooldown", { rateLimitState: isolated, nowImpl: () => 1 })).toBeNull();
+  });
+
+  test("explicit caller rate-limit states remain isolated", async () => {
+    const first = {};
+    const second = {};
+    await client.requestWithRetry({ apiKey: "isolated-callers", body: "{}", rateLimitState: first, maxAttempts: 1,
+      fetchImpl: async () => new Response("", { status: 401 }) });
+    expect(client.checkCredentialCooldown("isolated-callers", { rateLimitState: first })).toMatchObject({ authFailed: true, status: 401 });
+    expect(client.checkCredentialCooldown("isolated-callers", { rateLimitState: second })).toBeNull();
+  });
   test("bounded body cancellation resolves even when cancel stalls", async () => {
     const response = { body: { cancel: () => new Promise<void>(() => {}) } };
     await expect(client.cancelBodyBounded(response, { timeoutMs: 1 })).resolves.toBeUndefined();
   });
 
+  test("timeout during a hanging body read cancels once and handles late cancellation rejection", async () => {
+    let cancelCalls = 0;
+    let rejectCancel!: (error: Error) => void;
+    let bodyReadStarted = false;
+    let fireTimeout: (() => void) | undefined;
+    const response = {
+      status: 200,
+      ok: true,
+      body: { cancel: () => {
+        cancelCalls += 1;
+        return new Promise<void>((_resolve, reject) => { rejectCancel = reject; });
+      } },
+      json: () => { bodyReadStarted = true; return new Promise<never>(() => {}); },
+    };
+    const request = client.requestWithRetry({
+      apiKey: "hanging-body",
+      body: "{}",
+      maxAttempts: 1,
+      timeoutMs: 5,
+      totalBudgetMs: 10000,
+      fetchImpl: async () => response,
+      setTimeoutImpl: (callback: () => void) => { fireTimeout = callback; return 1; },
+      clearTimeoutImpl: () => {},
+    });
+
+    for (let i = 0; i < 20 && !bodyReadStarted; i++) await Promise.resolve();
+    expect(bodyReadStarted).toBe(true);
+    expect(fireTimeout).toBeDefined();
+    fireTimeout?.();
+    await expect(request).rejects.toMatchObject({ name: "TimeoutError" });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(cancelCalls).toBe(1);
+    rejectCancel(new Error("late cancel failure"));
+    await Promise.resolve();
+    expect(cancelCalls).toBe(1);
+  });
+  test("abort before headers cancels a response that arrives later", async () => {
+    const controller = new AbortController();
+    let resolveFetch!: (response: Response) => void;
+    let cancelCalls = 0;
+    const request = client.requestWithRetry({
+      apiKey: "late-abort-response",
+      body: "{}",
+      signal: controller.signal,
+      maxAttempts: 1,
+      fetchImpl: () => new Promise<Response>((resolve) => { resolveFetch = resolve; }),
+    });
+
+    for (let i = 0; i < 20 && !resolveFetch; i++) await Promise.resolve();
+    expect(resolveFetch).toBeDefined();
+    controller.abort();
+    resolveFetch({
+      status: 200,
+      ok: true,
+      body: { cancel: () => { cancelCalls += 1; return Promise.resolve(); } },
+      json: async () => ({}),
+    } as unknown as Response);
+
+    await expect(request).rejects.toMatchObject({ name: "AbortError" });
+    expect(cancelCalls).toBe(1);
+  });
   test("retries only 429 and 529, then shares a credential cooldown", async () => {
     const state = {};
     let retryableCalls = 0;

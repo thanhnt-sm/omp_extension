@@ -81,21 +81,23 @@ describe("trusted purpose policies and canonical preparation", () => {
     expect(resolved.rerank.ok).toBe(true);
   });
 
-  test("projects typed assistant private fields without deleting user business data", () => {
+  test("projects typed assistant fields and drops unapproved private roles", () => {
     const privateText = "internal thought details not public";
     const prepared = api.prepareRequest({ ...request(), state: {
       thinking: "Inventory planning concept",
       messages: [
-        { role: "user", content: "Public task", thinking: "Public customer terminology" },
+        { role: "user", content: "Private user prompt", thinking: "Private user context" },
         { role: "assistant", content: "Public assistant text", thinking: privateText, reasoning_content: privateText },
       ],
     } });
     expect(prepared.ok).toBe(true);
     const state = JSON.parse(prepared.body).state;
     expect(state.thinking).toBe("Inventory planning concept");
-    expect(state.messages[0].thinking).toBe("Public customer terminology");
-    expect(state.messages[1].content).toBe("Public assistant text");
+    expect(state.messages).toHaveLength(1);
+    expect(state.messages[0].content).toBe("Public assistant text");
     expect(prepared.body).not.toContain(privateText);
+    expect(prepared.body).not.toContain("Private user prompt");
+    expect(prepared.body).not.toContain("Private user context");
   });
 
   test("snapshots nested configuration and isolates registrations and purposes", () => {

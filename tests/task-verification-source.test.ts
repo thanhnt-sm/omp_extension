@@ -1,4 +1,6 @@
 import { createRequire } from "node:module";
+import { writeFile } from "node:fs/promises";
+import path from "node:path";
 import { describe, expect, test } from "bun:test";
 import { createTaskVerificationRuntime, type TaskVerificationRuntimeOptions } from "../src/task-verification-runtime";
 import type { ExpertJudgeResponse } from "../src/cook-expert-judge";
@@ -11,7 +13,7 @@ interface LocalPreparationClient {
 }
 interface LocalPolicyClient { resolveTrustedToolPolicy(purpose: "native_done"): ResolvedToolPolicy }
 interface OfflineSourceRuntime { options: TaskVerificationRuntimeOptions; calls(): number; preparedBodies: string[] }
-function sourceRuntime(host: ReadonlyVerificationFixture, failure: "unavailable" | "rejected" | "below-policy", approvalPolicy: SemanticApprovalPolicy = createSemanticApprovalPolicy({})): OfflineSourceRuntime {
+function sourceRuntime(host: ReadonlyVerificationFixture, failure: "unavailable" | "rejected" | "below-policy" | "approve", approvalPolicy: SemanticApprovalPolicy = createSemanticApprovalPolicy({}), duringReview?: () => Promise<void>): OfflineSourceRuntime {
   const key = "synthetic-private-test-key";
   const api = createRequire(import.meta.url)("../src/typesafe-api-client.cjs") as LocalPreparationClient;
   const policy = (createRequire(import.meta.url)("../src/typesafe-policy-client.cjs") as LocalPolicyClient).resolveTrustedToolPolicy("native_done");
@@ -27,6 +29,7 @@ function sourceRuntime(host: ReadonlyVerificationFixture, failure: "unavailable"
         if (!validator) throw new Error("An exact final prepared-body validator is required");
         expect(await validator(prepared)).toEqual({ ok: true });
         preparedBodies.push(prepared.body);
+        if (duringReview) await duringReview();
         // Offline parser stimulus only; no HTTP/provider/native-ready result is fabricated.
         if (failure === "unavailable") return { error: "fixture_service_unavailable" };
         const rejected = failure === "rejected";
@@ -92,6 +95,20 @@ describe("Authentic local task source with non-authoritative offline semantic st
       expect((await host.invocations.run(host.context, "typesafe_review_task", "rejection-2", target, () => restored.review(host.context, "rejection-2", target))).status).toBe("REJECTED");
       expect(fixture.calls()).toBe(1);
       expect((await restored.preflight(host.context, target, "done")).status).not.toBe("APPROVED_PENDING_COMMIT");
+    } finally { await host.dispose(); }
+  });
+  test("a source mutation landing while the semantic request is in flight voids the returned favorable assessment", async () => {
+    const host = await readonlyVerificationFixture();
+    try {
+      const fixture = sourceRuntime(host, "approve", createSemanticApprovalPolicy({}), () =>
+        writeFile(path.join(host.cwd, "reports/cause.md"), "Task report rewritten after evidence collection.\n", "utf8"));
+      const runtime = createTaskVerificationRuntime(fixture.options);
+      const target = { task: host.task, phase: "Investigation" };
+      const outcome = await host.invocations.run(host.context, "typesafe_review_task", "inflight-1", target, () => runtime.review(host.context, "inflight-1", target));
+      expect(fixture.calls()).toBe(1);
+      expect(outcome.status).toBe("EVIDENCE_REQUIRED");
+      expect(JSON.stringify(outcome)).toContain("changed during review");
+      expect((await runtime.preflight(host.context, target, "done")).status).not.toBe("APPROVED_PENDING_COMMIT");
     } finally { await host.dispose(); }
   });
 });

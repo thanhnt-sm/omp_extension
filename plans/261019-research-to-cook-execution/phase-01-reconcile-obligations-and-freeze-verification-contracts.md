@@ -11,6 +11,8 @@ dependencies: []
 ## Overview
 Implement the shared, host-owned contract and receipt identity used by every later phase. The exhaustive audit already exists; this phase must produce working code and consumer behavior, not another investigation-only report.
 
+**Current state (2026-10-22):** `src/types/verification.ts` and `src/task-contract.ts` already exist and are wired. This phase is **verify-then-extend**: start by reconciling each requirement below as `I` (preserve), `P` (finish), or `U` (implement). Never recreate or overwrite an existing module.
+
 Context: [33-plan inventory](../reports/261019-all-plan-implementation-inventory.md), [C01–C35 coverage](../reports/261019-all-research-implementation-coverage.md), [recovery evidence](../reports/261019-todo-recovery-evidence.json). Coverage: C04/C07/C15/C17/C29/C35; interface inputs for every other row.
 
 ## Requirements
@@ -33,16 +35,16 @@ Use supported `appendEntry`/`getBranch` and event hooks after capability checks;
 
 ## Related Code Files
 Paths below are absolute and actions apply only in this workspace.
-- Create: `D:/100.Software/Github/omp_extension/src/types/verification.ts` — common contract/outcome/receipt types, no new service classes.
-- Create: `D:/100.Software/Github/omp_extension/src/task-contract.ts` — binding, amendment and branch projection helpers.
+- Extend (exists — do not recreate): `D:/100.Software/Github/omp_extension/src/types/verification.ts` — common contract/outcome/receipt types, no new service classes.
+- Extend (exists — do not recreate): `D:/100.Software/Github/omp_extension/src/task-contract.ts` — binding, amendment and branch projection helpers.
 - Modify: `D:/100.Software/Github/omp_extension/typesafe-planner.ts` — factory-owned contract registry, actual host hooks/tool registration and explicit plan binding.
 - Modify: `D:/100.Software/Github/omp_extension/src/evidence-collector.ts` and `src/verification-gate.ts` — accept the shared contract reference, preserve advisory non-authority.
-- Create/extend behavior tests under `D:/100.Software/Github/omp_extension/tests/` for contract binding/history; reuse current native lifecycle/input fixtures.
+- Extend behavior tests under `D:/100.Software/Github/omp_extension/tests/` for contract binding/history; reuse current native lifecycle/input fixtures.
 - Modify relevant historical plan frontmatter/notes only through documented CLI status operations and evidence-backed reconciliation; do not rewrite the historical record as current proof.
 
 ## Implementation Steps
 1. Parent freezes the C01–C35 plus RECOVERY-SEC-01–06 coverage ledger and exact inherited plan acceptance. For each objective record implemented/partial/unimplemented/superseded/unsupported, implementation owner and final evidence. Audit inputs are already delivered; do not rerun all historical work.
-2. Run symbol references before exported changes; use configured LSP, otherwise explicit callsite inventory. Record current real host registration, session identity/history, custom-entry and task receipt capabilities; do not invent `pi.spawnAgent` or change native todo schema.
+2. Reconcile every requirement in this phase against the current tree (`I`/`P`/`U`) **before** editing. Then run symbol references before exported changes; use configured LSP, otherwise explicit callsite inventory. Record current real host registration, session identity/history, custom-entry and task receipt capabilities; do not invent `pi.spawnAgent` or change native todo schema.
 3. Implement canonical contract parsing from an explicit approved plan/phase reference. Preserve source spans and parent obligations; exclude boilerplate as evidence, not as authority. For non-plan research use the actual original user request and explicit task association, not code/test requirements invented by a generic rubric.
 4. Integrate a bounded project extension contract-binding operation if needed. Agent input is a proposal; validate it against observed native targets and trusted user/plan source before recording. Material scope reduction/conflict requires actual human authority; status updates and unrelated user turns do not silently amend criteria.
 5. Persist/reproject supported host-owned contract/debt history across branch/restart; new session/branch identities invalidate transient stages. Do not restore approvals from receipt JSON or clear unresolved debt during hydration. Phase 3 supplies full lifecycle/debt policy consumption.

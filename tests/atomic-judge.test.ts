@@ -4,6 +4,9 @@ import { createAtomicJudge, validateAtomicReceipt, type AtomicInput } from "../s
 import { prepareAtomicInput } from "../src/atomic-preparation";
 import { createPairedReviewDriver } from "../src/atomic-evaluation";
 import { advisorFixture } from "./advisor-fixtures";
+import { createRequire } from "node:module";
+// Host-side permitted-redaction projection: 64-hex digests are legitimately redacted as high-entropy runs on the wire.
+const { redactEvidenceState } = createRequire(import.meta.url)("../src/typesafe-api-client.cjs") as { redactEvidenceState(state: unknown, options: { apiKey?: string }): Record<string, unknown> };
 
 function inputFixture(): AtomicInput {
   const { request, contract, packetSet } = advisorFixture("shadow");
@@ -24,7 +27,7 @@ describe("bounded real atomic packet driver", () => {
     const bodies: Record<string, unknown>[] = [];
     const receipt = await createAtomicJudge({ apiKey: "fixture-key", fetchImpl: transportFixture(bodies) }).review(input);
     expect(bodies).toHaveLength(1); expect(Object.keys(bodies[0].questions as object)).toHaveLength(2);
-    expect((bodies[0].state as Record<string, unknown>).evidence_packet).toEqual(input.packetSet.packets[0].packet);
+    expect((bodies[0].state as Record<string, unknown>).evidence_packet).toEqual(redactEvidenceState({ evidence_packet: input.packetSet.packets[0].packet }, { apiKey: "fixture-key" }).evidence_packet);
     expect(receipt.status).toBe("supported"); expect(receipt.uncoveredCriterionIds).toEqual([]);
     expect(validateAtomicReceipt(receipt, { binding: input.binding, snapshot: input.snapshot, criterionIds: input.criteria.map(c => c.id) })).toBe(true);
     expect(Object.isFrozen(receipt.outcomes)).toBe(true);
@@ -35,8 +38,11 @@ describe("bounded real atomic packet driver", () => {
     const bodies: Record<string, unknown>[] = [];
     const receipt = await createAtomicJudge({ apiKey: "fixture-key", fetchImpl: transportFixture(bodies) }).review(input);
     expect(bodies).toHaveLength(2); expect(receipt.manifest).toHaveLength(2);
-    const state = bodies[1].state as { dependencies: unknown[]; dependencyDigest: string };
-    expect(state.dependencies).toHaveLength(1); expect(state.dependencyDigest).toBe(canonicalDigest(state.dependencies));
+    const state = bodies[1].state as { dependencies: { predicateId: string }[]; dependencyDigest: string };
+    expect(state.dependencies).toHaveLength(1); expect(state.dependencies[0].predicateId).toBe(first.id);
+    const typed = [receipt.outcomes[0]];
+    expect({ dependencies: state.dependencies, dependencyDigest: state.dependencyDigest }).toEqual(redactEvidenceState({ dependencies: typed, dependencyDigest: canonicalDigest(typed) }, { apiKey: "fixture-key" }));
+    expect(bodies[1].state).not.toEqual(bodies[0].state);
   });
   test("deterministic failed exit is not delegated or averaged away by all semantic passes", async () => {
     const input = structuredClone(inputFixture()); input.deterministicChecks = [{ id: "test-exit", criterionId: input.criteria[0].id, kind: "exit_status", actual: 1, expected: 0 }];

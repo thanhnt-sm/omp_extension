@@ -236,15 +236,24 @@ test("an 80KB root consumer gets a verified bounded claim packet without approvi
     },
   });
   const reviewed = await atomic.review(input);
-  expect(actualBodies).toHaveLength(1);
-  const actual: { state: { evidence_packet: JudgeEvidencePacket } } = JSON.parse(actualBodies[0]);
+  // The bounded child claim and the independent parent-integration predicate are separate dispatches by design (atomic-parent.ts: own group, depends on children).
+  expect(actualBodies).toHaveLength(2);
+  const actual: { questions: Record<string, unknown>; state: { evidence_packet: JudgeEvidencePacket; parent_integration?: unknown } } = JSON.parse(actualBodies[0]);
+  const parentBody: { questions: Record<string, unknown>; state: { parent_integration?: unknown } } = JSON.parse(actualBodies[1]);
+  expect(Object.keys(actual.questions)).toHaveLength(1);
+  expect(actual.state.parent_integration).toBeUndefined();
+  expect(Object.keys(parentBody.questions)).toHaveLength(1);
+  expect(parentBody.state.parent_integration).toBeDefined();
   expect(actual.state.evidence_packet.source[0].coverage).toBe("spans");
   expect(actual.state.evidence_packet.source[0].spans?.[0].text).toBe(text);
   expect(actual.state.evidence_packet.source[0].content).toBeUndefined();
-  expect(actualBodies[0]).not.toContain("authorized root context 1000");
-  expect(Buffer.byteLength(actualBodies[0])).toBeLessThanOrEqual(32768);
-  expect(reviewed.attempts[0].bodyDigest).toBe(digestBytes(actualBodies[0]));
+  for (const [index, raw] of actualBodies.entries()) {
+    expect(raw).not.toContain("authorized root context 1000");
+    expect(Buffer.byteLength(raw)).toBeLessThanOrEqual(32768);
+    expect(reviewed.attempts[index].bodyDigest).toBe(digestBytes(raw));
+  }
   expect(reviewed.outcomes[0].relation).toBe("supports");
+  expect(reviewed.outcomes[1].parentRequirementId).toBe("parent:parent-root:parent-root-integration");
   expect(reviewed.status).toBe("insufficient");
   expect(reviewed.uncoveredCriterionIds).toContain("parent-root-integration");
   expect(reviewed.uncoveredParentRequirementIds).toContain("parent:parent-root:parent-root-integration");

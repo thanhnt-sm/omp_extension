@@ -1,11 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import {
   preparePayloadSafe,
   redactAnthropicSecrets,
-  truncatePayloadState,
-  type TypeSafePayload,
 } from "../src/payload-safety";
 import {
   assertPathIsClaudeSafe,
@@ -121,28 +120,31 @@ diff --git a/tests/auth.test.ts b/tests/auth.test.ts
     expect(result.reasons.some((r) => r.includes("Scope reduction forbidden"))).toBe(true);
   });
 
-  test("Attack 4 (Large Diff Flood >200KB): Strictly bounds payload to <= 32768 bytes while preserving errors", () => {
+  test("Attack 4 (Large Diff Flood >200KB): Fails closed on the real dispatch path with zero oversize egress", async () => {
     const testFailureHeader = "FAIL src/core.test.ts\nError: Connection timed out after 5000ms\n    at Socket.connect (core.ts:42)";
     const hugeDiff = "+ console.log('flood flood flood');\n".repeat(6000); // ~210KB
     const massiveState = `Header: starting run\n${hugeDiff}\n${testFailureHeader}`;
+    const questions = { check: { type: "noul" as const, instructions: "Validate implementation correctness" } };
 
-    const payload: TypeSafePayload = {
-      state: massiveState,
-      questions: {
-        check: {
-          type: "noul",
-          instructions: "Validate implementation correctness",
-        },
-      },
+    // Implicit clipping would change evidence meaning: oversize must be rejected, never silently truncated.
+    expect(() => preparePayloadSafe({ state: massiveState, questions })).toThrow("payload too large");
+
+    // The real egress path must also refuse before any network call.
+    const policyClient = createRequire(import.meta.url)("../src/typesafe-policy-client.cjs") as {
+      resolveTrustedToolPolicy(purpose: string): unknown;
+      judgeWithPolicy(options: Record<string, unknown>): Promise<{ ok: boolean; code?: string }>;
     };
-
-    const safe = preparePayloadSafe(payload);
-    const byteLength = Buffer.byteLength(JSON.stringify(safe), "utf8");
-
-    expect(byteLength).toBeLessThanOrEqual(32768);
-    expect(typeof safe.state).toBe("string");
-    expect(safe.state as string).toContain("FAIL src/core.test.ts");
-    expect(safe.state as string).toContain("Error: Connection timed out");
+    let fetchCalls = 0;
+    const outcome = await policyClient.judgeWithPolicy({
+      args: { state: massiveState, questions },
+      purpose: "judge",
+      trustedPolicy: policyClient.resolveTrustedToolPolicy("judge"),
+      apiKey: "adversarial-flood-fixture-credential",
+      fetchImpl: (async () => { fetchCalls++; return new Response("{}", { status: 200 }); }) as unknown as typeof fetch,
+    });
+    expect(outcome.ok).toBe(false);
+    expect(outcome.code).toBe("payload too large");
+    expect(fetchCalls).toBe(0);
   });
 
   test("Attack 5 (Credential Revocation & Network Drop): Fails closed on 401 or network error", async () => {
@@ -161,34 +163,48 @@ diff --git a/tests/auth.test.ts b/tests/auth.test.ts
     );
 
     expect(result.approved).toBe(false);
-    expect(result.escalateToUser).toBe(true);
+    expect(result.gate2?.passed).toBe(false);
+    expect(result.disposition?.status).toBe("UNAVAILABLE");
+    // Infrastructure/credential outages go to the service owner, never to the human as a semantic rejection.
+    expect(result.escalateToUser).toBe(false);
   });
 
   test("Attack 6 (Loop Exhaustion & Escalation): Escalates to user on 3rd consecutive failed attempt", async () => {
+    let judgeCalls = 0;
     const mockJudge: PlanJudgeClient = {
-      evaluatePlan: async () => ({
-        answers: {
-          scope_mode: { choice: "HOLD" },
-          algorithm_depth: { score: 1.1 },
-          task_actionability: { noul: 0.35 },
-          claude_isolation_adherence: { noul: 1.0 },
-        },
-      }),
-    };
-
-    const result = await evaluatePlanDraft(
-      {
-        planTitle: "Persistent failure plan",
-        planContent: "Repeatedly vague draft",
-        attempt: 3,
+      evaluatePlan: async () => {
+        judgeCalls++;
+        return {
+          answers: {
+            scope_mode: { choice: "HOLD" },
+            algorithm_depth: { score: 1.1 },
+            task_actionability: { noul: 0.35 },
+            claude_isolation_adherence: { noul: 1.0 },
+          },
+        };
       },
-      mockJudge
-    );
+    };
+    const planContent =
+      "1. Implement token validation in src/auth.ts with expired-token rejection.\nVerification: bun test tests/auth.test.ts";
 
-    expect(result.approved).toBe(false);
-    expect(result.escalateToUser).toBe(true);
-    expect(result.feedback).toBeDefined();
-    expect(result.feedback).toContain("Plan rejected on attempt 3/3");
+    const second = await evaluatePlanDraft({ planTitle: "Persistent failure plan", planContent, attempt: 2 }, mockJudge);
+    expect(second.approved).toBe(false);
+    expect(second.status).toBe("rejected");
+    expect(second.escalateToUser).toBe(false);
+
+    const third = await evaluatePlanDraft({ planTitle: "Persistent failure plan", planContent, attempt: 3 }, mockJudge);
+    expect(third.approved).toBe(false);
+    expect(third.status).toBe("rejected");
+    expect(third.escalateToUser).toBe(true);
+    expect(third.feedback).toContain("attempt 3");
+    expect(judgeCalls).toBe(2);
+
+    // A structurally insufficient plan also escalates at the limit without dispatching the judge.
+    const vague = await evaluatePlanDraft({ planTitle: "Vague", planContent: "Repeatedly vague draft", attempt: 3 }, mockJudge);
+    expect(vague.approved).toBe(false);
+    expect(vague.triagePassed).toBe(false);
+    expect(vague.escalateToUser).toBe(true);
+    expect(judgeCalls).toBe(2);
   });
 
   test("Attack 7 (Claude Credential & Boundary Violation Attempt): Blocks access and scrubs secrets", () => {
@@ -237,6 +253,7 @@ diff --git a/tests/auth.test.ts b/tests/auth.test.ts
     const gateJudge: GateJudgeClient = {
       evaluateGate: async () => ({
         answers: {
+          deliverables_verdict: { choice: "APPROVE" },
           meets_criteria: { noul: 0.96 },
           plan_drift: { choice: "no_drift" },
           claude_account_untouched: { noul: 1.0 },

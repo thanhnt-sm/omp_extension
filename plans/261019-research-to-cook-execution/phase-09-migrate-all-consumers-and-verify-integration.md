@@ -9,13 +9,14 @@ dependencies: [7]
 # Phase 9: Migrate all consumers and verify integration
 
 ## Overview
-Integrate every actual caller into the canonical contract/evidence/result/authority pipeline and verify real consumer behavior. The phase7 dependency means its **source-ready outputs**, not a requirement to mark phase7's externally dependent live-child criteria complete. After the phase7-source-ready evidence milestone, continue structural migration while runtime/provider acceptance or phase8 labels/spend wait. Live H selection still requires real reasoning plus a valid adoption decision.
+Integrate every actual caller into the canonical contract/evidence/result/authority pipeline and verify real consumer behavior. The phase7 dependency means its **source-ready outputs**, not a requirement to mark phase7's externally dependent live-child criteria complete. Structural migration may proceed after the phase7-source-ready milestone while runtime/provider acceptance or phase8 labels/spend wait. **Strategy selection is a separate gate: until Phase 8 returns a valid adoption/retention decision, Phase 9 must keep repaired-M and may not claim a selected H strategy.**
 
 ## Requirements
 - No duplicate native authority orchestrator, compatibility shim, deprecated alias or production fake fallback. Preserve meaningful generic API/advisory tools without giving them native authority.
 - One input/result meaning across native done/drop, explicit verifier, plan elevation, expert roles, Advisor, rerank/multi-label, standalone EGC and evaluation driver, with purpose-specific applicability.
 - Repaired-M remains selected while H promotion lacks required evidence. This is deliberate configured strategy, not per-request fallback after an H rejection/error.
-- Every U/P recommendation is implemented and exercised or retains a precisely named external empirical/activation acceptance; no silent scope reduction or blanket completed status.
+- Operational README and current operations guide agree with current host registration, bound contract/evidence collection, receipt preparation, preflight staging, matching-result commit, configured approval policy, mutation grants and current repository command/path. Historical architecture/runbooks explicitly identify their applicable source/runtime revision instead of presenting old gates or environment flags as current.
+- Cross-cutting verification evidence distinguishes implementation, component tests, integration, host-live behavior, deployment and external prerequisites. A passing suite or source SHA alone does not close the other dimensions.
 
 ## Architecture
 The common evaluator consumes phase1/2 contracts/packets, phase3 authority, phase6 policy and phase7 source-ready implementations. Generic raw judge and standalone consultation remain useful without synthetic todos, but their discriminated receipts cannot stage native work. Task/parent native consumers require current host contract/incarnation/operation/target bindings and real applicable reasoning. Phase7 remaining live acceptance stays open until observed; source-ready is not a waiver.
@@ -23,11 +24,10 @@ The common evaluator consumes phase1/2 contracts/packets, phase3 authority, phas
 Separate evaluation strategy selection from runtime outcome handling. An `adoption.json` record is non-authoritative evidence requiring validated policy/revisions and activation approval. H unavailable/rejected never invokes M to search for approval. If retention is selected, H remains a real tested non-authoritative candidate/driver; no second production task tracker or orphan mock path remains.
 
 ## Related Code Files
-- Modify actual consumers in `D:/100.Software/Github/omp_extension/typesafe-planner.ts`, `src/bicameral-consensus.ts`, `src/cook-expert-judge.ts`, `src/verification-gate.ts`, `src/plan-evaluator.ts`, `src/egc.ts` and shared CJS/policy modules.
-- Integrate planned contract/evidence/receipt/atomic/Advisor modules and `D:/100.Software/Github/omp_extension/tools/jev-paired-eval.ts` without aliases to obsolete implementations.
+- Verify-then-extend actual consumers in `D:/100.Software/Github/omp_extension/typesafe-planner.ts`, `src/bicameral-consensus.ts`, `src/cook-expert-judge.ts`, `src/verification-gate.ts`, `src/plan-evaluator.ts`, `src/egc.ts` and shared CJS/policy modules. Do not recreate modules already present.
+- Integrate existing contract/evidence/receipt/atomic/Advisor modules and `D:/100.Software/Github/omp_extension/tools/jev-paired-eval.ts` only where a real caller gap remains; no aliases to obsolete implementations.
 - Update actual agent definitions under `D:/100.Software/Github/omp_extension/agents/` and `.omp/agents/`; never write global installed definitions directly.
-- Update current `D:/100.Software/Github/omp_extension/docs/typesafe-operations.md`, `docs/operations-and-user-guide.md`, `docs/system-architecture.md`, `docs/source-code-specification.md`, `docs/data-flow-and-states.md`, `docs/model-specification.md` and other affected maintained references from real behavior.
-- Update relevant behavior tests across `D:/100.Software/Github/omp_extension/tests/`; do not invent absent legacy root test commands or modify unrelated verification assets.
+- Update current maintained docs and affected behavior tests from real behavior; enumerate every changed-path consumer before editing.
 
 ## Implementation Steps
 1. Re-run exported references against the integrated revision and enumerate every real caller/registration. Use the C01–C35/security coverage ledger, not only filenames from the recent atomic plan. Record purpose, contract source, evidence preparation, result consumer, authority and final native effect for each.

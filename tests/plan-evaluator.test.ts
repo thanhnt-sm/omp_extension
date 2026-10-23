@@ -485,7 +485,7 @@ describe("Plan evidence boundaries and strict returned primitives", () => {
       expect(result.approved).toBe(false);
       const nextCall = await evaluatePlanDraft({ planTitle: "New advisory invocation", planContent: completePlan }, {
         evaluatePlan: async () => ({ answers: { ...completeAnswers, task_actionability: { noul: 0.8 } } }),
-      }, { approvalPolicy: createSemanticApprovalPolicy({ TYPESAFE_AUTO_APPROVAL_THRESHOLD: "70" }) });
+      });
       expect(nextCall.approved).toBe(true);
     } finally {
       if (saved === undefined) delete process.env.TYPESAFE_AUTO_APPROVAL_THRESHOLD;

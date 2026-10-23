@@ -11,6 +11,10 @@ dependencies: [7]
 ## Overview
 Implement and execute a resumable paired evaluator for repaired-M versus complete H. Documentation fit is not accuracy/economic proof. Coverage C01/C10/C28/C34; consumes phase7's real workspace driver and all baseline correctness fixes.
 
+**Current state (2026-10-22):** `tools/jev-paired-eval.ts`, its `jev-paired-*` library, `tests/jev-paired-evaluation.test.ts` and the frozen `plans/261019-jev-atomic-review/evaluation/*` inputs already exist. This phase is **verify-then-extend**; the remaining real work is the authorized empirical run and its adoption decision, not scaffolding.
+
+**Dependency:** this phase produces the strategy decision that Phase 9 consumes, even though Phase 9's frontmatter depends only on Phase 7 source readiness.
+
 ## Requirements
 - Implement the full candidate regardless of its promotion result. A negative result retains repaired-M; an unrun benchmark is never called completed.
 - Compare equivalent original obligations and eligible evidence. Give both arms repaired input and genuine parent reasoning where required; do not credit H for a fix applied only to H.
@@ -19,11 +23,11 @@ Implement and execute a resumable paired evaluator for repaired-M versus complet
 - Shadow evaluation cannot stage native operations, mutate task/plan state or grant human/deployment authority.
 
 ## Related Code Files
-- Create: `D:/100.Software/Github/omp_extension/tools/jev-paired-eval.ts` — validate/freeze/benchmark/report/decide CLI.
-- Create: `D:/100.Software/Github/omp_extension/tools/jev-paired-eval-lib.ts` — bounded corpus/split/scheduling/statistics/decision functions; extract cohesive helpers if needed, not a benchmark framework.
-- Create: `D:/100.Software/Github/omp_extension/tests/jev-paired-evaluation.test.ts` and fixtures under `tests/fixtures/jev-paired-evaluation/`.
-- Create actual versioned inputs under `D:/100.Software/Github/omp_extension/plans/261019-jev-atomic-review/evaluation/`: protocol.json, corpus.jsonl, splits.json, labels.jsonl, prices.json and approved sanitized snapshots.
-- Write real run output only when executed under `D:/100.Software/Github/omp_extension/plans/261019-jev-atomic-review/reports/paired/<run-id>/`: manifest, attempts, case-results, coverage, metrics, report and adoption decision.
+- Verify (exists — do not recreate): `D:/100.Software/Github/omp_extension/tools/jev-paired-eval.ts` — validate/freeze/benchmark/report/decide CLI.
+- Verify (exists — do not recreate): `D:/100.Software/Github/omp_extension/tools/jev-paired-eval-lib.ts` — bounded corpus/split/scheduling/statistics/decision functions.
+- Extend (exists): `D:/100.Software/Github/omp_extension/tests/jev-paired-evaluation.test.ts` and fixtures under `tests/fixtures/jev-paired-evaluation/`.
+- Verify/freeze (exists): `D:/100.Software/Github/omp_extension/plans/261019-jev-atomic-review/evaluation/` — protocol.json, corpus.jsonl, splits.json, labels.jsonl, prices.json.
+- Write real run output only when executed under `D:/100.Software/Github/omp_extension/plans/261019-jev-atomic-review/reports/paired/<run-id>/`.
 - Modify existing client/adapters only to preserve actually returned model/usage/attempt metadata; share phase6 transport and limits, never add another retry owner.
 - Update `D:/100.Software/Github/omp_extension/tools/README.md`, `docs/typesafe-operations.md`, atomic plan and coverage ledger from actual results.
 
@@ -52,7 +56,7 @@ Report separate false-approval risk among gold non-approvable parents and unsafe
 1. Implement the CLI/driver/manifest and pure decision replay first. Map all36scenarioIDs to real deterministic assertions or semantic-case references; never count variants/translations/renamed constants as independent tasks.
 2. Produce approved challenge/natural cases prospectively when historical snapshots are incomplete. Original P=.13 missing wire and deployed equality are not prerequisites. The runner does not execute shell commands embedded in corpus text; it consumes trusted frozen receipts.
 3. Group connected project/parent/template/derivation families before deterministic60/20/20 dev/calibration/holdout assignment. Prefer project-disjoint holdout; one-project family holdout must not be sold as cross-project generalization. Freeze eligible cases/groups/labels/seed and source digests before outcomes.
-4. Freeze exact requested JEV version (current documented stable1.13.0 is an initial supported choice, not a permanent default), actual Advisor provider/model, policy, prompts, packet selection, limits, retry and price records. Compare actual response model; an alias/request is not resolved identity. Do not enable danger-zone long context to rescue an oversized arm.
+4. Freeze exact requested JEV version. `src/typesafe-api-client.cjs:28` currently sends `MODEL = 'jev-latest'`; the `1.13.0` reference at `:352` is a documented-source note, not a pinned runtime constant. State the evaluated model identity explicitly (a resolved model, not an alias) and do not present an unpinned vendor number as a frozen decision.
 5. Run repaired-M/H in counterbalanced seeded order; initial concurrency1 unless trusted quota policy explicitly allows more. Retain every scheduled pair, unavailable result and billed attempt. Existing bounded429/529 transport is the only retry owner; never rerun completed semantic output to select a pass.
 6. Report input-repair, duplicate Choice/Noul, incremental Advisor and batching/context ablations separately. Pure batching keeps individual state/questions byte-identical. Curated-small versus global-union state is a context-selection experiment, not batching alone.
 7. Use phase6's explicit local128question ceiling and32768-byte prepared-body policy. Official current docs have no separate count cap within model contexts; local128 is not vendor truth. Global80 is optional/unproven until final bytes and context fit; if infeasible report that arm's reason/denominator without silently dropping/chunking evidence. This cannot block all H evaluation.

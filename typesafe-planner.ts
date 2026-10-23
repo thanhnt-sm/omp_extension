@@ -16,7 +16,7 @@ import type { AdvisorHostServices } from "./src/advisor-host-types";
 import { currentSourceMutationGrant, sourceMutationAllowed, sourceMutationGrantCurrent } from "./src/source-mutation-authority";
 import { assertScopedPlanClosure, parsePlanCliCheck, phaseFileForCheck, PlanClosurePrerequisiteError } from "./src/plan-closure";
 import { evaluatePlanDraft, type PlanJudgeClient, type PlanQuestion } from "./src/plan-evaluator";
-import { runMultiPersonaDebate, type DebateJudgeClient } from "./src/debate-evaluator";
+import { resolveDebateModel, runMultiPersonaDebate, type DebateJudgeClient } from "./src/debate-evaluator";
 import type { JudgePurpose, ResolvedToolPolicy, TrustedToolPolicy, PreparedRequestValidator, TypeSafePreparedRequest, TypeSafeJudgeResult } from "./src/payload-safety";
 import { scoreValue, type SemanticResponse, type SemanticTransportMetadata } from "./src/semantic-judge-client";
 import { verifyTaskCompletion, type GateJudgeClient, type GateQuestion } from "./src/verification-gate";
@@ -1447,6 +1447,12 @@ export default function registerExtension(
     const resolver = loadResolverModule();
     const healthPolicy = toolPolicies?.health;
     if (!apiKey || !resolver?.resolveTypeSafeEnabled(getProjectDir(ctx), resolverOptions).enabled || !policyClient || !healthPolicy?.ok) return;
+    if (loadApiClientModule()?.checkCredentialCooldown(apiKey)) {
+      const skipped = "TypeSafe warning: diagnostic probe skipped while the credential is unavailable.";
+      try { await Promise.resolve(context?.ui?.notify?.(skipped, "warning")); } catch { /* host UI failure never changes the skip */ }
+      await safeSendMessage(pi, { customType: "typesafe-health", content: skipped, display: true });
+      return;
+    }
     let outcome: TypeSafeJudgeResult;
     try {
       outcome = await policyClient.judgeWithPolicy({
@@ -1459,9 +1465,15 @@ export default function registerExtension(
       return;
     }
     const message = outcome.ok
-      ? `TypeSafe transport available; resolved model: ${outcome.metadata.resolvedModel ?? "unreported"}. This is not semantic approval.`
-      : `TypeSafe diagnostic unavailable (${outcome.code}); no task was semantically rejected.`;
-    try { context?.ui?.notify?.(message, outcome.ok ? "info" : "warning"); }
+      ? `TypeSafe: ONLINE (jev-latest). Transport only; resolved model: ${outcome.metadata.resolvedModel ?? "unreported"}. This is not semantic approval.`
+      : outcome.authError
+        ? "TypeSafe warning: TYPESAFE_API_KEY is invalid or expired. Check your environment configuration. No task was semantically rejected."
+        : outcome.code === "http_404"
+          ? "TypeSafe warning: TypeSafe API routing failed (404). Check models.yml baseUrl configuration. No task was semantically rejected."
+          : outcome.code === "network_error" || outcome.code === "timeout"
+            ? "TypeSafe warning: TypeSafe API unreachable. Check internet connection or proxy settings. No task was semantically rejected."
+            : `TypeSafe warning: Pre-flight diagnostic probe unavailable (${outcome.code}). No task was semantically rejected.`;
+    try { await Promise.resolve(context?.ui?.notify?.(message, outcome.ok ? "info" : "warning")); }
     catch { await safeSendMessage(pi, { customType: "typesafe-ui-unavailable", content: "Health notification UI failed; the transport result is unchanged.", display: false }); }
     await safeSendMessage(pi, { customType: "typesafe-health", content: message, display: true });
   });
@@ -2005,6 +2017,8 @@ export default function registerExtension(
   ): Promise<ExtensionToolResult> {
     const resolver = loadResolverModule();
     if (!resolver?.resolveTypeSafeEnabled(getProjectDir(ctx), resolverOptions).enabled) return DISABLED_RESULT;
+    const credentialStatus = loadApiClientModule()?.checkCredentialCooldown(apiKey);
+    if (credentialStatus) return credentialStatus.authFailed ? DISABLED_RESULT : shortError(`http_${credentialStatus.status}`);
     const boundPolicy = toolPolicies?.[purpose];
     if (!policyClient || !boundPolicy) return shortError("policy_client_missing");
     if (!boundPolicy.ok) return shortError("policy_invalid");
@@ -2217,9 +2231,10 @@ export default function registerExtension(
       const client = createExtensionJudgeClient(apiKey, signal, ctx);
       const resolvedUserPrompt = params.userPrompt || collectConversationContext(ctx).userRequest || undefined;
       const result = await evaluatePlanDraft({ ...params, userPrompt: resolvedUserPrompt }, client, { approvalPolicy });
+      const debateModel = resolveDebateModel();
       const debate = result.approved ? await runMultiPersonaDebate(params.planContent, client) : {
-        approved: false, status: "unavailable" as const,
-        reasons: ["Independent multi-persona review was not dispatched because the plan evaluation did not approve."],
+        approved: false, status: "unavailable" as const, advisoryOnly: true as const, modelTier: debateModel, requestedModel: debateModel,
+        reasons: ["Independent multi-persona review was not dispatched because the plan evaluation did not approve."], personas: {},
       };
       return publicResult({ ...result, approved: result.approved && debate.approved, status: result.approved ? debate.status : result.status,
         reasons: [...result.reasons, ...debate.reasons], debate, advisoryOnly: true });

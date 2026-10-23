@@ -153,6 +153,8 @@ describe("Phase 3: Session Pre-Flight Health Probe", () => {
     expect(JSON.parse(originMessages[0].content)).toEqual({
       kind: "runtime-origin",
       algorithm: "sha256",
+      interpretation: "disk-observation-not-loaded-code-proof",
+      loadedFactoryDigest: expect.stringMatching(/^[0-9a-f]{64}$/),
       entrypoint: {
         origin: expect.stringMatching(/^file:/),
         sha256: entrypointDigest,
@@ -294,6 +296,45 @@ describe("Phase 3: Session Pre-Flight Health Probe", () => {
       );
       expect(warning).toBeDefined();
       expect(warning?.display).toBe(true);
+    });
+  });
+
+  test("a revoked key is not probed again on the next session start", async () => {
+    let sessionStartHandler: ((event: unknown, ctx: unknown) => Promise<void>) | undefined;
+    const sentMessages: SentMessage[] = [];
+    const mockPi = {
+      zod: {
+        object: (x: unknown) => x,
+        union: (x: unknown) => x,
+        string: () => ({ optional: () => "string", min: () => "string" }),
+        number: () => ({ optional: () => "number" }),
+        record: (x: unknown) => x,
+        enum: (x: unknown) => x,
+        unknown: () => ({ optional: () => "unknown" }),
+        array: (x: unknown) => ({ min: () => x, optional: () => x }),
+      },
+      on: (event: string, handler: (event: unknown, ctx: unknown) => Promise<void>) => {
+        if (event === "session_start") sessionStartHandler = handler;
+      },
+      sendMessage: async (msg: SentMessage, _opts?: MessageOptions) => {
+        sentMessages.push(msg);
+      },
+      registerTool: () => {},
+    };
+
+    registerHealthExtension(mockPi as unknown as Parameters<typeof registerExtension>[0]);
+    await withScopedEnv({ TYPESAFE_API_KEY: "revoked_key_for_cooldown" }, async () => {
+      let fetchCalls = 0;
+      globalThis.fetch = mock(async () => {
+        fetchCalls++;
+        return new Response("Unauthorized", { status: 401 });
+      }) as unknown as typeof fetch;
+
+      await sessionStartHandler!({}, { cwd: process.cwd() });
+      expect(fetchCalls).toBe(1);
+      await sessionStartHandler!({}, { cwd: process.cwd() });
+      expect(fetchCalls).toBe(1);
+      expect(sentMessages.some((m) => m.content.includes("diagnostic probe skipped"))).toBe(true);
     });
   });
 
