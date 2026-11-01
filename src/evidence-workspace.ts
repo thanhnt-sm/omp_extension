@@ -69,15 +69,21 @@ export async function captureWorkspaceSnapshot(cwd: string, options: WorkspaceSn
       const ref = snapshotGit(["symbolic-ref", "--quiet", "HEAD"]).toString().trim();
       if (!ref.startsWith("refs/heads/") || snapshotGit(["for-each-ref", "--format=%(refname)", ref]).toString().split(/\r?\n/).includes(ref)) throw Object.assign(new Error("GIT_HEAD_UNAVAILABLE"), { code: "GIT_HEAD_UNAVAILABLE" });
     }
-    names = snapshotGit(["ls-files", "-z", "--cached", "--others", "--exclude-standard"]).toString("utf8").split("\0").filter(Boolean);
     const stagedIndex = snapshotGit(["ls-files", "--stage", "-z"]); indexDigest = digestBytes(stagedIndex);
+    const cachedNames: string[] = [];
     for (const entry of stagedIndex.toString("utf8").split("\0").filter(Boolean)) {
       const separator = entry.indexOf("\t"); const header = entry.slice(0, separator).split(" ");
-      if (separator > 0 && header[2] === "0") indexBlobs.set(entry.slice(separator + 1), header[1]);
-      else omissions.push({ reason: "UNMERGED_INDEX_PREIMAGE_REQUIRED", kind: "unavailable", required: true });
+      if (separator > 0) {
+        const entryPath = entry.slice(separator + 1);
+        cachedNames.push(entryPath);
+        if (header[2] === "0") indexBlobs.set(entryPath, header[1]);
+        else omissions.push({ reason: "UNMERGED_INDEX_PREIMAGE_REQUIRED", kind: "unavailable", required: true });
+      } else omissions.push({ reason: "UNMERGED_INDEX_PREIMAGE_REQUIRED", kind: "unavailable", required: true });
     }
+    const untracked = snapshotGit(["ls-files", "-z", "--others", "--exclude-standard"]).toString("utf8").split("\0").filter(Boolean);
+    names = [...new Set([...cachedNames, ...untracked])];
     dirty = new Set(snapshotGit(["diff", "--name-only", "-z", ...(headSha ? [headSha] : [])]).toString("utf8").split("\0").filter(Boolean));
-    for (const name of snapshotGit(["ls-files", "-z", "--others", "--exclude-standard"]).toString("utf8").split("\0").filter(Boolean)) dirty.add(name);
+    for (const name of untracked) dirty.add(name);
   } catch (error) {
     // Only the absence of any repository ancestor is a supported non-Git lane.
     let cursor = root; let repositoryMarker = false;

@@ -46,7 +46,7 @@ let child: ChildProcess | undefined;
 try {
   const executable = process.argv[2] ?? "omp";
   const version = home.execFileSync("verification", executable, ["--version"], { encoding: "utf8" }).trim();
-  assert.equal(version, "omp/18.12.3", "this smoke exercises the source-verified SDK version");
+  assert.ok(["omp/18.12.3", "omp/18.13.2"].includes(version), "this smoke exercises an explicitly verified SDK version");
   const entrypoint = fileURLToPath(new URL("../typesafe-planner.ts", import.meta.url));
   child = home.spawn("verification", executable, ["--cwd", workspace, "--no-session", "--no-extensions", "-e", entrypoint, "-e", extension,
     "--no-skills", "--no-rules", "--mode", "json", "--model", "owned-sdk-smoke/native-boundary-control", "-p",

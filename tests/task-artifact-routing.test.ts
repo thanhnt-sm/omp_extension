@@ -34,8 +34,8 @@ async function withProject(run: (fixture: ProjectFixture) => Promise<void>): Pro
   try {
     await fs.mkdir(cwd, { recursive: true });
     await fs.mkdir(path.join(homeDir, "empty-hooks"), { recursive: true });
-    await fs.mkdir(path.join(homeDir, ".claude"));
-    await fs.writeFile(path.join(homeDir, ".claude", ".ck.json"), JSON.stringify({
+    await fs.mkdir(path.join(homeDir, ".omp", "agent"), { recursive: true });
+    await fs.writeFile(path.join(homeDir, ".omp", "agent", "typesafe.json"), JSON.stringify({
       typesafe: { projects: ["*"], excludeProjects: [] },
     }));
     const env = {

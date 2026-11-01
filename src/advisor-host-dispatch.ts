@@ -123,8 +123,13 @@ export async function executeHostTask(api: AdvisorHostAPI, services: AdvisorHost
         scope.runtime.invalidateRequest(final.requestId, "advisor_queued_dispatch_scope_or_evidence_changed");
         return hostUnavailable("advisor_queued_dispatch_scope_or_evidence_changed");
       }
-      return advisorDispatchFrame.run({ scope, request: final, toolCallId, spawnAuthorized: false },
-        () => scope.runtime.executeNativeTask(toolCallId, params, boundedSignal, onUpdate, raw));
+      const childName = capabilities.namedChild ? `Advisor${randomUUID().replace(/-/g, "").slice(0, 24)}` : undefined;
+      const allocatedName = childName && (raw.agent.kind === "sub" ? `${raw.agent.id}.${childName}` : childName);
+      const nativeParams = childName ? capabilities.shape === "batch"
+        ? { ...params, tasks: (params.tasks as Record<string, unknown>[]).map((task, index) => index === review.index ? { ...task, name: childName } : task) }
+        : { ...params, name: childName } : params;
+      return advisorDispatchFrame.run({ scope, request: final, toolCallId, spawnAuthorized: false, allocatedName },
+        () => scope.runtime.executeNativeTask(toolCallId, nativeParams, boundedSignal, onUpdate, raw));
     });
     if (!bounded.ok) {
       scope.runtime.invalidateRequest(final.requestId, "advisor_trusted_native_job_exhausted");

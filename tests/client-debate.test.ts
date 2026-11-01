@@ -8,9 +8,9 @@ import { withScopedEnv } from "./helpers/test-env-harness";
 describe("Phase 2 Client Integration: evaluateDebate on extension judge client", () => {
   test("createExtensionJudgeClient implements evaluateDebate method", async () => {
     const home = await fs.mkdtemp(path.join(os.tmpdir(), "typesafe-debate-home-"));
-    await fs.mkdir(path.join(home, ".claude"), { recursive: true });
+    await fs.mkdir(path.join(home, ".omp", "agent"), { recursive: true });
     await fs.writeFile(
-      path.join(home, ".claude", ".ck.json"),
+      path.join(home, ".omp", "agent", "typesafe.json"),
       JSON.stringify({ typesafe: { projects: ["*", process.cwd()], excludeProjects: [] } }),
       "utf8"
     );

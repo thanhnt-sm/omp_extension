@@ -166,9 +166,9 @@ async function withFixture(run: (fixture: Fixture) => Promise<void>): Promise<vo
   });
   try {
     await fs.mkdir(planDir, { recursive: true });
-    await fs.mkdir(path.join(homeDir, ".claude"), { recursive: true });
+    await fs.mkdir(path.join(homeDir, ".omp", "agent"), { recursive: true });
     await fs.mkdir(path.join(homeDir, "empty-hooks"));
-    await fs.writeFile(path.join(homeDir, ".claude", ".ck.json"), JSON.stringify({ typesafe: { projects: ["*"], excludeProjects: [] } }));
+    await fs.writeFile(path.join(homeDir, ".omp", "agent", "typesafe.json"), JSON.stringify({ typesafe: { projects: ["*"], excludeProjects: [] } }));
     await fs.writeFile(path.join(planDir, "plan.md"), [
       "---", "title: Explicit native authority", "status: in_progress", "---", "# Explicit native authority", "",
       "| Phase | Status |", "| --- | --- |", "| [1](phase-01-authority.md) | pending |", "",

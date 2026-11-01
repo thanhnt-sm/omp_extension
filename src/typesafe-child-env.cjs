@@ -16,10 +16,23 @@ const GIT_FIXED = Object.freeze({
 class ChildEnvironmentError extends Error {
   constructor(code) { super(`Child environment rejected: ${code}`); this.name = "ChildEnvironmentError"; this.code = code; }
 }
+const NAMED_SECRETS = ["TYPESAFE_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "GITHUB_TOKEN", "GH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"];
+const SECRET_SUFFIX = /(?:_API_KEY|_SECRET|_TOKEN|_PASSWORD)$/i;
 const reject = (code) => { throw new ChildEnvironmentError(code); };
+function collectSecrets(values) {
+  const discovered = [];
+  for (const name of NAMED_SECRETS) {
+    const v = values.get(name.toUpperCase());
+    if (typeof v === "string" && v.trim().length > 0) discovered.push(v, v.trim());
+  }
+  for (const [key, v] of values.entries()) {
+    if (SECRET_SUFFIX.test(key) && typeof v === "string" && v.trim().length >= 12) discovered.push(v, v.trim());
+  }
+  return [...new Set(discovered.filter(Boolean))];
+}
 function policy(purpose) {
   if (!PURPOSES.includes(purpose)) reject("UNKNOWN_PURPOSE");
-  return { version: 1, purpose, names: purpose === "deployment-sync" ? [...BASE, ...DEPLOYMENT] : [...BASE], required: process.platform === "win32" ? ["PATH", "SystemRoot"] : ["PATH"], absolutePaths: purpose === "deployment-sync" ? DEPLOYMENT.filter((name) => name !== "OMP_BUN_BIN") : [], executableNames: purpose === "deployment-sync" ? ["OMP_BUN_BIN"] : [], secretNames: ["TYPESAFE_API_KEY"], fixed: ["evidence-git", "egc-setup"].includes(purpose) ? GIT_FIXED : {}, maxValueBytes: 32768 };
+  return { version: 1, purpose, names: purpose === "deployment-sync" ? [...BASE, ...DEPLOYMENT] : [...BASE], required: process.platform === "win32" ? ["PATH", "SystemRoot"] : ["PATH"], absolutePaths: purpose === "deployment-sync" ? DEPLOYMENT.filter((name) => name !== "OMP_BUN_BIN") : [], executableNames: purpose === "deployment-sync" ? ["OMP_BUN_BIN"] : [], secretNames: NAMED_SECRETS, fixed: ["evidence-git", "egc-setup"].includes(purpose) ? GIT_FIXED : {}, maxValueBytes: 32768 };
 }
 function canonicalSource(source) {
   if (!source || typeof source !== "object" || Array.isArray(source)) reject("INVALID_SOURCE");
@@ -38,8 +51,7 @@ function canonicalSource(source) {
 }
 function buildChildEnvironment(purpose, source = process.env) {
   const rules = policy(purpose); const values = canonicalSource(source); const result = {};
-  const active = values.get("TYPESAFE_API_KEY");
-  const secrets = active ? [...new Set([active, active.trim()].filter(Boolean))] : [];
+  const secrets = collectSecrets(values);
   for (const name of rules.names) {
     const value = values.get(name.toUpperCase());
     if (value === undefined || value === "") continue;
@@ -76,8 +88,8 @@ function createVerificationHome() {
       if (purpose !== "verification" && purpose !== "deployment-verify") reject("HOME_PURPOSE_FORBIDDEN");
       assertOwned();
       const result = { ...buildChildEnvironment(purpose, source), HOME: directory, USERPROFILE: directory, XDG_CONFIG_HOME: directory, XDG_CACHE_HOME: directory, XDG_DATA_HOME: directory };
-      const active = canonicalSource(source).get("TYPESAFE_API_KEY");
-      if (active && [active, active.trim()].filter(Boolean).some((secret) => Object.values(result).some((value) => value.includes(secret)))) reject("UNSAFE_ALLOWED_VALUE");
+      const secrets = collectSecrets(canonicalSource(source));
+      if (secrets.some((secret) => Object.values(result).some((value) => value.includes(secret)))) reject("UNSAFE_ALLOWED_VALUE");
       return result;
     },
     execFileSync(purpose, command, args = [], options = {}) {

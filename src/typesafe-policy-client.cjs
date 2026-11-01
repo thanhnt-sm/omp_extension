@@ -4,6 +4,7 @@
 /** @typedef {import('./payload-safety').ResolvedToolPolicy} ResolvedToolPolicy */
 /** @typedef {import('./payload-safety').TypeSafeJudgeResult} TypeSafeJudgeResult */
 const crypto = require('node:crypto');
+const { performance } = require('node:perf_hooks');
 function loadApiClient() {
   try {
     const api = require('./typesafe-api-client.cjs');
@@ -18,7 +19,7 @@ const REVIEW_LIMITS = Object.freeze({ maxPackets: 128, maxDispatches: 384, deadl
 const POLICY_FIELDS = Object.freeze({ maxQuestionsPerRequest: true, provider: true, routing: true, semanticReviewLimits: true });
 const PROVIDER_FIELDS = Object.freeze({ allowedModels: true });
 const ROUTING_FIELDS = Object.freeze({ baseline: true, lattice: true, questionKeys: true });
-const hasOnlyFields = (value, fields) => Object.keys(value).every((key) => Object.hasOwn(fields, key));
+const hasOnlyFields = (value, fields) => Object.keys(value).every((key) => Object.prototype.hasOwnProperty.call(fields, key));
 const snapshots = new WeakSet();
 const object = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const strings = (value) => Array.isArray(value) && value.length > 0 &&
@@ -52,7 +53,7 @@ function resolvePolicySnapshot(purpose, supplied, trustedDefaults) {
   if (!PURPOSES.includes(purpose) || (supplied !== undefined && !object(supplied))) return invalid(purpose);
   if (supplied?.ok === false) return invalid(purpose);
   const source = supplied ?? {
-    maxQuestionsPerRequest: 128, provider: { allowedModels: ['jev-latest'] },
+    maxQuestionsPerRequest: 128, provider: { allowedModels: ['jev-latest', 'jev-1.14.0', 'typesafe/jev-latest', 'typesafe/jev-1.14.0'] },
     ...(purpose === 'judge' ? { routing: {
       baseline: trustedDefaults.baseline === undefined ? 'review' : trustedDefaults.baseline,
       lattice: trustedDefaults.lattice === undefined ? ['auto', 'review', 'block'] : trustedDefaults.lattice,

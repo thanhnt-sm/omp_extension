@@ -105,7 +105,8 @@ describe("TypeSafe root consumer integration", () => {
       await fs.cp(path.resolve(import.meta.dir, "../tools"), path.join(bundleDir, "tools"), { recursive: true });
       await fs.mkdir(path.join(homeDir, ".claude", "hooks", "lib"), { recursive: true });
       await fs.mkdir(path.join(homeDir, ".claude", "mcp", "typesafe"), { recursive: true });
-      await fs.writeFile(path.join(homeDir, ".claude", ".ck.json"), JSON.stringify({ typesafe: { projects: ["*"], excludeProjects: [] } }));
+      await fs.mkdir(path.join(homeDir, ".omp", "agent"), { recursive: true });
+      await fs.writeFile(path.join(homeDir, ".omp", "agent", "typesafe.json"), JSON.stringify({ typesafe: { projects: ["*"], excludeProjects: [] } }));
       for (const poisonPath of [
         path.join(homeDir, ".claude", "hooks", "lib", "typesafe-enabled-resolver.cjs"),
         ...["typesafe-api-client.cjs", "typesafe-redact.cjs", "typesafe-policy-client.cjs"].map(name => path.join(homeDir, ".claude", "mcp", "typesafe", name)),

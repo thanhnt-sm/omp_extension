@@ -5,7 +5,15 @@
   "type": "module",
   "main": "typesafe-planner.ts",
   "scripts": {
-    "test": "bun test"
+    "test": "bun test",
+    "verify:global": "bun tools/verify-omp-global.cjs",
+    "verify:live": "bun tools/verify-omp-global.cjs --live",
+    "sync:dry-run": "bun tools/sync-baseline.cjs --dry-run",
+    "sync:global": "bun tools/sync-baseline.cjs",
+    "oneclick": "powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File ./tools/oneclick-omp.ps1",
+    "judge:check": "bun tools/native-judge-setup.cjs --check",
+    "judge:apply": "bun tools/native-judge-setup.cjs --apply",
+    "judge:start": "bun tools/native-judge-launch.cjs"
   },
   "keywords": [
     "oh-my-pi",

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { canonicalDigest } from "../src/task-contract-source";
-import { createAdvisorRequest, foldAdvisorHistory, makeAdvisorReceipt, validateAdvisorReceipt, validateAssessment, type AdvisorJournalRecord } from "../src/advisor-protocol";
+import { advisorApplicabilityDigest, createAdvisorRequest, foldAdvisorHistory, makeAdvisorReceipt, validateAdvisorReceipt, validateAssessment, type AdvisorJournalRecord } from "../src/advisor-protocol";
 import { advisorFixture, digest, validAssessment } from "./advisor-fixtures";
 import { arbitrateConsensus, evaluateAdvisorIntent } from "../src/bicameral-consensus";
 
@@ -83,5 +83,37 @@ describe("Advisor protocol authority and coverage", () => {
       { verdict: "APPROVE", probability: 1, reasons: [] }, { receipt, binding: request.binding, snapshot: request.snapshot, criterionIds: request.criterionIds });
     expect(decision.disposition.status).toBe("EVIDENCE_REQUIRED");
     expect(receipt.authority).toBe("none");
+  });
+  test("RT#12: advisorApplicabilityDigest is stable across dispatchId changes and changes with contract revision or treeDigest", () => {
+    const { request, context, contract } = advisorFixture("task_review");
+    if (request.binding.purpose !== "task_review") throw new Error("expected task_review fixture");
+    const baseDigest = advisorApplicabilityDigest(request);
+
+    const nextProvenance = { ...request.binding.provenance, dispatchId: "dispatch-other-turn" };
+    const differentDispatchReq = createAdvisorRequest({
+      ...request,
+      binding: {
+        ...request.binding,
+        provenance: nextProvenance,
+      },
+    }, { ...context, expectedProvenance: nextProvenance });
+    expect(advisorApplicabilityDigest(differentDispatchReq)).toBe(baseDigest);
+
+    const revisedContract = { ...contract, revisionId: "revision-2" };
+    const revisedBinding = {
+      ...request.binding,
+      contract: { ...request.binding.contract, revisionId: "revision-2" },
+    };
+    const revisedReq = createAdvisorRequest(
+      { ...request, binding: revisedBinding },
+      { ...context, contract: revisedContract }
+    );
+    expect(advisorApplicabilityDigest(revisedReq)).not.toBe(baseDigest);
+
+    const changedTreeReq = createAdvisorRequest(
+      { ...request, snapshot: { ...request.snapshot, treeDigest: canonicalDigest("changed-tree-digest") } },
+      context
+    );
+    expect(advisorApplicabilityDigest(changedTreeReq)).not.toBe(baseDigest);
   });
 });

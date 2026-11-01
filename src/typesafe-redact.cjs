@@ -57,6 +57,9 @@ function redactPayload(payload, opts = {}) {
  * shaped key name (e.g. `{"password_required": true}`) carries no secret
  * material of its own, and wiping it destroys planning-relevant information
  * for no security benefit; `true`/`false` is not a value that can leak. */
+const TELEMETRY_COUNT_KEYS = new Set(["input_tokens","output_tokens","total_tokens","prompt_tokens","completion_tokens","cache_creation_input_tokens","cache_read_input_tokens"]);
+const isTelemetryCount = (k, v) => TELEMETRY_COUNT_KEYS.has(k) && Number.isSafeInteger(v) && v >= 0;
+
 function isWholesaleRedactable(v) {
   if (typeof v === 'string') return v.length > 0;
   if (typeof v === 'number') return true;
@@ -91,7 +94,7 @@ function redactDeep(value, opts, redactKeys) {
       const newKey = redactKeys ? redactString(key, opts) : key;
       const v = value[key];
       const kind = redactKeys ? sensitiveKeyKind(key) : null;
-      if (kind && isWholesaleRedactable(v)) {
+      if (kind && isWholesaleRedactable(v) && !isTelemetryCount(key, v)) {
         // N9: string values keep their specific kind marker (unchanged from
         // before); number/array/object values — invisible to this rule
         // before N9, since only strings were ever checked — get a generic

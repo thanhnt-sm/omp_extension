@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import defaultExport from "../src/egc.js";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, readFileSync, writeFileSync } from "node:fs";
+import { execSync } from "node:child_process";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
@@ -497,6 +498,184 @@ describe("EGC registered callback sink guards", () => {
       expect(JSON.stringify(appends)).toContain(TASK);
       expect(JSON.stringify(appends)).toContain("public blocker");
       expect(JSON.stringify(appends)).toContain('"lifecycle":"blocked"');
+    } finally {
+      for (const [key, value] of Object.entries(environment)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("RT#4, RT#5, RT#14, RT#15: screens unsandboxed todo inputs, enforces allow-mode falsifiability, refuses oversized/missing evidence, and rejects ambiguous done targets", async () => {
+    const root = mkdtempSync(join(tmpdir(), "egc-rt-phase3-"));
+    const environment = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE };
+    const handlers: Record<string, (event: unknown, ctx: unknown) => unknown> = {};
+    const commands: Record<string, { handler: (args: string, ctx: unknown) => Promise<unknown> }> = {};
+    const appends: Array<{ kind: string; data: unknown }> = [];
+    try {
+      process.env.HOME = root; process.env.USERPROFILE = root; delete process.env.TYPESAFE_API_KEY;
+      execSync("git init && git config user.name Test && git config user.email test@example.com", { cwd: root, stdio: "ignore" });
+      mkdirSync(join(root, "src"), { recursive: true });
+      writeFileSync(join(root, "src", "public.ts"), "export const v = 1;\n");
+      execSync("git add . && git commit -qm init", { cwd: root, stdio: "ignore" });
+
+      const host = {
+        zod: { z: { object: (shape: unknown) => shape, string: () => ({ describe: () => ({}) }) } },
+        on: (name: string, handler: (event: unknown, ctx: unknown) => unknown) => { handlers[name] = handler; },
+        registerTool: () => {},
+        registerCommand: (name: string, spec: { handler: (args: string, ctx: unknown) => Promise<unknown> }) => { commands[name] = spec; },
+        appendEntry: (kind: string, data: unknown) => { appends.push({ kind, data }); },
+      };
+      defaultExport(host as unknown as Parameters<typeof defaultExport>[0]);
+
+      const task2 = "[T2] Second obligation";
+      const uncontractedTask = "[U1] Fix egc.ts lint";
+      const initInput = { op: "init", list: [{ phase: PHASE, items: [TASK, task2, uncontractedTask] }] };
+      const initRes: NativeResult = {
+        toolName: "todo", toolCallId: "init-call", isError: false,
+        details: {
+          op: "init",
+          phases: [{ name: PHASE, tasks: [{ content: TASK, status: "in_progress" }, { content: task2, status: "pending" }, { content: uncontractedTask, status: "pending" }] }],
+          completedTasks: [],
+        },
+      };
+      const entries: unknown[] = [assistantCall("init-call", initInput), historyResult(initRes)];
+      let judgeCalls = 0;
+      const ctx = {
+        cwd: root,
+        sessionManager: { getBranch: () => entries },
+        ui: { notify: () => {} },
+        judge: async () => {
+          judgeCalls++;
+          return { answers: { stub: { noul: 0.05 }, tamper: { noul: 0.05 }, impl_r1: { noul: 0.95 } } };
+        },
+      };
+
+      const loadAndLock = async (contractObj: Record<string, unknown>) => {
+        mkdirSync(join(root, ".omp"), { recursive: true });
+        writeFileSync(join(root, ".omp", "egc.json"), JSON.stringify(contractObj));
+        await handlers.session_start({}, ctx);
+        await commands.egc.handler("lock", ctx);
+      };
+
+      // 1. RT#4: todo tool_call with "unsandboxed": true is blocked; task text "Fix egc.ts lint" is not blocked by the screen.
+      await loadAndLock({
+        mode: "enforce", isolation: "inplace", uncontracted: "allow",
+        jev: { mode: "off" },
+        tasks: { T1: { verify: [`"${process.execPath}" -e "process.exit(0)"`], planFiles: ["src/public.ts"], requirements: ["r"] } },
+      });
+      const unsandboxedBlocked = await handlers.tool_call({
+        toolName: "todo", toolCallId: "unsandboxed-call",
+        input: { op: "view", unsandboxed: true },
+      }, ctx);
+      expect(unsandboxedBlocked).toEqual({
+        block: true,
+        reason: "EGC: protected configuration or unsandboxed operation denied.",
+      });
+      const startEgcText = { op: "start", phase: PHASE, task: uncontractedTask };
+      entries.push(assistantCall("start-egc-text", startEgcText));
+      const egcTextRes = await handlers.tool_call({
+        toolName: "todo", toolCallId: "start-egc-text", input: startEgcText,
+      }, ctx);
+      expect(egcTextRes).toBeUndefined();
+
+      // 2. RT#5: uncontracted:"allow" with no verify/holdout and jev.mode unset -> EGC REFUSED containing "No verification command".
+      writeFileSync(join(root, "src", "public.ts"), "export const v = 2;\n");
+      await loadAndLock({
+        mode: "enforce", isolation: "inplace", uncontracted: "allow",
+      });
+      const doneUncontracted1 = { op: "done", phase: PHASE, task: uncontractedTask };
+      entries.push(assistantCall("done-u1-1", doneUncontracted1));
+      const refusedAllow = await handlers.tool_call({
+        toolName: "todo", toolCallId: "done-u1-1", input: doneUncontracted1,
+      }, ctx) as { block?: boolean; reason?: string };
+      expect(refusedAllow?.block).toBe(true);
+      expect(refusedAllow?.reason).toContain("EGC REFUSED");
+      expect(refusedAllow?.reason).toContain("No verification command");
+
+      // With jev.mode:"enforce" and defaults.requirements:["r"] -> no such refusal line (judge path runs).
+      await loadAndLock({
+        mode: "enforce", isolation: "inplace", uncontracted: "allow",
+        jev: { mode: "enforce" },
+        defaults: { requirements: ["r"] },
+      });
+      judgeCalls = 0;
+      const doneUncontracted2 = { op: "done", phase: PHASE, task: uncontractedTask };
+      entries.push(assistantCall("done-u1-2", doneUncontracted2));
+      const allowedWithJev = await handlers.tool_call({
+        toolName: "todo", toolCallId: "done-u1-2", input: doneUncontracted2,
+      }, ctx) as { block?: boolean; reason?: string } | undefined;
+      expect(JSON.stringify(allowedWithJev ?? {})).not.toContain("No verification command");
+      expect(judgeCalls).toBe(1);
+      expect(allowedWithJev).toBeUndefined();
+
+      // 3. RT#14: oversized planFiles entry, missing planFiles entry, and oversized untracked changed file -> EGC REFUSED: EVIDENCE_REQUIRED: FILE_TOO_LARGE|FILE_MISSING with assessment === "rejected".
+      const lastLedgerTask = (content: string) => {
+        const ledgerEntries = appends.filter((a) => a.kind === "egc-ledger");
+        const latest = ledgerEntries[ledgerEntries.length - 1]?.data as { tasks?: Array<{ content: string; assessment: string }> } | undefined;
+        return latest?.tasks?.find((t) => t.content === content);
+      };
+
+      // (a) planFiles entry > 131072 bytes (in-place mode so prepare() doesn't read it before gate() line 189)
+      writeFileSync(join(root, "src", "public.ts"), "x".repeat(131073));
+      await loadAndLock({
+        mode: "enforce", isolation: "inplace",
+        jev: { mode: "off" },
+        tasks: { T1: { verify: [`"${process.execPath}" -e "process.exit(0)"`], planFiles: ["src/public.ts"], requirements: ["r"] } },
+      });
+      const doneT1Oversized = { op: "done", phase: PHASE, task: TASK };
+      entries.push(assistantCall("done-t1-oversized", doneT1Oversized));
+      const oversizedPlanRes = await handlers.tool_call({
+        toolName: "todo", toolCallId: "done-t1-oversized", input: doneT1Oversized,
+      }, ctx) as { block?: boolean; reason?: string };
+      expect(oversizedPlanRes?.block).toBe(true);
+      expect(oversizedPlanRes?.reason).toMatch(/EGC REFUSED: EVIDENCE_REQUIRED: FILE_TOO_LARGE src\/public\.ts/);
+      expect(oversizedPlanRes?.reason).not.toContain("EGC UNAVAILABLE");
+      expect(lastLedgerTask(TASK)?.assessment).toBe("rejected");
+
+      // (b) missing planFiles entry
+      writeFileSync(join(root, "src", "public.ts"), "export const v = 3;\n");
+      await loadAndLock({
+        mode: "enforce", isolation: "inplace",
+        jev: { mode: "off" },
+        tasks: { T1: { verify: [`"${process.execPath}" -e "process.exit(0)"`], planFiles: ["src/missing-plan.ts"], requirements: ["r"] } },
+      });
+      const doneT1Missing = { op: "done", phase: PHASE, task: TASK };
+      entries.push(assistantCall("done-t1-missing", doneT1Missing));
+      const missingPlanRes = await handlers.tool_call({
+        toolName: "todo", toolCallId: "done-t1-missing", input: doneT1Missing,
+      }, ctx) as { block?: boolean; reason?: string };
+      expect(missingPlanRes?.block).toBe(true);
+      expect(missingPlanRes?.reason).toMatch(/EGC REFUSED: EVIDENCE_REQUIRED: FILE_MISSING src\/missing-plan\.ts/);
+      expect(missingPlanRes?.reason).not.toContain("EGC UNAVAILABLE");
+      expect(lastLedgerTask(TASK)?.assessment).toBe("rejected");
+
+      // (c) oversized untracked changed file
+      writeFileSync(join(root, "src", "untracked-oversized.ts"), "y".repeat(131073));
+      await loadAndLock({
+        mode: "enforce", isolation: "inplace",
+        jev: { mode: "off" },
+        tasks: { T1: { verify: [`"${process.execPath}" -e "process.exit(0)"`], planFiles: ["src/public.ts"], requirements: ["r"] } },
+      });
+      const doneT1Untracked = { op: "done", phase: PHASE, task: TASK };
+      entries.push(assistantCall("done-t1-untracked", doneT1Untracked));
+      const untrackedOversizedRes = await handlers.tool_call({
+        toolName: "todo", toolCallId: "done-t1-untracked", input: doneT1Untracked,
+      }, ctx) as { block?: boolean; reason?: string };
+      expect(untrackedOversizedRes?.block).toBe(true);
+      expect(untrackedOversizedRes?.reason).toMatch(/EGC REFUSED: EVIDENCE_REQUIRED: FILE_TOO_LARGE src\/untracked-oversized\.ts/);
+      expect(untrackedOversizedRes?.reason).not.toContain("EGC UNAVAILABLE");
+      expect(lastLedgerTask(TASK)?.assessment).toBe("rejected");
+      rmSync(join(root, "src", "untracked-oversized.ts"), { force: true });
+
+      // 4. RT#15: done operation resolving to more than one target -> ambiguous completion target and nothing staged.
+      const ambiguousDone = { op: "done", phase: PHASE };
+      entries.push(assistantCall("done-ambiguous", ambiguousDone));
+      const ambiguousRes = await handlers.tool_call({
+        toolName: "todo", toolCallId: "done-ambiguous", input: ambiguousDone,
+      }, ctx) as { block?: boolean; reason?: string };
+      expect(ambiguousRes).toEqual({
+        block: true,
+        reason: "EGC: ambiguous completion target; specify exact phase and task content.",
+      });
     } finally {
       for (const [key, value] of Object.entries(environment)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
       rmSync(root, { recursive: true, force: true });

@@ -57,7 +57,12 @@ export interface AdvisorNativeTodoServices {
   beforeExecute(params: Record<string, unknown>, context: AdvisorHostContext, actualCallId: string, signal?: AbortSignal): Promise<{ status: "READY"; input: NormalizedNativeTodoInput } | AdvisorNativeTodoOutcome>;
   afterExecute(params: NormalizedNativeTodoInput, context: AdvisorHostContext, actualCallId: string, actualNativeResult: unknown): void | Promise<void>;
 }
-export interface AdvisorHostOptions { nativeTodo?: AdvisorNativeTodoServices; mutationDelegation?: NativeMutationDelegationOptions }
+export interface AdvisorHostOptions {
+  nativeTodo?: AdvisorNativeTodoServices;
+  mutationDelegation?: NativeMutationDelegationOptions;
+  /** Trusted session-latched policy, never caller tool arguments or transport availability. */
+  isProjectExcluded?: (context: AdvisorHostExecuteContext) => boolean;
+}
 export interface AdvisorHostReview { request: AdvisorRequest; receipt: AdvisorReceipt }
 export interface AdvisorHostRegistration {
   prepareShadowReview(prepare: AdvisorShadowDraftFactory, context: AdvisorHostExecuteContext): Promise<AdvisorHostToolResult>;

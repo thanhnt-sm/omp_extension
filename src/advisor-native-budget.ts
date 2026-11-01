@@ -14,8 +14,8 @@ export interface AdvisorNativeBudget {
   cancel(reason: string): void;
 }
 /** Reuses the canonical trusted scheduler; this module never sends HTTP or selects a native model. */
-export function createAdvisorNativeBudget(supplied?: TrustedToolPolicy | ResolvedToolPolicy): AdvisorNativeBudget {
-  const client = createRequire(import.meta.url)("./typesafe-policy-client.cjs") as SharedPolicyClient;
+export function createAdvisorNativeBudget(supplied?: TrustedToolPolicy | ResolvedToolPolicy, injectedClient?: SharedPolicyClient): AdvisorNativeBudget {
+  const client = injectedClient ?? (createRequire(import.meta.url)("./typesafe-policy-client.cjs") as SharedPolicyClient);
   const policy = client.resolveTrustedToolPolicy("advisor", supplied);
   const scheduler = policy.ok ? client.createSemanticReviewScheduler(policy) : undefined;
   const jobs = new Map<string, Job>(); const controllers = new Set<AbortController>();
@@ -38,7 +38,16 @@ export function createAdvisorNativeBudget(supplied?: TrustedToolPolicy | Resolve
           finally { jobs.delete(request.requestId); }
         }, { signal: controller.signal });
         // Only drain an already invoked, abort-signalled native operation. Never dispatch again.
-        if (observed.promise) observed.result = await observed.promise;
+        if (observed.promise) {
+          let drainTimer: ReturnType<typeof setTimeout> | undefined;
+          const drainMs = Math.max(1, Math.min(250, (deadline ?? Date.now() + 250) - Date.now()));
+          const drainOutcome = await Promise.race([
+            observed.promise.then(r => { observed.result = r; return "done" as const; }, () => "done" as const),
+            new Promise<"timeout">(resolve => { drainTimer = setTimeout(() => resolve("timeout"), drainMs); }),
+          ]);
+          clearTimeout(drainTimer);
+          if (drainOutcome === "timeout") return { ok: false, code: "advisor_native_drain_timeout", started: true };
+        }
         return result.ok ? { ok: true, result: observed.result, started: true }
           : { ok: false, code: result.code ?? "advisor_native_review_unavailable", started: observed.started, ...(observed.started ? { result: observed.result } : {}) };
       } finally { clearTimeout(timer); signal?.removeEventListener("abort", abort); controllers.delete(controller); jobs.delete(request.requestId); }

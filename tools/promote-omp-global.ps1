@@ -71,6 +71,9 @@ function New-ChildStartInfo([string]$executable, [string[]]$arguments) {
 
 function Get-ChildPolicy([string]$purpose) {
   $info = New-ChildStartInfo $nodeExecutable @($policyScript, "--policy-json", $purpose)
+  # Node's Windows crypto initialization needs the OS directory even before policy loading.
+  # Resolve it from the OS API, never from caller-controlled environment variables.
+  $info.EnvironmentVariables["SystemRoot"] = [Environment]::GetFolderPath([Environment+SpecialFolder]::Windows)
   $info.RedirectStandardOutput = $true
   $info.RedirectStandardError = $true
   $process = New-Object Diagnostics.Process

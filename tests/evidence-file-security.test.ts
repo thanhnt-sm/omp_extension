@@ -73,6 +73,30 @@ test("ancestor junctions and hardlink aliases are rejected", () => {
   } finally { rmSync(f.base, { recursive: true, force: true }); }
 });
 
+test("junction root, junction intermediate parent and case-variant root behave safely", () => {
+  const f = fixture();
+  try {
+    const dirLinkType = process.platform === "win32" ? "junction" : "dir";
+    writeFileSync(path.join(f.root, "allowed.txt"), "legitimate");
+    const junctionRoot = path.join(f.base, "junction-root");
+    symlinkSync(f.root, junctionRoot, dirLinkType);
+    const rootRejected = rejection(junctionRoot, "allowed.txt");
+    expect(["UNSAFE_PARENT", "AMBIGUOUS_PARENT"]).toContain(rootRejected.code);
+
+    mkdirSync(path.join(f.root, "real-sub"), { recursive: true });
+    writeFileSync(path.join(f.root, "real-sub", "nested.txt"), "nested-safe");
+    symlinkSync(path.join(f.root, "real-sub"), path.join(f.root, "intermediate-junction"), dirLinkType);
+    const intermediateRejected = rejection(f.root, "intermediate-junction/nested.txt");
+    expect(["UNSAFE_PARENT", "AMBIGUOUS_PARENT"]).toContain(intermediateRejected.code);
+
+    if (process.platform === "win32") {
+      const caseVariantRoot = path.join(f.base, "WorkSpace");
+      const image = reader.readWorkspaceFile(caseVariantRoot, "allowed.txt", { maxBytes: 64 });
+      expect(image.bytes.toString("utf8")).toBe("legitimate");
+    }
+  } finally { rmSync(f.base, { recursive: true, force: true }); }
+});
+
 for (const seam of ["before-open", "after-open", "after-read", "parent-after-read", "same-size-after-read", "overflow-after-open", "hardlink-after-read", "same-content-after-read"]) {
   test(`descriptor guard rejects deterministic ${seam} race without accepting forbidden content`, () => {
     const f = fixture();

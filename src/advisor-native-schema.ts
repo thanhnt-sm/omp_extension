@@ -2,7 +2,7 @@ import { record, advisorOutputSchema } from "./advisor-protocol";
 import { ADVISOR_NATIVE_CONTEXT, ADVISOR_SOLUTION_SPACE } from "./advisor-native-prompt";
 import type { AdvisorHostAPI, AdvisorRequestDraft } from "./advisor-host-types";
 export type AdvisorNativeTaskShape = "batch" | "flat";
-export interface AdvisorNativeTaskCapabilities { shape: AdvisorNativeTaskShape; disableIsolation: boolean }
+export interface AdvisorNativeTaskCapabilities { shape: AdvisorNativeTaskShape; disableIsolation: boolean; namedChild: boolean }
 /** omp/18.12.3 omptype Type.toJsonSchema + task/types.ts dynamic batch/structured fields. */
 export function advisorNativeTaskCapabilities(api: AdvisorHostAPI): AdvisorNativeTaskCapabilities | undefined {
   const original = api.getAllTools().find(tool => tool.name === "task")?.parameters;
@@ -13,7 +13,7 @@ export function advisorNativeTaskCapabilities(api: AdvisorHostAPI): AdvisorNativ
   const item = record(properties.tasks) && record(properties.tasks.items) && record(properties.tasks.items.properties) ? properties.tasks.items.properties : properties;
   if (!Object.hasOwn(item, "task") || !Object.hasOwn(item, "agent") || !Object.hasOwn(item, "outputSchema") || !Object.hasOwn(item, "schemaMode")) return undefined;
   const shape = Object.hasOwn(properties, "tasks") && Object.hasOwn(properties, "context") ? "batch" : Object.hasOwn(properties, "task") ? "flat" : undefined;
-  return shape ? { shape, disableIsolation: Object.hasOwn(item, "isolated") } : undefined;
+  return shape ? { shape, disableIsolation: Object.hasOwn(item, "isolated"), namedChild: Object.hasOwn(item, "name") } : undefined;
 }
 export function advisorNativeParameters(draft: AdvisorRequestDraft, shape: AdvisorNativeTaskShape, disableIsolation = false): Record<string, unknown> {
   const item = { agent: draft.agent, task: draft.publicPrompt, solutionSpace: ADVISOR_SOLUTION_SPACE, outputSchema: advisorOutputSchema, schemaMode: "strict", ...(disableIsolation ? { isolated: false } : {}) };

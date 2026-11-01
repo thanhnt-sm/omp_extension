@@ -32,9 +32,9 @@ describe("Phase 3: Session Pre-Flight Health Probe", () => {
   beforeEach(async () => {
     resetRateLimitState();
     fixtureHome = await fs.mkdtemp(path.join(os.tmpdir(), "typesafe-health-home-"));
-    await fs.mkdir(path.join(fixtureHome, ".claude"), { recursive: true });
+    await fs.mkdir(path.join(fixtureHome, ".omp", "agent"), { recursive: true });
     await fs.writeFile(
-      path.join(fixtureHome, ".claude", ".ck.json"),
+      path.join(fixtureHome, ".omp", "agent", "typesafe.json"),
       JSON.stringify({ typesafe: { projects: ["*", process.cwd()], excludeProjects: [] } }),
       "utf8"
     );

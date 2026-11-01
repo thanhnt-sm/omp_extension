@@ -40,7 +40,6 @@ function createFixture(): Fixture {
   const backup = path.join(root, "backup");
 
   mkdirSync(target, { recursive: true });
-  mkdirSync(path.join(home, ".claude"), { recursive: true });
   mkdirSync(path.join(home, ".omp", "agent", "agents"), { recursive: true });
   writeFile(path.join(workspace, "typesafe-planner.ts"), "export default {};\n");
   writeFile(path.join(workspace, "package.json"), "{}\n");
@@ -221,22 +220,22 @@ test("managed deployment enrolls identical files, refuses unowned conflicts, and
 function enrollThenChangeSources(fixture: Fixture, backupName: string) {
   const enrollment = runSync(fixture, { OMP_SKIP_VERIFY_TESTS: "1" }, []);
   expect(enrollment.status, enrollment.stderr).toBe(0);
-  const resolver = path.join(fixture.home, ".claude", "hooks", "lib", "typesafe-enabled-resolver.cjs");
+  const globalAgent = path.join(fixture.home, ".omp", "agent", "agents", "advisor.md");
   const before = {
     planner: readFileSync(path.join(fixture.target, "typesafe-planner.ts"), "utf8"),
-    resolver: readFileSync(resolver, "utf8"),
+    globalAgent: readFileSync(globalAgent, "utf8"),
     manifest: readFileSync(path.join(fixture.target, ".sync-manifest.json"), "utf8"),
     pointer: readFileSync(fixture.pointer, "utf8"),
   };
   fixture.backup = path.join(fixture.root, backupName);
   writeFile(path.join(fixture.workspace, "typesafe-planner.ts"), "export default { revised: true };\n");
-  writeFile(path.join(fixture.workspace, "src", "typesafe-enabled-resolver.cjs"), "module.exports = { revised: true };\n");
-  return { before, resolver };
+  writeFile(path.join(fixture.workspace, "agents", "advisor.md"), "revised advisor\n");
+  return { before, globalAgent };
 }
 
-function expectRecoveredBoundaries(fixture: Fixture, resolver: string, before: { planner: string; resolver: string; manifest: string; pointer: string }) {
+function expectRecoveredBoundaries(fixture: Fixture, globalAgent: string, before: { planner: string; globalAgent: string; manifest: string; pointer: string }) {
   expect(readFileSync(path.join(fixture.target, "typesafe-planner.ts"), "utf8")).toBe(before.planner);
-  expect(readFileSync(resolver, "utf8")).toBe(before.resolver);
+  expect(readFileSync(globalAgent, "utf8")).toBe(before.globalAgent);
   expect(readFileSync(path.join(fixture.target, ".sync-manifest.json"), "utf8")).toBe(before.manifest);
   expect(readFileSync(fixture.pointer, "utf8")).toBe(before.pointer);
   expect(existsSync(path.join(fixture.home, ".claude", ".ck.json"))).toBe(false);
@@ -245,11 +244,11 @@ function expectRecoveredBoundaries(fixture: Fixture, resolver: string, before: {
 test("after_target_copy rolls back enrolled target and global writes", () => {
   const fixture = createFixture();
   try {
-    const { before, resolver } = enrollThenChangeSources(fixture, "backup-after-target");
+    const { before, globalAgent } = enrollThenChangeSources(fixture, "backup-after-target");
     const result = runSync(fixture, { OMP_SKIP_VERIFY_TESTS: "1", OMP_FAULT_INJECT: "after_target_copy" }, []);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("RECOVERED: fault injected at after_target_copy");
-    expectRecoveredBoundaries(fixture, resolver, before);
+    expectRecoveredBoundaries(fixture, globalAgent, before);
     const journal = JSON.parse(readFileSync(path.join(fixture.backup, ".sync-journal.json"), "utf8"));
     expect(journal.status).toBe("recovered");
     expect(journal.entries.some((entry: { applied: boolean }) => entry.applied)).toBe(true);
@@ -278,6 +277,51 @@ test("managed deployment rejects malformed manifests and held locks before mutat
     rmSync(fixture.root, { recursive: true, force: true });
   }
 });
+test("schema 1 migration validates legacy metadata without reading or mutating Claude paths", () => {
+  const fixture = createFixture();
+  const legacyPath = path.join(fixture.home, ".claude", "hooks", "lib", "typesafe-enabled-resolver.cjs");
+  const legacyBytes = "legacy-owned-content\n";
+  const guard = path.join(fixture.root, "reject-legacy-io.cjs");
+  try {
+    writeFile(legacyPath, legacyBytes);
+    writeFile(path.join(fixture.target, "typesafe-planner.ts"), "export default {};\n");
+    writeFile(path.join(fixture.target, ".sync-manifest.json"), `${JSON.stringify({
+      schemaVersion: 1,
+      entries: [
+        { root: "target", relativePath: "typesafe-planner.ts", deployedHash: createHash("sha256").update("export default {};\n").digest("hex") },
+        { root: "global_claude", relativePath: "hooks/lib/typesafe-enabled-resolver.cjs", deployedHash: createHash("sha256").update(legacyBytes).digest("hex") },
+      ],
+    })}\n`);
+    writeFile(guard, [
+      'const fs = require("node:fs");',
+      'const path = require("node:path");',
+      `const forbidden = ${JSON.stringify(path.resolve(fixture.home, ".claude").toLowerCase())};`,
+      'const guard = (original) => function guardedLegacyIO(...args) { const value = typeof args[0] === "string" ? path.resolve(args[0]).toLowerCase() : ""; if (value === forbidden || value.startsWith(forbidden + path.sep)) throw new Error("legacy Claude IO"); return original.apply(this, args); };',
+      'for (const name of ["existsSync", "lstatSync", "realpathSync", "readFileSync", "openSync", "statSync", "mkdirSync", "unlinkSync", "renameSync"]) {',
+      '  const original = fs[name];',
+      '  fs[name] = guard(original);',
+      '  if (name === "realpathSync") fs[name].native = guard(original.native);',
+      '}',
+    ].join("\n"));
+    const result = spawnSync(process.execPath, ["--require", guard, scriptPath], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        OMP_WORKSPACE_DIR: fixture.workspace,
+        OMP_TARGET_DIR: fixture.target,
+        OMP_HOME_DIR: fixture.home,
+        OMP_EXTENSION_POINTER: fixture.pointer,
+        OMP_BACKUP_DIR: fixture.backup,
+        OMP_SKIP_VERIFY_TESTS: "1",
+      },
+    });
+    expect(result.status, result.stderr).toBe(0);
+    const migrated = JSON.parse(readFileSync(path.join(fixture.target, ".sync-manifest.json"), "utf8"));
+    expect(migrated.schemaVersion).toBe(2);
+    expect(migrated.entries.some((entry: { root: string }) => entry.root === "global_claude")).toBe(false);
+    expect(readFileSync(legacyPath, "utf8")).toBe(legacyBytes);
+  } finally { rmSync(fixture.root, { recursive: true, force: true }); }
+});
 
 test("isolated real Bun verification produces deterministic manifest on repeat deployment", () => {
   const fixture = createFixture();
@@ -298,11 +342,11 @@ test("fault checkpoints recover enrolled writes and retain journal evidence", ()
   for (const checkpoint of ["after_global_write", "after_copy_write", "after_manifest_write", "before_verify"]) {
     const fixture = createFixture();
     try {
-      const { before, resolver } = enrollThenChangeSources(fixture, `backup-${checkpoint}`);
+      const { before, globalAgent } = enrollThenChangeSources(fixture, `backup-${checkpoint}`);
       const result = runSync(fixture, { OMP_SKIP_VERIFY_TESTS: "1", OMP_FAULT_INJECT: checkpoint }, []);
       expect(result.status).toBe(1);
       expect(result.stderr).toContain(`RECOVERED: fault injected at ${checkpoint}`);
-      expectRecoveredBoundaries(fixture, resolver, before);
+      expectRecoveredBoundaries(fixture, globalAgent, before);
       const journal = JSON.parse(readFileSync(path.join(fixture.backup, ".sync-journal.json"), "utf8"));
       expect(journal.status).toBe("recovered");
       expect(journal.entries.some((entry: { intent?: boolean }) => entry.intent === true)).toBe(true);
@@ -333,14 +377,14 @@ test("after_prune restores enrolled files and its manifest", () => {
 test("verifier failure with during_rollback retains incomplete recovery evidence", () => {
   const fixture = createFixture();
   try {
-    const { before, resolver } = enrollThenChangeSources(fixture, "backup-during-rollback");
+    const { before, globalAgent } = enrollThenChangeSources(fixture, "backup-during-rollback");
     const result = runSync(fixture, {
       OMP_BUN_BIN: "this-command-must-fail",
       OMP_FAULT_INJECT: "during_rollback",
     }, []);
     expect(result.status).toBe(2);
     expect(result.stderr).toContain("RECOVERY_INCOMPLETE");
-    expectRecoveredBoundaries(fixture, resolver, before);
+    expectRecoveredBoundaries(fixture, globalAgent, before);
     const journal = JSON.parse(readFileSync(path.join(fixture.backup, ".sync-journal.json"), "utf8"));
     expect(journal.status).toBe("rollback_incomplete");
     expect(journal.unresolved.length).toBeGreaterThan(0);
@@ -382,20 +426,22 @@ test("manifest rejects protected and non-allowlisted global destinations before 
 test("explicit bootstrap adopts only an unmanifested managed baseline", () => {
   const fixture = createFixture();
   const targetPlanner = path.join(fixture.target, "typesafe-planner.ts");
-  const globalResolver = path.join(fixture.home, ".claude", "hooks", "lib", "typesafe-enabled-resolver.cjs");
+  const globalAgent = path.join(fixture.home, ".omp", "agent", "agents", "advisor.md");
   try {
     writeFile(targetPlanner, "unowned target planner\n");
-    writeFile(globalResolver, "unowned global resolver\n");
+    writeFile(globalAgent, "unowned global advisor\n");
 
     const preview = runSync(fixture, {}, ["--dry-run", "--bootstrap"]);
     expect(preview.status, preview.stderr).toBe(0);
     expect(preview.stdout).toContain("BOOTSTRAP_OVERWRITE:target/typesafe-planner.ts");
     expect(readFileSync(targetPlanner, "utf8")).toBe("unowned target planner\n");
+    expect(preview.stdout).toContain("BOOTSTRAP_OVERWRITE:global_omp_agents/advisor.md");
+    expect(readFileSync(globalAgent, "utf8")).toBe("unowned global advisor\n");
 
     const deployed = runSync(fixture, { OMP_SKIP_VERIFY_TESTS: "1" }, ["--bootstrap"]);
     expect(deployed.status, deployed.stderr).toBe(0);
     expect(readFileSync(targetPlanner, "utf8")).toBe("export default {};\n");
-    expect(readFileSync(globalResolver, "utf8")).toBe("module.exports = {};\n");
+    expect(readFileSync(globalAgent, "utf8")).toBe("owned advisor\n");
     expect(existsSync(path.join(fixture.target, ".sync-manifest.json"))).toBe(true);
 
     fixture.backup = path.join(fixture.root, "repeat-bootstrap-backup");
@@ -423,7 +469,8 @@ for (const mode of interferenceCases) {
   test(`managed rollback preserves external ${mode} and compensates unaffected owned entries`, () => {
     const fixture = createFixture();
     try {
-      const { before, resolver } = enrollThenChangeSources(fixture, `backup-${mode}`);
+      if (mode === "global-prune-recreation") writeFile(path.join(fixture.workspace, "agents", "ck-advisor.md"), "owned secondary advisor\n");
+      const { before, globalAgent } = enrollThenChangeSources(fixture, `backup-${mode}`);
       const planner = path.join(fixture.target, "typesafe-planner.ts");
       const created = path.join(fixture.target, "src", "new-managed.txt");
       const pruned = path.join(fixture.target, "obsolete.md");
@@ -433,10 +480,10 @@ for (const mode of interferenceCases) {
       if (mode.startsWith("created-")) writeFile(path.join(fixture.workspace, "src", "new-managed.txt"), "owned new file\n");
       if (mode === "prune-recreation") rmSync(path.join(fixture.workspace, "obsolete.md"));
       const globalCreated = path.join(fixture.home, ".omp", "agent", "agents", "ck-advisor.md");
-      const globalPruned = path.join(fixture.home, ".omp", "agent", "agents", "advisor.md");
+      const globalPruned = path.join(fixture.home, ".omp", "agent", "agents", "ck-advisor.md");
       if (mode === "global-created-mutation") writeFile(path.join(fixture.workspace, "agents", "ck-advisor.md"), "owned new advisor\n");
-      if (mode === "global-prune-recreation") rmSync(path.join(fixture.workspace, "agents", "advisor.md"));
-      const paths = { planner, created, pruned, manifest, lock, journalPath, resolver, globalCreated, globalPruned, backup: fixture.backup };
+      if (mode === "global-prune-recreation") rmSync(path.join(fixture.workspace, "agents", "ck-advisor.md"));
+      const paths = { planner, created, pruned, manifest, lock, journalPath, globalAgent, globalCreated, globalPruned, backup: fixture.backup };
       // The deployed verifier itself performs the interference, after promotion and before rollback.
       // No sleeps, network, live installation or new production fault-control surface is involved.
       writeFile(path.join(fixture.workspace, "tests", "interference.test.ts"), [
@@ -448,9 +495,9 @@ for (const mode of interferenceCases) {
         '  const entry = journal.entries.find((item) => item.destination === paths.planner);',
         '  if (!entry || !entry.backupPath) throw new Error("Missing expected sandbox preimage");',
         '  if (mode === "rewrite") fs.writeFileSync(paths.planner, "external ordinary prose\\n");',
-        '  if (mode === "global-rewrite") fs.writeFileSync(paths.resolver, "external ordinary prose\\n");',
-        '  if (mode === "global-same-content-replacement") { const bytes = fs.readFileSync(paths.resolver); fs.writeFileSync(paths.resolver + ".external", bytes); fs.renameSync(paths.resolver + ".external", paths.resolver); }',
-        '  if (mode === "global-deletion") fs.unlinkSync(paths.resolver);',
+        '  if (mode === "global-rewrite") fs.writeFileSync(paths.globalAgent, "external ordinary prose\\n");',
+        '  if (mode === "global-same-content-replacement") { const bytes = fs.readFileSync(paths.globalAgent); fs.writeFileSync(paths.globalAgent + ".external", bytes); fs.renameSync(paths.globalAgent + ".external", paths.globalAgent); }',
+        '  if (mode === "global-deletion") fs.unlinkSync(paths.globalAgent);',
         '  if (mode === "global-created-mutation") fs.writeFileSync(paths.globalCreated, "external ordinary prose\\n");',
         '  if (mode === "global-prune-recreation") fs.writeFileSync(paths.globalPruned, "external ordinary prose\\n");',
         '  if (mode === "same-content-replacement") { const bytes = fs.readFileSync(paths.planner); fs.writeFileSync(paths.planner + ".external", bytes); fs.renameSync(paths.planner + ".external", paths.planner); }',
@@ -487,16 +534,16 @@ for (const mode of interferenceCases) {
         return;
       }
       if (["global-rewrite", "global-same-content-replacement", "global-deletion"].includes(mode)) {
-        if (mode === "global-deletion") expect(existsSync(resolver)).toBe(false);
-        else if (mode === "global-rewrite") expect(readFileSync(resolver, "utf8")).toBe("external ordinary prose\n");
+        if (mode === "global-deletion") expect(existsSync(globalAgent)).toBe(false);
+        else if (mode === "global-rewrite") expect(readFileSync(globalAgent, "utf8")).toBe("external ordinary prose\n");
         else {
-          expect(readFileSync(resolver, "utf8")).toBe("module.exports = { revised: true };\n");
-          const entry = journal.entries.find((item) => item.destination === resolver)!;
-          expect(String(statSync(resolver, { bigint: true }).ino)).not.toBe(entry.postimage!.identity.ino);
+          expect(readFileSync(globalAgent, "utf8")).toBe("revised advisor\n");
+          const entry = journal.entries.find((item) => item.destination === globalAgent)!;
+          expect(String(statSync(globalAgent, { bigint: true }).ino)).not.toBe(entry.postimage!.identity.ino);
         }
         expect(readFileSync(planner, "utf8")).toBe(before.planner);
       } else {
-        expect(readFileSync(resolver, "utf8")).toBe(before.resolver);
+        expect(readFileSync(globalAgent, "utf8")).toBe(before.globalAgent);
         if (mode === "rewrite") expect(readFileSync(planner, "utf8")).toBe("external ordinary prose\n");
         else if (mode === "deletion") expect(existsSync(planner)).toBe(false);
         else if (["same-content-replacement", "metadata", "backup-corruption", "backup-replacement"].includes(mode)) {
@@ -528,7 +575,7 @@ test.skipIf(process.platform !== "win32")("PowerShell bootstraps policy with emp
     const promotion = path.join(tools, "promote-omp-global.ps1");
     writeFile(promotion, readFileSync(path.resolve(import.meta.dir, "../tools/promote-omp-global.ps1"), "utf8"));
     const names = ["TYPESAFE_API_KEY", "FOREIGN_CUSTOM", "NODE_OPTIONS", "HTTPS_PROXY", "HOME", "USERPROFILE", "OMP_FAULT_INJECT"];
-    writeFile(path.join(tools, "sync-baseline.cjs"), `console.log("CHILD_PROBE:"+JSON.stringify(${JSON.stringify(names)}.map(name=>Object.hasOwn(process.env,name))));require(${JSON.stringify(scriptPath)});\n`);
+    writeFile(path.join(tools, "sync-baseline.cjs"), `console.log("CHILD_PROBE:"+JSON.stringify(${JSON.stringify(names)}.map(name=>Object.prototype.hasOwnProperty.call(process.env,name))));require(${JSON.stringify(scriptPath)});\n`);
     const startup = path.join(fixture.root, "private-startup.cjs");
     const marker = path.join(fixture.root, "startup-leaked");
     writeFile(startup, `require("node:fs").writeFileSync(${JSON.stringify(marker)},"unsafe inherited hook");`);
@@ -548,7 +595,7 @@ for (const mode of ["rewrite", "delete", "same-content-replace", "metadata"] as 
   test(`successful verifier cannot silently ${mode} an unchanged managed file`, () => {
     const fixture = createFixture();
     try {
-      const { before, resolver } = enrollThenChangeSources(fixture, `backup-noop-${mode}`);
+      const { before, globalAgent } = enrollThenChangeSources(fixture, `backup-noop-${mode}`);
       const untouched = path.join(fixture.target, ".gitignore");
       const original = readFileSync(untouched, "utf8");
       const originalInode = statSync(untouched, { bigint: true }).ino;
@@ -573,7 +620,7 @@ for (const mode of ["rewrite", "delete", "same-content-replace", "metadata"] as 
         if (mode === "same-content-replace") expect(statSync(untouched, { bigint: true }).ino).not.toBe(originalInode);
         if (mode === "metadata") expect(statSync(untouched).mtimeMs).toBe(200000);
       }
-      expectRecoveredBoundaries(fixture, resolver, before);
+      expectRecoveredBoundaries(fixture, globalAgent, before);
       const journal: RecoveryJournal = JSON.parse(readFileSync(path.join(fixture.backup, ".sync-journal.json"), "utf8"));
       expect(journal.status).toBe("rollback_incomplete");
       expect(journal.unresolved.some((entry) => entry.path === untouched && entry.reason === "UNCHANGED_PATH_CHANGED")).toBe(true);
@@ -627,3 +674,53 @@ test("managed inventory deploys real paired runtime modules but not custodian in
     }
   } finally { rmSync(fixture.root, { recursive: true, force: true }); }
 }, 30_000);
+
+test("target root identity change between preflight and transaction aborts with deployment plan changed after lock", () => {
+  const fixture = createFixture();
+  const swappedTarget = path.join(fixture.root, "target-swapped");
+  mkdirSync(swappedTarget, { recursive: true });
+  try {
+    const lockFile = path.join(path.dirname(fixture.target), `.omp-sync-${path.basename(fixture.target)}.lock`);
+    const swappedPointer = `export { default } from "${path.join(swappedTarget, "typesafe-planner.ts").replace(/\\/g, "/")}";\n`;
+    const driver = `
+      const fs = require("node:fs");
+      const origRealpath = fs.realpathSync.native;
+      const target = ${JSON.stringify(path.resolve(fixture.target))};
+      const swapped = ${JSON.stringify(path.resolve(swappedTarget))};
+      const lockFile = ${JSON.stringify(lockFile)};
+      const pointerPath = ${JSON.stringify(fixture.pointer)};
+      const swappedPointer = ${JSON.stringify(swappedPointer)};
+      let swappedOnce = false;
+      fs.realpathSync.native = function(p, ...rest) {
+        if ( fs.existsSync(lockFile) && !swappedOnce ) {
+          swappedOnce = true;
+          fs.writeFileSync(pointerPath, swappedPointer, "utf8");
+        }
+        if (swappedOnce && path.resolve(String(p)).toLowerCase() === target.toLowerCase()) {
+          return origRealpath.call(fs, swapped, ...rest);
+        }
+        return origRealpath.call(fs, p, ...rest);
+      };
+      const path = require("node:path");
+      require(${JSON.stringify(scriptPath)});
+    `;
+    const result = spawnSync(process.execPath, ["-e", driver], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        OMP_WORKSPACE_DIR: fixture.workspace,
+        OMP_TARGET_DIR: fixture.target,
+        OMP_HOME_DIR: fixture.home,
+        OMP_EXTENSION_POINTER: fixture.pointer,
+        OMP_BACKUP_DIR: fixture.backup,
+        OMP_SKIP_VERIFY_TESTS: "1",
+      },
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("deployment plan changed after lock");
+    expect(readdirSync(fixture.target)).toEqual([]);
+    expect(readdirSync(swappedTarget)).toEqual([]);
+  } finally {
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});

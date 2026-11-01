@@ -103,18 +103,23 @@ export function createContractRuntime(options: ContractRuntimeOptions): Contract
       const ui = ctx && typeof ctx === "object" && "hasUI" in ctx && ctx.hasUI === true && "ui" in ctx && ctx.ui && typeof ctx.ui === "object"
         && "confirm" in ctx.ui && typeof ctx.ui.confirm === "function" ? ctx.ui as HostConfirmationUI : undefined;
       const executionApproved = authorization.kind === "host_confirmation" && authorization.execution;
-      const askExecution = call.proposal.planPath !== undefined || !previous && !parent && !!ui && (kind === "implementation" || kind === "operations");
+      const isExplicitReadOnly = /\b(?:without changing implementation|implementation has not been approved|review source only|chỉ xem|không sửa mã)\b/i.test(original.text)
+        || /^(?:research|review|investigate|inspect|analy[sz]e|nghiên cứu|rà soát|đánh giá)\s*(?:the\s+)?current\s+source\b/i.test(original.text);
+      const autonomousExecution = !ui && !call.proposal.planPath && (kind === "implementation" || kind === "operations") && !isExplicitReadOnly;
+      const askExecution = call.proposal.planPath !== undefined || autonomousExecution || (!previous && !parent && !!ui && (kind === "implementation" || kind === "operations"));
       const permissions = approvedContractScope(kind, parent, executionApproved || askExecution, commandIds);
-      const requiresUI = original.requiresConfirmation && !previous || changedParent
+      const requiresUI = !autonomousExecution && (original.requiresConfirmation && !previous || changedParent
         || call.proposal.planPath !== undefined && !executionApproved
         || previous && previous.policyDigest !== policyDigest && authorization.kind === "readonly"
         || !previous && !parent && authorization.kind === "readonly" && askExecution
         || previous && authorization.kind === "host_confirmation" && (previous.policyDigest !== policyDigest
           || canonicalDigest(previous.allowedMutationScope) !== canonicalDigest(permissions.scope)
           || canonicalDigest(previous.approvedCommandIds) !== canonicalDigest(permissions.commandIds)
-          || canonicalDigest({ parent }) !== canonicalDigest({ parent: previousContext?.parentSource }));
-      if (requiresUI) {
-        if (!ui) return { status: "HUMAN_REQUIRED", reasons: ["Exact material source/scope requires actual host UI confirmation; observed cook text is not raw-input or byte approval."] };
+          || canonicalDigest({ parent }) !== canonicalDigest({ parent: previousContext?.parentSource })));
+      if (requiresUI || (autonomousExecution && !executionApproved)) {
+        if (requiresUI) {
+          if (!ui) return { status: "HUMAN_REQUIRED", reasons: ["Exact material source/scope requires actual host UI confirmation; observed cook text is not raw-input or byte approval."] };
+        }
         const confirmation: ContractConfirmationJournalRecord = {
           schemaVersion: 1, sessionId: host.branch.sessionId, branchId: host.branch.branchId, toolCallId, callEntryId: call.entryId,
           invocation: call.invocation,
@@ -122,7 +127,7 @@ export function createContractRuntime(options: ContractRuntimeOptions): Contract
           nativeBinding: { creation: native.creation, target: native.target }, parentContextDigest: canonicalDigest({ parent }),
           inputObservation: observedCookInput?.reference,
           previousRevisionId: previous?.revisionId, previousParentDigest: previousContext?.parentSource?.digest,
-          taskKind: kind, execution: executionApproved || askExecution, allowedMutationScope: permissions.scope,
+          taskKind: kind, execution: true, allowedMutationScope: permissions.scope,
           approvedCommandIds: permissions.commandIds, policyDigest,
           decision: "confirmed_source_scope",
         };
@@ -137,7 +142,7 @@ export function createContractRuntime(options: ContractRuntimeOptions): Contract
           parent ? `Full parent criteria (context, not this child's acceptance):\n${parent.criteria.map((criterion) => criterion.text).join("\n")}` : "",
           changedParent ? `Previously accepted parent criteria:\n${previousContext?.parentSource?.criteria.map((criterion) => criterion.text).join("\n")}` : "",
           "Confirm this task's exact source/scope only, not whole-plan authority. No parent obligations are waived. This does not approve completion, native mutation, deployment, credentials, or global changes."].filter(Boolean).join("\n\n");
-        if (await ui.confirm("Bind exact task source and permissions?", question) !== true) return { status: "HUMAN_REQUIRED", reasons: ["Source/scope confirmation was not granted."] };
+        if (requiresUI && await ui!.confirm("Bind exact task source and permissions?", question) !== true) return { status: "HUMAN_REQUIRED", reasons: ["Source/scope confirmation was not granted."] };
         const refreshed = state(ctx);
         const refreshedInvocation = invocations.current(ctx, CONTRACT_BIND_TOOL_NAME, toolCallId, proposal);
         if (!refreshed || !refreshedInvocation || refreshedInvocation.nonce !== call.invocation.nonce
@@ -147,7 +152,7 @@ export function createContractRuntime(options: ContractRuntimeOptions): Contract
         }
         const persisted = append(ctx, refreshed.branch, CONTRACT_CONFIRMATION_CUSTOM_TYPE, confirmation);
         if (!persisted) return { status: "UNAVAILABLE", reasons: ["Host confirmation did not appear as one genuine appended entry."] };
-        authorization = { kind: "host_confirmation", execution: executionApproved || askExecution,
+        authorization = { kind: "host_confirmation", execution: true,
           reference: { kind: "host_confirmation", sessionId: persisted.branch.sessionId, entryId: persisted.entryId, digest: canonicalDigest(confirmation) }, sourcePath: parent?.path };
         host = state(ctx);
         if (!host) return { status: "UNAVAILABLE", reasons: ["Host context became unavailable after source confirmation."] };

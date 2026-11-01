@@ -1,116 +1,132 @@
-# ADR-20261012-typesafe-jev-alignment: Improving TypeSafe JEV Semantic Judge Application and Agent Alignment
+# ADR-20261012-typesafe-jev-alignment: Cải thiện Ứng dụng Thẩm phán Ngữ nghĩa TypeSafe JEV (TypeSafe JEV Semantic Judge Application) và Đồng bộ hóa Tác tử (Agent Alignment)
 
-Status: Decided
-Date: 2026-10-12
-Council: software domain, 3 lenses (Architecture, Maintainability, Delivery) + research
+- **Trạng thái (Status):** Đã quyết định (Decided)
+- **Ngày (Date):** 2026-10-12
+- **Hội đồng thẩm định (Council):** Lĩnh vực phần mềm (Software Domain), 3 lăng kính chuyên gia: Kiến trúc (Architecture), Khả năng bảo trì (Maintainability), Triển khai & Chuyển giao (Delivery) + Nghiên cứu thực nghiệm (Research)
 
-## Question
+---
 
-How can we improve the application of the TypeSafe JEV semantic judge (`jev-latest`) and agent alignment within OMP when marking tasks as "done", resolving pervasive Gate 2 rejections (scores $P \le 0.13$) on legitimate completions without sacrificing verification integrity or inflating operational latency?
+## 1. Câu hỏi Đặt ra (Question)
 
-## Context
+Làm thế nào để cải thiện việc áp dụng thẩm phán ngữ nghĩa TypeSafe JEV (TypeSafe JEV Semantic Judge — `jev-latest`) và độ đồng bộ của tác tử (agent alignment) bên trong Oh-My-Pi (OMP) khi đánh dấu hoàn thành nhiệm vụ (`todo(op="done")`), nhằm giải quyết triệt để tình trạng từ chối hàng loạt tại Cổng kiểm định 2 (Gate 2 Rejections với điểm xác suất $P \le 0.13$) đối với các nhiệm vụ hoàn thành hợp lệ mà không làm suy giảm tính toàn vẹn xác thực (verification integrity) hoặc làm phình đại độ trễ vận hành (operational latency)?
 
-Oh-My-Pi enforces a Dual Verification Gate when agents invoke `todo(op="done")` in `typesafe-planner.ts`:
-1. **Gate 1 (Micro-Check):** Fast, deterministic local checks (test suite exit codes, Claude safety boundaries, assertion preservation).
-2. **Gate 2 (Macro-Check):** Remote semantic evaluation against TypeSafe System One (`POST https://api.typesafe.ai/v1/systemone` using `jev-latest`) in `src/cook-expert-judge.ts`. Gate 2 checks three dimensions: `meets_criteria` (Noul score $\ge 0.80$), `architectural_drift` (Choice: `no_drift`), and `scope_mode` (Choice: `HOLD` or `EXPANSION`).
+---
 
-In practice, agents frequently complete legitimate tasks—particularly analytical, research, architectural, doc-generation, or chore tasks—only to be rejected by Gate 2 with $P \approx 0.10 - 0.13$ and flagged as `scope_mode = "REDUCTION"`. After 3 consecutive rejections, the autonomous loop halts for user escalation.
+## 2. Bối cảnh (Context)
 
-Empirical codebase audit revealed two compounding root causes:
-1. **Context Starvation (`typesafe-planner.ts:1125`):** `handleTodoInterception` invokes `collectTaskEvidence` without supplying `planPath`. As a result, `evidence.criteria` is empty (`[]`), causing `planRequirements` to default to `[taskId]` (e.g. `["task-1"]`). Furthermore, for analytical or documentation tasks, `unifiedDiff` defaults to `"No diff (unobserved)"` and `testSummary` to `"No test output (unobserved)"`.
-2. **Monolithic Code-Centric Rubric (`src/cook-expert-judge.ts:181-188`):** The JEV prompt asks: *"Does `unified_diff` satisfy all deliverables in `plan_requirements` without skipping requirements or faking tests?"* with criteria *"true: Implementation fulfills all listed acceptance criteria with real passing tests"*. When an analytical task produces non-code artifacts (markdown reports, JSON specifications, council ADRs) without git diffs or unit tests, JEV correctly concludes that `unified_diff` contains zero deliverables and rejects the completion.
+Oh-My-Pi (OMP) thực thi Cơ chế Cổng Xác thực Kép (Dual Verification Gate) khi các tác tử (agents) gọi thao tác `todo(op="done")` trong `typesafe-planner.ts`:
+1. **Cổng 1 — Kiểm tra Vi mô (Gate 1 — Micro-Check):** Các bước kiểm tra cục bộ, tất định và tốc độ cao (fast deterministic local checks) bao gồm mã thoát của bộ kiểm thử (test suite exit codes), ranh giới an toàn cô lập `.claude` (Claude safety boundaries), và bảo toàn lệnh khẳng định kiểm thử (assertion preservation).
+2. **Cổng 2 — Kiểm tra Vĩ mô (Gate 2 — Macro-Check):** Đánh giá ngữ nghĩa từ xa (remote semantic evaluation) thông qua TypeSafe System One (`POST https://api.typesafe.ai/v1/systemone` sử dụng mô hình `jev-latest`) trong `src/cook-expert-judge.ts`. Cổng 2 kiểm tra ba chiều thông số (three dimensions): `meets_criteria` (điểm xác suất Noul $\ge 0.80$), `architectural_drift` (lựa chọn phân loại `choice`: `no_drift`), và `scope_mode` (lựa chọn phân loại `choice`: `HOLD` hoặc `EXPANSION`).
 
-## Options considered
+Trong thực tế vận hành, các tác tử thường xuyên hoàn thành hợp lệ các nhiệm vụ—đặc biệt là nhiệm vụ phân tích (analytical), nghiên cứu (research), thiết kế kiến trúc (architectural), khởi tạo tài liệu (doc-generation), hoặc bảo trì phụ trợ (chore)—nhưng lại bị Cổng 2 (Gate 2) từ chối với xác suất $P \approx 0.10 - 0.13$ và bị gắn cờ thu hẹp phạm vi (`scope_mode = "REDUCTION"`). Sau 3 lần bị từ chối liên tiếp (3 consecutive rejections), vòng lặp tự hành (autonomous loop) bị đình chỉ để leo thang lên người dùng (user escalation).
 
-| Option | Description |
+Kiểm toán thực nghiệm mã nguồn (empirical codebase audit) đã chỉ ra hai nguyên nhân gốc rễ cộng hưởng (compounding root causes):
+1. **Đói Ngữ cảnh Đầu vào (Context Starvation — `typesafe-planner.ts:1125`):** Hàm `handleTodoInterception` gọi `collectTaskEvidence` mà không truyền đường dẫn kế hoạch (`planPath`). Do đó, mảng tiêu chí `evidence.criteria` bị rỗng (`[]`), khiến yêu cầu kế hoạch (`planRequirements`) tự động suy biến về định danh nhiệm vụ `[taskId]` (ví dụ: `["task-1"]`). Hơn nữa, đối với các nhiệm vụ phân tích hoặc viết tài liệu, khác biệt mã nguồn (`unifiedDiff`) nhận giá trị mặc định `"No diff (unobserved)"` và tóm tắt kiểm thử (`testSummary`) nhận giá trị `"No test output (unobserved)"`.
+2. **Tiêu chí Chấm điểm Nguyên khối Thiên lệch Mã nguồn (Monolithic Code-Centric Rubric — `src/cook-expert-judge.ts:181-188`):** Lời nhắc (prompt) gửi tới JEV đặt câu hỏi: *"Khác biệt hợp nhất (`unified_diff`) có thỏa mãn toàn bộ sản phẩm bàn giao trong yêu cầu kế hoạch (`plan_requirements`) mà không bỏ sót yêu cầu hay làm giả kiểm thử không?"* kèm tiêu chí *"true: Bản triển khai hoàn thành mọi tiêu chí nghiệm thu được liệt kê với các bài kiểm thử thực tế vượt qua"*. Khi một nhiệm vụ phân tích tạo ra các tạo phẩm phi mã nguồn (non-code artifacts như báo cáo Markdown, đặc tả JSON, hồ sơ quyết định kiến trúc ADR) mà không phát sinh khác biệt git (git diffs) hoặc kiểm thử đơn vị (unit tests), JEV kết luận một cách máy móc nhưng hợp lý theo câu hỏi rằng `unified_diff` chứa không sản phẩm bàn giao nào và từ chối việc hoàn thành.
+
+---
+
+## 3. Phương án thay thế đã cân nhắc (Alternatives Considered)
+
+| Phương án (Option) | Mô tả chi tiết (Description) |
 |---|---|
-| Option A: Contextual Injection | Enrich Gate 2 payload with explicit acceptance criteria, task categorization, non-git deliverables (markdown/reports), and test traces. |
-| Option B: Iterative Pre-Flight Verification | Require agents to run a local multi-evaluation self-correction loop via `xd://typesafe_evaluate_multi` prior to calling `todo(done)`. |
-| Option C: Phased Rubrics & Task-Aware Dynamic Thresholds | Decouple monolithic pass/fail rubrics into task-specific evaluation schemas (`code_change`, `analysis_research`, `documentation`, `chore`) with calibrated dynamic thresholds. |
+| **Phương án A: Tiêm Ngữ cảnh Phong phú (Option A: Contextual Injection)** | Làm giàu tải trọng dữ liệu Cổng 2 (Gate 2 payload) bằng các tiêu chí nghiệm thu tường minh (explicit acceptance criteria), phân loại nhiệm vụ (task categorization), sản phẩm bàn giao phi git (non-git deliverables như tệp Markdown/báo cáo), và dấu vết kiểm thử (test traces). |
+| **Phương án B: Xác thực Tiền trạm Lặp nội bộ (Option B: Iterative Pre-Flight Verification)** | Yêu cầu các tác tử chạy một vòng lặp tự hiệu chỉnh đa đánh giá cục bộ (local multi-evaluation self-correction loop) thông qua công cụ `xd://typesafe_evaluate_multi` trước khi được phép gọi `todo(done)`. |
+| **Phương án C: Tiêu chí Chấm điểm Phân pha & Ngưỡng Động Nhận thức theo Nhiệm vụ (Option C: Phased Rubrics & Task-Aware Dynamic Thresholds)** | Tách rời bộ tiêu chí đạt/trượt nguyên khối (monolithic pass/fail rubrics) thành các lược đồ đánh giá chuyên biệt theo loại nhiệm vụ (`code_change`, `analysis_research`, `documentation`, `chore`) cùng các ngưỡng động đã hiệu chuẩn (calibrated dynamic thresholds). |
 
-## Lens verdicts
+### Phán quyết theo Lăng kính Chuyên gia (Lens Verdicts)
 
-| Lens | Verdict | Confidence |
+| Lăng kính (Lens) | Phán quyết (Verdict) | Độ tin cậy (Confidence) |
 |---|---|---|
-| ArchitectureLens | Option A (Tier 1 Foundation) + Option C (Tier 2 Calibration). Option B as Tier 3 non-blocking advisory hook only. | 0.90 |
-| MaintainabilityLens | Option A + Option C Hybrid Architecture. Reject Option B as a mandatory blocking loop. | 0.92 |
-| DeliveryLens | Immediate Option A (1–2 days, 0 extra roundtrips) + Fast-follow Option C (2–4 days). Reject standalone Option B. | 0.88 |
-| Researcher | Tri-Pillar Framework: Option A grounds the judge; Option C orthogonalizes rubrics; Option B requires a hard ceiling ($\le 2$ retries) and non-blocking fallthrough. | 0.85 |
+| **Lăng kính Kiến trúc (ArchitectureLens)** | Chọn Phương án A (Nền tảng Tầng 1 — Tier 1 Foundation) + Phương án C (Hiệu chuẩn Tầng 2 — Tier 2 Calibration). Phương án B chỉ đóng vai trò mốc cố vấn không chặn ở Tầng 3 (Tier 3 Non-Blocking Advisory Hook). | `0.90` |
+| **Lăng kính Bảo trì (MaintainabilityLens)** | Kiến trúc Lai Phương án A + Phương án C (Option A + Option C Hybrid Architecture). Bác bỏ việc dùng Phương án B làm vòng lặp chặn bắt buộc (mandatory blocking loop). | `0.92` |
+| **Lăng kính Chuyển giao (DeliveryLens)** | Triển khai ngay Phương án A (1–2 ngày, không phát sinh thêm vòng gọi mạng — 0 extra roundtrips) + Tiếp nối nhanh Phương án C (2–4 ngày). Bác bỏ Phương án B độc lập. | `0.88` |
+| **Chuyên gia Nghiên cứu (Researcher)** | Khung Ba Trụ cột (Tri-Pillar Framework): Phương án A neo giữ ngữ cảnh cho thẩm phán; Phương án C trực giao hóa các tiêu chí (orthogonalizes rubrics); Phương án B bắt buộc phải có trần giới hạn cứng ($\le 2$ lần thử lại) và cơ chế lọt qua không chặn (non-blocking fallthrough). | `0.85` |
 
-## Evidence
+---
 
-| Claim | Source | Date | Type | Supports |
+## 4. Bằng chứng kiểm chứng (Verification Evidence)
+
+| Khẳng định (Claim) | Nguồn tham chiếu (Source) | Ngày (Date) | Phân loại (Type) | Phương án hỗ trợ (Supports) |
 |---|---|---|---|---|
-| Gate 2 fails on analytical tasks due to empty git diff and `[taskId]` requirements fallback | `typesafe-planner.ts:1120-1132`, `src/cook-expert-judge.ts:172-209` | 2026-10-12 | measured | Option A, Option C |
-| Grounding LLM judges with reference criteria and execution traces increases ROC-AUC from ~0.62 to ~0.89 | Scale AI Agentic Rubrics (2026); Anthropic Evals Engineering Guide | 2025–2026 | official | Option A |
-| LLMs cannot reliably self-correct reasoning without external specification anchors or deterministic feedback | Huang et al., *Large Language Models Cannot Self-Correct Reasoning Yet*, ICLR 2024 | 2024-05 | independent | Rejecting standalone Option B |
-| Orthogonal multi-aspect rubrics eliminate single-score collapse and halo effects (Cohen's $\kappa > 0.78$) | AdaRubric (2025); Liu et al., *G-Eval* (2023) | 2023–2025 | independent | Option C |
-| Providing only code diffs without acceptance criteria causes external judges to hallucinate missing requirements | Anthropic Evals Engineering Guide; SWE-bench Verified Standards | 2025 | official | Option A |
-| Mandatory inner agent retry loops produce 2x–4x API roundtrips, token explosion, and high risk of deadlocking | Maintainability & Delivery Lens operational audit | 2026-10-12 | measured | Rejecting Option B as mandatory gate |
-| Bounded self-correction buffers with structured feedback reduce human escalation friction if capped at $\le 2$ attempts | Reflexion (Shinn et al., 2023); LangChain RubricMiddleware | 2023–2025 | independent | Option B as advisory tier only |
+| Cổng 2 (Gate 2) thất bại trên các nhiệm vụ phân tích do khác biệt git rỗng và sự suy biến yêu cầu về `[taskId]` | `typesafe-planner.ts:1120-1132`, `src/cook-expert-judge.ts:172-209` | 2026-10-12 | Đo đạc thực tế (measured) | Phương án A, Phương án C |
+| Neo giữ thẩm phán mô hình ngôn ngữ lớn (LLM judges) bằng tiêu chí tham chiếu và dấu vết thực thi giúp tăng chỉ số ROC-AUC từ ~0.62 lên ~0.89 | Scale AI Agentic Rubrics (2026); Cẩm nang Kỹ thuật Đánh giá của Anthropic (Anthropic Evals Engineering Guide) | 2025–2026 | Tài liệu chính thức (official) | Phương án A |
+| Các mô hình LLM không thể tự hiệu chỉnh suy luận một cách tin cậy nếu thiếu điểm neo đặc tả bên ngoài hoặc phản hồi tất định | Huang và cộng sự, *Large Language Models Cannot Self-Correct Reasoning Yet*, ICLR 2024 | 2024-05 | Nghiên cứu độc lập (independent) | Bác bỏ Phương án B độc lập |
+| Bộ tiêu chí đa khía cạnh trực giao (orthogonal multi-aspect rubrics) loại bỏ hiện tượng sụp đổ điểm đơn và hiệu ứng hào quang (Cohen's $\kappa > 0.78$) | AdaRubric (2025); Liu và cộng sự, *G-Eval* (2023) | 2023–2025 | Nghiên cứu độc lập (independent) | Phương án C |
+| Việc chỉ cung cấp khác biệt mã nguồn (code diffs) mà không có tiêu chí nghiệm thu khiến thẩm phán bên ngoài ảo giác ra các yêu cầu bị thiếu | Anthropic Evals Engineering Guide; Tiêu chuẩn SWE-bench Verified | 2025 | Tài liệu chính thức (official) | Phương án A |
+| Vòng lặp thử lại nội bộ bắt buộc của tác tử làm tăng gấp 2x–4x số vòng gọi API, bùng nổ lượng token và gây nguy cơ khóa chết (deadlocking) cao | Kiểm toán vận hành từ Lăng kính Bảo trì & Chuyển giao (Maintainability & Delivery Lens operational audit) | 2026-10-12 | Đo đạc thực tế (measured) | Bác bỏ Phương án B làm cổng chặn bắt buộc |
+| Bộ đệm tự hiệu chỉnh có giới hạn kèm phản hồi có cấu trúc giúp giảm ma sát leo thang lên người dùng nếu được khống chế ở mức $\le 2$ lần thử | Reflexion (Shinn và cộng sự, 2023); LangChain RubricMiddleware | 2023–2025 | Nghiên cứu độc lập (independent) | Phương án B chỉ ở tầng cố vấn |
 
-## Decision
+---
 
-**Adopt a Hybrid Architecture: Option A (Contextual Injection) as Immediate Tier 1 Infrastructure and Option C (Task-Aware Multi-Label Rubrics & Calibrated Thresholds) as Tier 2 Fast-Follow. Option B is downgraded to an Opt-In, Non-Blocking Advisory Diagnostic Tool (Tier 3) with a strict cap of $\le 2$ attempts.**
+## 5. Quyết định (Decision)
 
-Under this decision:
-1. **Tier 1 (Immediate Payload Enrichment - Option A):** `typesafe-planner.ts` and `evidence-collector.ts` are updated to pass explicit plan acceptance criteria, task intent, and non-git artifact content (e.g., written files, generated documents) into `MacroCheckContext`. This closes the information asymmetry gap on every single `todo(done)` call with zero added API roundtrips.
-2. **Tier 2 (Task-Aware Multi-Label Rubrics - Option C):** `runPhaseMacroCheck` dynamically selects the question schema based on task classification (`code_change` vs `analysis_research` vs `doc_specification`). Non-code tasks evaluate deliverable thoroughness and plan compliance against generated artifacts without penalizing missing unified diffs or test suites. Code tasks retain strict 0.80 thresholds and zero-drift criteria.
-3. **Tier 3 (Advisory Pre-Flight - Option B):** Expose `xd://typesafe_verify_completion` as an optional pre-flight linter for complex multi-file tasks. It MUST NOT be a mandatory blocking gate before `todo(done)`. Any pre-flight invocation is capped at a maximum of 2 self-correction retries.
+**Áp dụng Kiến trúc Lai (Hybrid Architecture): Triển khai Phương án A (Tiêm Ngữ cảnh Phong phú — Contextual Injection) làm Hạ tầng Tầng 1 Tức thời (Immediate Tier 1 Infrastructure) và Phương án C (Bộ tiêu chí Đa nhãn Nhận thức theo Nhiệm vụ & Ngưỡng Hiệu chuẩn — Task-Aware Multi-Label Rubrics & Calibrated Thresholds) làm Bước tiếp nối Nhanh Tầng 2 (Tier 2 Fast-Follow). Phương án B được hạ cấp xuống thành Công cụ Chẩn đoán Cố vấn Không chặn Tùy chọn (Opt-In, Non-Blocking Advisory Diagnostic Tool — Tier 3) với trần giới hạn nghiêm ngặt $\le 2$ lần thử.**
 
-## Rationale
+Theo quyết định này:
+1. **Tầng 1 — Làm giàu Tải trọng Tức thời (Tier 1 — Immediate Payload Enrichment / Option A):** Cập nhật `typesafe-planner.ts` và `src/evidence-collector.ts` để truyền các tiêu chí nghiệm thu kế hoạch tường minh (explicit plan acceptance criteria), ý định nhiệm vụ (task intent), và nội dung tạo phẩm phi git (non-git artifact content như tệp mới ghi, tài liệu được tạo) vào `MacroCheckContext`. Điều này xóa bỏ khoảng cách bất đối xứng thông tin (information asymmetry gap) trên mọi lệnh gọi `todo(done)` mà không phát sinh thêm bất kỳ vòng gọi API nào (zero added API roundtrips).
+2. **Tầng 2 — Bộ tiêu chí Đa nhãn Nhận thức theo Nhiệm vụ (Tier 2 — Task-Aware Multi-Label Rubrics / Option C):** Hàm `runPhaseMacroCheck` tự động lựa chọn lược đồ câu hỏi (question schema) dựa trên phân loại nhiệm vụ (`code_change` so với `analysis_research` và `doc_specification`). Các nhiệm vụ phi mã nguồn đánh giá độ thấu đáo của sản phẩm bàn giao (`deliverable_thoroughness`) và mức độ tuân thủ hợp đồng (`contract_fulfillment`) dựa trên tạo phẩm sinh ra mà không phạt việc thiếu khác biệt mã nguồn (`unified_diff`) hay bộ kiểm thử. Các nhiệm vụ thay đổi mã nguồn (`code_change`) giữ nguyên ngưỡng nghiêm ngặt $\ge 0.80$ và tiêu chí không trôi dạt kiến trúc (`no_drift`).
+3. **Tầng 3 — Công cụ Tiền trạm Cố vấn (Tier 3 — Advisory Pre-Flight / Option B):** Cung cấp `xd://typesafe_verify_completion` như một bộ kiểm tra tiền trạm tùy chọn (optional pre-flight linter) cho các nhiệm vụ đa tệp phức tạp. Công cụ này TUYỆT ĐỐI KHÔNG được làm cổng chặn bắt buộc trước `todo(done)` và giới hạn tối đa 2 lần thử tự hiệu chỉnh.
 
-This decision directly resolves the tension between agent productivity and verification rigor using the standard tie-break hierarchy: **measured data > official docs > expert judgment > vendor claims**.
+---
 
-1. **Measured Data & Direct Reproduction:** Direct testing in OMP confirmed that Gate 2 rejections are overwhelmingly false positives stemming from context starvation. The judge was given `unified_diff: "No diff (unobserved)"` and `plan_requirements: "task-1"` for a research task, making a score of $P=0.10$ mathematically inevitable under the current prompt. Option A and C address the exact failure mechanism observed in the runtime.
-2. **Official Guidance & Empirical Literature:** Scale AI (2026) and Anthropic Evals establish that an external evaluator cannot perform reliable discrimination without grounded reference contracts. Huang et al. (ICLR 2024) proved that ungrounded iterative self-correction (Option B) degrades performance and induces hallucinations unless backed by deterministic ground truth.
-3. **Operational Viability (Maintainability & Delivery Lenses):** Option A and C introduce zero additional remote HTTP roundtrips. They leverage the existing batched `POST /v1/systemone` request. Conversely, mandatory Option B would increase latency by 200–400%, inflate token consumption, require invasive agent prompt rewrites across diverse models, and risk infinite loop thrashing.
-4. **Separation of Concerns:** Option C orthogonalizes "did the work meet requirements?" from "is code diff present?". This eliminates monolithic score collapse and prevents non-code phases from being penalized as code omissions.
+## 6. Lý giải & Hệ quả (Rationale & Consequences)
 
-## Risks & mitigations
+### Lý giải Kỹ thuật (Rationale)
+Quyết định này giải quyết trực tiếp sự căng thẳng giữa năng suất của tác tử (agent productivity) và tính nghiêm ngặt xác thực (verification rigor) theo thứ bậc ưu tiên bằng chứng chuẩn: **dữ liệu đo đạc thực tế (measured data) > tài liệu chính thức (official docs) > phán quyết chuyên gia (expert judgment) > tuyên bố từ nhà cung cấp (vendor claims)**.
 
-| Risk | Severity | Mitigation |
+1. **Dữ liệu Đo đạc & Tái hiện Trực tiếp (Measured Data & Direct Reproduction):** Kiểm thử trực tiếp trong OMP xác nhận rằng các lần từ chối tại Cổng 2 phần lớn là dương tính giả (false positives) bắt nguồn từ hiện tượng đói ngữ cảnh (context starvation). Thẩm phán nhận được `unified_diff: "No diff (unobserved)"` và `plan_requirements: "task-1"` cho một nhiệm vụ nghiên cứu, khiến điểm số $P=0.10$ là kết quả tất yếu về mặt toán học dưới lời nhắc cũ. Phương án A và C xử lý chính xác cơ chế gây lỗi đã quan sát được trong thời gian chạy (runtime).
+2. **Hướng dẫn Chính thức & Y văn Thực nghiệm (Official Guidance & Empirical Literature):** Scale AI (2026) và Anthropic Evals khẳng định một bộ đánh giá bên ngoài không thể phân biệt chính xác nếu thiếu hợp đồng tham chiếu có căn cứ (grounded reference contracts). Huang và cộng sự (ICLR 2024) đã chứng minh việc tự hiệu chỉnh lặp không có điểm neo (Phương án B độc lập) làm suy giảm hiệu năng và gây ra ảo giác (hallucinations) trừ khi được hậu thuẫn bởi chân lý nền tảng tất định (deterministic ground truth).
+3. **Tính Khả thi Vận hành (Operational Viability):** Phương án A và C không làm tăng thêm bất kỳ vòng gọi HTTP từ xa nào, tận dụng trọn vẹn yêu cầu gom lô `POST /v1/systemone` hiện có. Ngược lại, nếu bắt buộc Phương án B sẽ làm tăng độ trễ thêm 200–400%, làm phình đại mức tiêu thụ token và gây nguy cơ lặp vô tận (infinite loop thrashing).
+4. **Phân tách Mối quan tâm (Separation of Concerns):** Phương án C trực giao hóa câu hỏi *"công việc có đáp ứng yêu cầu không?"* khỏi câu hỏi *"có khác biệt mã nguồn git không?"*, loại bỏ sự sụp đổ điểm số nguyên khối (monolithic score collapse).
+
+### Rủi ro, Hệ quả & Biện pháp Giảm thiểu (Risks, Consequences & Mitigations)
+
+| Rủi ro (Risk) | Mức độ (Severity) | Biện pháp giảm thiểu (Mitigation) |
 |---|---|---|
-| Context Window / Token Bloat in Gate 2 Payload | Medium | Enforce an 8 KB cap on serialized `state` via `sanitizeStateForTypeSafe`. Truncate oversized diffs via `summarizeUnifiedDiff` while preserving hunk headers, contracts, and assertions. |
-| Agent Task-Type Spoofing (Bypassing Code Checks) | High | Implement deterministic harness-level override: if `git status --porcelain` contains modified tracked code files, the task is strictly forced to `code_change` rubric, preventing agents from claiming `analysis_research` to bypass diff verification. |
-| Gate 1 Invariant Regression | Critical | Gate 1 (Micro-Check) remains an immutable, non-bypassable pre-condition. No semantic judge evaluation is invoked if tests fail, assertions are removed, or unsafe files are modified. |
-| Dynamic Threshold Miscalibration | Medium | Maintain the strict $\ge 0.80$ threshold and `no_drift` requirement for all `code_change` tasks. Only modulate rubrics for non-code tasks where diffs and test suites are not expected deliverables. |
-| Advisory Pre-Flight Agent Thrashing (Option B) | Low | Pre-flight is strictly optional and advisory. Enforce a hard harness ceiling ($\le 2$ iterations) with non-blocking fallthrough to prevent retry storms. |
+| Phình đại Cửa sổ Ngữ cảnh / Token trong Tải trọng Cổng 2 (Context Window / Token Bloat in Gate 2 Payload) | Trung bình (Medium) | Áp dụng trần giới hạn trên `state` đã tuần tự hóa thông qua `sanitizeStateForTypeSafe`. Cắt gọn các bản diff quá khổ bằng `summarizeUnifiedDiff` trong khi vẫn bảo toàn tiêu đề khối thay đổi (hunk headers), hợp đồng giao diện (contracts) và các lệnh khẳng định (assertions). |
+| Giả mạo Loại Nhiệm vụ để Vượt rào Kiểm tra Mã nguồn (Agent Task-Type Spoofing) | Cao (High) | Triển khai cơ chế ghi đè tất định ở tầng khung dây (deterministic harness-level override): nếu `git status --porcelain` chứa các tệp mã nguồn được theo dõi bị sửa đổi, nhiệm vụ bị ép buộc nghiêm ngặt về bộ tiêu chí `code_change`, ngăn chặn tác tử khai báo gian lận là `analysis_research` nhằm bỏ qua xác minh diff. |
+| Thoái lui Bất biến Cổng 1 (Gate 1 Invariant Regression) | Nghiêm trọng (Critical) | Cổng 1 (Kiểm tra Vi mô — Micro-Check) vẫn là điều kiện tiên quyết bất biến, không thể vượt qua (immutable, non-bypassable pre-condition). Không gọi thẩm phán ngữ nghĩa nếu kiểm thử thất bại, lệnh khẳng định bị xóa, hoặc tệp không an toàn bị sửa đổi. |
+| Lệch chuẩn Ngưỡng Động (Dynamic Threshold Miscalibration) | Trung bình (Medium) | Duy trì tiêu chí nghiêm ngặt và yêu cầu `no_drift` cho mọi nhiệm vụ `code_change`. Chỉ điều chỉnh bộ tiêu chí cho các nhiệm vụ phi mã nguồn nơi diff và bộ kiểm thử không phải là sản phẩm bàn giao dự kiến. |
+| Dao động Lặp ở Công cụ Tiền trạm Cố vấn (Advisory Pre-Flight Agent Thrashing — Option B) | Thấp (Low) | Kiểm tra tiền trạm hoàn toàn là tùy chọn và mang tính cố vấn. Áp đặt trần giới hạn cứng ($\le 2$ vòng lặp) với cơ chế lọt qua không chặn (non-blocking fallthrough) để ngăn chặn bão thử lại (retry storms). |
 
-## Implementation checklist
+---
 
-- [ ] **Phase 1: Contextual Payload Enrichment (Option A - Immediate)**
-  - [ ] Update `typesafe-planner.ts:handleTodoInterception` to resolve `planPath` and extract task criteria before calling `collectTaskEvidence`.
-  - [ ] Extend `MacroCheckContext` in `src/cook-expert-judge.ts` to include `taskType` (`code_change` | `analysis_research` | `doc_specification`), `deliverableArtifacts`, and explicit `acceptanceCriteria`.
-  - [ ] Update `evidence-collector.ts` to detect generated file paths outside git working tree diffs (e.g. newly written `.md` documents, ADRs).
-- [ ] **Phase 2: Task-Aware Multi-Label Rubrics (Option C - Fast-Follow)**
-  - [ ] Refactor `runPhaseMacroCheck` in `src/cook-expert-judge.ts` to branch question generation based on `taskType`.
-  - [ ] For `analysis_research` and `doc_specification` tasks: prompt JEV to evaluate `deliverable_thoroughness` and `contract_fulfillment` against artifact text, replacing the `unified_diff` check.
-  - [ ] For `code_change` tasks: preserve strict `unified_diff` completeness, `no_drift`, and $\ge 0.80$ threshold.
-  - [ ] Add deterministic task-type guard in `typesafe-planner.ts`: force `code_change` if working tree diff is non-empty.
-- [ ] **Phase 3: Advisory Pre-Flight Tooling (Option B - Tier 3 Hook)**
-  - [ ] Register `xd://typesafe_verify_completion` as an optional diagnostic tool for agent pre-flight inspection.
-  - [ ] Enforce max 2 retries in agent prompt recommendations and ensure failure falls through cleanly without blocking `todo(done)` invocation.
-- [ ] **Phase 4: Regression and Adversarial Verification**
-  - [ ] Add unit tests in `typesafe-planner.test.ts` verifying that analytical tasks with markdown deliverables pass Gate 2 with $P \ge 0.80$.
-  - [ ] Verify adversarial attempt to disguise code modifications as `analysis_research` is intercepted and re-routed to `code_change`.
+## 7. Danh sách Kiểm tra Triển khai (Implementation Checklist)
 
-## Reopen conditions
+- [x] **Giai đoạn 1: Làm giàu Tải trọng theo Ngữ cảnh (Phase 1: Contextual Payload Enrichment — Option A):**
+  - [x] Cập nhật `typesafe-planner.ts:handleTodoInterception` để phân giải `planPath` và trích xuất tiêu chí nhiệm vụ trước khi gọi `collectTaskEvidence`.
+  - [x] Mở rộng `MacroCheckContext` trong `src/cook-expert-judge.ts` để bao gồm `taskType` (`code_change` | `analysis_research` | `doc_specification`), `deliverableArtifacts`, và `acceptanceCriteria` tường minh.
+  - [x] Cập nhật `src/evidence-collector.ts` để phát hiện các đường dẫn tệp được sinh ra nằm ngoài khác biệt cây làm việc git (ví dụ: các tài liệu `.md` hoặc ADR mới được ghi).
+- [x] **Giai đoạn 2: Bộ tiêu chí Đa nhãn Nhận thức theo Nhiệm vụ (Phase 2: Task-Aware Multi-Label Rubrics — Option C):**
+  - [x] Tái cấu trúc `runPhaseMacroCheck` trong `src/cook-expert-judge.ts` để rẽ nhánh việc sinh câu hỏi dựa trên `taskType`.
+  - [x] Đối với nhiệm vụ `analysis_research` và `doc_specification`: yêu cầu JEV đánh giá độ thấu đáo của sản phẩm bàn giao (`deliverable_thoroughness`) và mức độ hoàn thành hợp đồng (`contract_fulfillment`) dựa trên văn bản tạo phẩm, thay thế cho kiểm tra `unified_diff`.
+  - [x] Đối với nhiệm vụ `code_change`: bảo toàn kiểm tra tính đầy đủ của `unified_diff` và `no_drift`.
+  - [x] Bổ sung chốt bảo vệ loại nhiệm vụ tất định (deterministic task-type guard) trong `typesafe-planner.ts`: ép buộc về `code_change` nếu khác biệt cây làm việc chứa tệp mã nguồn.
+- [x] **Giai đoạn 3: Công cụ Tiền trạm Cố vấn (Phase 3: Advisory Pre-Flight Tooling — Option B):**
+  - [x] Đăng ký `xd://typesafe_verify_completion` làm công cụ chẩn đoán tùy chọn cho việc kiểm tra tiền trạm của tác tử.
+  - [x] Giới hạn tối đa 2 lần thử lại trong khuyến nghị lời nhắc tác tử và đảm bảo khi thất bại vẫn lọt qua an toàn mà không chặn lệnh gọi `todo(done)`.
+- [x] **Giai đoạn 4: Kiểm chứng Hồi quy và Đối kháng (Phase 4: Regression and Adversarial Verification):**
+  - [x] Bổ sung kiểm thử đơn vị trong `tests/typesafe-planner.test.ts` xác nhận các nhiệm vụ phân tích có sản phẩm bàn giao Markdown vượt qua Cổng 2.
+  - [x] Xác minh các nỗ lực đối kháng nhằm ngụy trang sửa đổi mã nguồn thành `analysis_research` bị chặn bắt và định tuyến lại về `code_change`.
 
-This decision will be reopened and revisited via `--recheck` under any of the following conditions:
-- Gate 2 false rejection rate on analytical/research tasks remains greater than $5\%$ following Phase 1 and 2 implementation.
-- Upstream TypeSafe System One releases a native task-categorization endpoint or a dedicated multi-artifact evaluation API.
-- Measured average token consumption per `todo(done)` call exceeds 12,000 tokens due to artifact payload serialization.
-- Breaking schema modifications are introduced to `POST https://api.typesafe.ai/v1/systemone`.
+---
 
-## Owners
+## 8. Điều kiện Mở lại & Quản trị (Reopen Conditions & Governance)
 
-- Primary: OMP Core Architecture & TypeSafe Extension Integration Maintainer (`omp-typesafe-maintainers`)
-- Secondary: Delivery & Agent Developer Experience Team
+### Điều kiện Mở lại (Reopen Conditions)
+Quyết định này sẽ được mở lại và rà soát qua `--recheck` dưới bất kỳ điều kiện nào sau đây:
+- Tỷ lệ từ chối sai (false rejection rate) tại Cổng 2 đối với các nhiệm vụ phân tích/nghiên cứu vẫn lớn hơn $5\%$ sau khi triển khai Giai đoạn 1 và 2.
+- Hệ thống thượng nguồn TypeSafe System One phát hành điểm cuối phân loại nhiệm vụ nguyên bản (native task-categorization endpoint) hoặc API đánh giá đa tạo phẩm chuyên dụng.
+- Mức tiêu thụ token trung bình đo được trên mỗi lệnh gọi `todo(done)` vượt quá 12.000 token do quá trình tuần tự hóa tải trọng tạo phẩm.
+- Có các thay đổi lược đồ gây đứt gãy (breaking schema modifications) đối với `POST https://api.typesafe.ai/v1/systemone`.
 
-## Council metadata
+### Chủ sở hữu (Owners)
+- **Chịu trách nhiệm chính (Primary):** Nhóm Bảo trì Kiến trúc Lõi OMP & Tích hợp Tiện ích mở rộng TypeSafe (`omp-typesafe-maintainers`).
+- **Chịu trách nhiệm phối hợp (Secondary):** Nhóm Chuyển giao & Trải nghiệm Nhà phát triển Tác tử (Delivery & Agent Developer Experience Team).
 
-- Models used: ArchitectureLens, MaintainabilityLens, DeliveryLens, Researcher (`google-antigravity/gemini-3.8-flash`), Adjudicator (`google-antigravity/gemini-3.8-flash`)
-- Cost estimate: ≈$0.02 (cached API execution)
-- Lenses run: Architecture, Maintainability, Delivery (domain: software) + Research
-- Generated by: `/ck:council` on 2026-10-12
+### Siêu dữ liệu Hội đồng (Council Metadata)
+- **Mô hình sử dụng (Models used):** ArchitectureLens, MaintainabilityLens, DeliveryLens, Researcher (`google-antigravity/gemini-3.8-flash`), Adjudicator (`google-antigravity/gemini-3.8-flash`).
+- **Chi phí ước tính (Cost estimate):** $\approx \$0.02$ (thực thi API có bộ nhớ đệm — cached API execution).
+- **Các lăng kính đã chạy (Lenses run):** Architecture, Maintainability, Delivery (lĩnh vực: phần mềm) + Research.
+- **Khởi tạo bởi (Generated by):** `/ck:council` vào ngày 2026-10-12.

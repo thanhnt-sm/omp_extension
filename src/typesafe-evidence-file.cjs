@@ -31,10 +31,10 @@ function inspectDirectoryChain(directory) {
     if (segment) cursor = path.join(cursor, segment);
     const stat = fs.lstatSync(cursor, { bigint: true });
     if (stat.isSymbolicLink() || !stat.isDirectory()) reject("UNSAFE_PARENT");
-    const real = fs.realpathSync.native(cursor);
-    if (comparable(path.resolve(real)) !== comparable(path.resolve(cursor))) reject("AMBIGUOUS_PARENT");
     chain.push({ path: cursor, identity: identity(stat) });
   }
+  const real = fs.realpathSync.native(absolute);
+  if (comparable(path.resolve(real)) !== comparable(absolute)) reject("AMBIGUOUS_PARENT");
   return chain;
 }
 function inspect(root, segments) {
@@ -52,10 +52,10 @@ function readWorkspaceFile(root, relativePath, { maxBytes } = {}) {
     if (!Number.isSafeInteger(maxBytes) || maxBytes < 0 || maxBytes > 256 * 1024 * 1024) reject("INVALID_BOUND");
     if (typeof root !== "string" || !path.isAbsolute(root)) reject("INVALID_ROOT");
     const segments = parts(relativePath);
-    const originalRoot = inspectDirectoryChain(root);
     const canonicalRoot = fs.realpathSync.native(root);
+    const originalRoot = comparable(canonicalRoot) === comparable(path.resolve(root)) ? null : inspectDirectoryChain(root);
     const before = inspect(canonicalRoot, segments);
-    if (originalRoot.some((entry, index) => !before.directories[index] || !sameNode(entry.identity, before.directories[index].identity))) reject("ROOT_IDENTITY_CHANGED");
+    if (originalRoot && originalRoot.some((entry, index) => !before.directories[index] || !sameNode(entry.identity, before.directories[index].identity))) reject("ROOT_IDENTITY_CHANGED");
     if (before.stat.size > BigInt(maxBytes)) reject("FILE_TOO_LARGE", "unavailable");
     descriptor = fs.openSync(before.target, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0) | (fs.constants.O_NONBLOCK || 0));
     const opened = fs.fstatSync(descriptor, { bigint: true });
@@ -71,8 +71,10 @@ function readWorkspaceFile(root, relativePath, { maxBytes } = {}) {
     if (!sameIdentity(before.identity, identity(afterHandle))) reject("HANDLE_IDENTITY_CHANGED");
     const after = inspect(canonicalRoot, segments);
     if (!sameIdentity(before.identity, after.identity) || before.directories.length !== after.directories.length || before.directories.some((entry, index) => !sameNode(entry.identity, after.directories[index].identity))) reject("PATH_IDENTITY_CHANGED");
-    const afterRoot = inspectDirectoryChain(root);
-    if (originalRoot.length !== afterRoot.length || originalRoot.some((entry, index) => !sameNode(entry.identity, afterRoot[index].identity))) reject("ROOT_IDENTITY_CHANGED");
+    if (originalRoot) {
+      const afterRoot = inspectDirectoryChain(root);
+      if (originalRoot.length !== afterRoot.length || originalRoot.some((entry, index) => !sameNode(entry.identity, afterRoot[index].identity))) reject("ROOT_IDENTITY_CHANGED");
+    }
     if (comparable(fs.realpathSync.native(root)) !== comparable(canonicalRoot)) reject("ROOT_IDENTITY_CHANGED");
     const bytes = buffer.subarray(0, length);
     return { bytes, sha256: crypto.createHash("sha256").update(bytes).digest("hex"), identity: before.identity };

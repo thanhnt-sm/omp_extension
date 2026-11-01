@@ -38,10 +38,18 @@ export function publicHostText(value: unknown): string {
   return value.flatMap((block) => record(block) && block.type === "text" && typeof block.text === "string" ? [block.text] : []).join("\n");
 }
 export function userRequestText(entry: HostHistoryEntry): string | undefined {
-  if (entry.type !== "message" || entry.message?.role !== "user") return undefined;
-  const text = publicHostText(entry.message.content)
-    .replace(/<system-(?:notice|reminder)\b[^>]*>[\s\S]*?<\/system-(?:notice|reminder)>/gi, "").trim();
-  if (!text || /^(?:please\s+)?(?:retry|continue|proceed|resume|go ahead|try again|yes|ok|tiếp tục)\b/iu.test(text)
+  let text: string | undefined;
+  if (entry.type === "message" && entry.message?.role === "user") {
+    text = publicHostText(entry.message.content);
+  } else if (entry.type === "custom_message" && (entry as Record<string, unknown>).customType === "skill-prompt") {
+    const raw = typeof (entry as Record<string, unknown>).content === "string" ? (entry as Record<string, unknown>).content as string : "";
+    const match = /\nUser:\s*([\s\S]*)$/i.exec(raw);
+    if (match) text = match[1].trim();
+  }
+  if (!text) return undefined;
+  text = text.replace(/<system-(?:notice|reminder)\b[^>]*>[\s\S]*?<\/system-(?:notice|reminder)>/gi, "").trim();
+  const isBareContinuation = /^(?:please\s+)?(?:retry|continue|proceed|resume|go ahead|try again|yes|ok|tiếp tục)\s*[.!?]*$/iu.test(text);
+  if (!text || isBareContinuation
     || /^(?:<(?:system-notice|system-reminder|task-result|irc)\b|\[Wait interrupted|\[automated)/i.test(text)) return undefined;
   return text;
 }
@@ -124,8 +132,13 @@ export function validateProjectToolInvocationJoin(branch: HostBranch, invocation
   if (requireSettled && (calls !== 1 || results !== 1)) return false;
   if (calls === 0) return true;
   const actual = findProjectToolCall(branch, invocation.callId, invocation.toolName);
-  return actual !== undefined && canonicalDigest(actual.params) === invocation.inputDigest
-    && (results === 0 || resultTool === actual.transportToolName);
+  if (!actual || results !== 0 && resultTool !== actual.transportToolName) return false;
+  if (canonicalDigest(actual.params) === invocation.inputDigest) return true;
+  // The host may strip the display-only intent before schema-validated execute.
+  // Ignore only that known metadata field; every authority-bearing argument stays exact.
+  if (typeof actual.params.i !== "string") return false;
+  const { i: _intent, ...executionParams } = actual.params;
+  return canonicalDigest(executionParams) === invocation.inputDigest;
 }
 
 /** Cache commitment over all contract-relevant host data, excluding assistant private/text blocks. */

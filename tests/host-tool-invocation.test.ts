@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createHostToolInvocationRuntime, HOST_TOOL_INVOCATION_ENTRY } from "../src/host-tool-invocation";
-import { readHostBranch } from "../src/host-history";
+import { readHostBranch, validateProjectToolInvocationJoin } from "../src/host-history";
 import type { HostHistoryEntry } from "../src/host-history";
 
 function fixture() {
@@ -13,6 +13,22 @@ function fixture() {
 }
 
 describe("execute-scoped source witnesses", () => {
+  test("joins schema-stripped intent but rejects changed authority-bearing arguments", async () => {
+    const f = fixture();
+    const wire = { i: "Binding current task", task: "A", phase: "P" };
+    f.entries.push({ id: "actual-assistant", type: "message", message: { role: "assistant", content: [
+      { type: "toolCall", id: "call", name: "typesafe_bind_task", arguments: wire },
+    ] } });
+    await f.runtime.run(f.context, "typesafe_bind_task", "call", { task: "A", phase: "P" }, async () => {
+      const witness = f.runtime.current(f.context)!;
+      expect(validateProjectToolInvocationJoin(readHostBranch(f.context)!, witness)).toBe(true);
+      wire.task = "B";
+      expect(validateProjectToolInvocationJoin(readHostBranch(f.context)!, witness)).toBe(false);
+      wire.task = "A";
+      wire.phase = "Q";
+      expect(validateProjectToolInvocationJoin(readHostBranch(f.context)!, witness)).toBe(false);
+    });
+  });
   test("works before a current assistant row publishes, stores no raw public/private payload and binds actual assigned journal ID", async () => {
     const f = fixture();
     await f.runtime.run(f.context, "typesafe_bind_task", "actual-call", { task: "public task", privateMarker: "NEVER_JOURNAL_THIS" }, async () => {

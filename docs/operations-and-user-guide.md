@@ -1,129 +1,204 @@
-# Developer & Operations Manual
+# Tài liệu Hướng dẫn Sử dụng & Vận hành Toàn diện (`operations-and-user-guide.md`)
 
-## 1. Developer Onboarding & Local Setup
-
-### 1.1 Prerequisites
-- **Runtime:** [Bun](https://bun.sh) ($\ge 1.0$)
-- **Node.js:** ($\ge 18$) (for baseline sync utility)
-- **Git:** Git CLI configured and accessible via PATH
-
-### 1.2 Installation
-Clone the repository and install dev dependencies:
-```bash
-git clone https://github.com/thanhnt-sm/omp_extension.git
-cd omp_extension
-bun install
-```
-
-### 1.3 Running Tests
-Run the repository suite from a clean, identified checkout:
-```bash
-bun test
-```
-A result is meaningful only with its commit/worktree revision, operating system and Bun version. Passing local tests do not establish live model-quality, host UI, deployment, or loaded-runtime behavior.
+Tài liệu hướng dẫn chi tiết từ cài đặt, cấu hình, sử dụng 16 công cụ `typesafe_*`, quy trình xác thực theo giai đoạn (Staged Verification Workflow), đến vận hành tự động **One-Click** và xử lý sự cố cho `omp_extension`.
 
 ---
 
-## 2. Linking Extension to OMP
+## 1. Tổng quan Luồng Vận hành Người dùng & Agent (End-to-End User & Agent Journey)
 
-The standard linking pattern uses a thin TypeScript loader in the OMP extensions directory:
+```mermaid
+flowchart LR
+    subgraph Setup["1. CÀI ĐẶT & ĐỒNG BỘ (OPERATOR)"]
+        S1["Cấu hình TYPESAFE_API_KEY\n& ~/.omp/agent/typesafe.json"]
+        S2["Nhấp đúp tools\\oneclick-omp.bat\n(Đồng bộ & Kiểm chứng 6 tầng)"]
+        S3["Khởi động phiên OMP\n(Xác nhận runtime-origin & ONLINE)"]
+        S1 --> S2 --> S3
+    end
 
-**Location:** `C:\Users\<user>\.omp\agent\extensions\typesafe-planner.ts` (or `~/.omp/agent/extensions/typesafe-planner.ts` on Linux/macOS)
+    subgraph Execution["2. THỰC THI & KIỂM CHỨNG TASK (AGENT TRONG OMP)"]
+        E1["1. Khởi tạo todo\n(todo init / start)"]
+        E2["2. Ràng buộc hợp đồng\n(typesafe_bind_task)"]
+        E3["3. Code + Test & Thu thập bằng chứng\n(typesafe_collect_evidence)"]
+        E4["4. Đánh giá Gate 1 + Gate 2 (M)\n(typesafe_review_task)"]
+        E5["5. Thẩm định độc lập Advisor\n(typesafe_prepare_advisor -> task -> typesafe_review_task)"]
+        E6["6. Chốt hoàn thành\n(todo done — 0ms preflight)"]
+        E1 --> E2 --> E3 --> E4 --> E5 --> E6
+    end
+
+    subgraph Recovery["3. XỬ LÝ NGOẠI LỆ & PHỤC HỒI"]
+        R1["Nếu REJECTED:\nChẩn đoán Advisor -> Sửa code -> Thu thập lại bằng chứng"]
+        R2["Nếu BLOCK / DROP / RM:\ntypesafe_prepare_todo_mutation\n+ Xác nhận UI Con người"]
+    end
+
+    Setup --> Execution
+    E4 -.->|"Từ chối ngữ nghĩa"| R1
+    R1 -.->|"Bằng chứng mới"| E3
+    E2 -.->|"Thay đổi phạm vi / Chờ bên ngoài"| R2
+```
+
+---
+
+## 2. Yêu cầu Hệ thống & Cài đặt Ban đầu
+
+### 2.1 Yêu cầu Môi trường (Prerequisites)
+
+| Thành phần | Phiên bản yêu cầu | Mục đích sử dụng | Lệnh kiểm tra |
+|---|---|---|---|
+| **Bun Runtime** | $\ge 1.0$ (Khuyến nghị $\ge 1.3$) | Chạy extension TypeScript, test runner (`bun test`), và paired benchmark | `bun --version` |
+| **Node.js** | $\ge 18.0$ | Thực thi giao dịch đồng bộ `tools/sync-baseline.cjs` và `verify-omp-global.cjs` | `node --version` |
+| **Git CLI** | $\ge 2.30$ | Thu thập `git status`, `git diff`, chụp snapshot cây thư mục làm việc | `git --version` |
+| **PowerShell** | $\ge 5.1$ (Windows STA) | Chạy bộ công cụ tự động `promote-omp-global.ps1` và `oneclick-omp.ps1` | `$PSVersionTable.PSVersion` |
+| **`TYPESAFE_API_KEY`** | API Key hợp lệ từ TypeSafe AI | Xác thực với TypeSafe | Chỉ kiểm tra biến đã được đặt; không in giá trị khóa |
+
+### 2.2 Cấu hình kích hoạt extension của OMP (OMP-Owned Activation)
+
+Resolver `src/typesafe-enabled-resolver.cjs` chỉ đọc `~/.omp/agent/typesafe.json` thuộc profile mặc định. Không đọc/import `.claude/.ck.json`, không tự bật từ API key, không dùng cấu hình trong repo để cấp consent. Đây là cấu hình activation riêng của extension, không phải model role/auth của native judge. Chưa hỗ trợ lựa chọn profile extension qua `PI_CODING_AGENT_DIR`.
+
+```json
+{
+  "typesafe": {
+    "enabled": true,
+    "projects": ["D:/100.Software/Github/omp_extension"],
+    "excludeProjects": []
+  }
+}
+```
+- `projects` nên liệt kê đường dẫn dự án được phép. `"*"` cho phép mọi dự án; chỉ dùng khi người vận hành thực sự chọn phạm vi đó.
+- `"excludeProjects"`: Danh sách đường dẫn tuyệt đối cần loại trừ (hỗ trợ kiểm tra hai chiều cả thư mục cha/con và Git worktree).
+
+### 2.3 Liên kết Proxy với OMP (Golden Invariant)
+
+File `C:\Users\<user>\.omp\agent\extensions\typesafe-planner.ts` **bắt buộc** chỉ chứa đúng 1 dòng trampoline trỏ về thư mục Active Deployment Target (`C:/Users/<user>/Projects/omp_extension`):
 
 ```typescript
-export { default } from "D:/100.Software/Github/omp_extension/typesafe-planner.ts";
+export { default } from "C:/Users/thant/Projects/omp_extension/typesafe-planner.ts";
 ```
+> **Tuyệt đối không sửa trực tiếp file này và không trỏ thẳng vào thư mục phát triển `D:/100.Software/...`.** Mọi thay đổi phát triển tại `D:/100.Software/Github/omp_extension` được đẩy sang `C:/Users/thant/Projects/omp_extension` thông qua công cụ One-Click.
 
 ---
 
-## 3. Operational Baseline Synchronization (`sync-baseline`)
+## 3. Hướng dẫn Sử dụng Bộ Công cụ One-Click (`tools/`)
 
-For the guided Windows path, double-click:
+### 3.1 Ba File `.bat` Chạy Ngay Bằng Nhấp Đúp Chuột
 
-```cmd
-tools\sync-baseline.bat
-```
+1. **`tools\oneclick-omp.bat`** *(Khuyên dùng hàng ngày)*:
+   - Tự động kiểm tra xem OMP Global đã khớp 100% với Workspace chưa.
+   - Nếu **đã khớp trên đĩa**: chạy verifier lần nữa và giữ nguyên mã thoát của hậu kiểm; lỗi không được biến thành thành công.
+   - Nếu **có cập nhật mới ở Workspace**: Chạy tiền kiểm (Preflight), tạo backup, đồng bộ hai gốc `target` và `global_omp_agents`, chạy kiểm thử cô lập và hậu kiểm SHA-256. Manifest phiên bản 1 được chuyển sang phiên bản 2 mà không truy cập tệp Claude legacy.
+2. **`tools\verify-omp-global.bat`** *(Kiểm tra cài đặt trên đĩa — Disk Verification)*:
+   - Mặc định ngoại tuyến dù có `TYPESAFE_API_KEY`; thêm `--live`/`--require-live` để gọi HTTP. Không chứng minh native judge hoặc mã đã nạp.
+3. **`tools\sync-baseline.bat`** *(Đồng bộ có hướng dẫn sửa Proxy)*:
+   - Điều phối `promote-omp-global.ps1`; nếu proxy sai hoặc thiếu, dừng và báo người sở hữu cài đặt. Không sửa, tạo lại hoặc tự phục hồi proxy bất biến.
 
-It runs `tools/promote-omp-global.ps1`, which validates the immutable loader, opens it for an external operator to repair when required, then runs the read-only preflight and managed transaction. The helper never writes the loader proxy itself.
-
-The underlying deployment entry point remains:
+### 3.2 Các Lệnh Tiện ích qua `bun` / `npm`
 
 ```bash
-node tools/sync-baseline.cjs
+# Kiểm tra nhanh cài đặt & đối chiếu 468+ files SHA-256
+bun run verify:global
+
+# Kiểm tra cài đặt + Gửi request thật tới TypeSafe System One (jev-latest)
+bun run verify:live
+
+# Chạy thử kế hoạch đồng bộ (Dry-Run, không ghi đĩa)
+bun run sync:dry-run
+
+# Chạy đồng bộ giao dịch đầy đủ từ Workspace sang OMP Global
+bun run sync:global
+
+# Chạy quy trình thông minh One-Click (Auto Verify -> Sync if needed -> Verify)
+bun run oneclick
 ```
 
-Use `node tools/sync-baseline.cjs --dry-run` first whenever the target's managed state is uncertain. A dry run performs the complete read-only preflight and reports managed actions/conflicts, but **does not** create a lock, backup, stage, journal, or modify any path.
-
-For a one-time migration from an existing unmanifested runtime, an operator may explicitly use `--bootstrap` (or `promote-omp-global.ps1 -Bootstrap`). Bootstrap is rejected after a manifest exists, snapshots every managed preimage, adopts only the managed allowlist, and still runs target verification. It is not a general force mode.
-
-### 3.1 Managed transaction boundaries
-
-- The deployment manifest is `<target>/.sync-manifest.json`. It records SHA-256 hashes only for files managed by the transaction.
-- Managed destinations are the target inventory plus the exact allowlisted resolver, TypeSafe MCP files, and `advisor.md`/`ck-advisor.md` agent files. It never manages or deletes `.claude` configuration, skills, or the OMP extension proxy.
-- Existing byte-identical files can be recorded as managed without content mutation. Differing unowned files, or files modified since their recorded deployment hash, are conflicts and abort the run. The sole exception is the explicit one-time `--bootstrap` migration before any manifest exists.
-- A disappeared workspace file is pruned only when the destination remains unchanged from its prior managed hash. Unknown target files are left intact.
-- The OMP extension pointer remains immutable: preflight requires exactly the expected single export statement and the transaction never rewrites it.
-
-### 3.2 Safety, recovery, and verification
-
-- A sibling exclusive lock is taken after preflight; planning and ownership checks are repeated while it is held. A pre-existing lock is never stolen—perform operator recovery before retrying.
-- Staging and retained backups/journals are outside all mutable roots. The journal records intent and verified preimages before each changed or pruned path; a failed apply, hash check, manifest write, or verification invokes reverse rollback only for transaction-touched paths.
-- A completed run reports either `DEPLOYED_VERIFIED` or `DEPLOYED_UNVERIFIED` (`OMP_SKIP_VERIFY_TESTS=1`). The latter is not promotion evidence. `RECOVERED` means rollback completed after a failure; `RECOVERY_INCOMPLETE` means an external change or rollback failure requires operator intervention using the retained backup/journal.
-- Normal deployment runs `bun test` in the isolated target after all writes and manifest verification. Do not use fault injection outside isolated fixtures; `OMP_FAULT_INJECT` exists only to test transaction recovery boundaries.
-
-### 3.3 Restart requirement
-
-After a verified deployment, stop and start the OMP host/session. Bun/Node cache extension modules in memory at host launch, so a successful filesystem transaction does not update an already-running OMP process.
-
-### 3.4 P6 promotion audit status
-
-The audited sync invocation was a read-only dry run. Immutable-pointer validation blocked it before any managed deployment transaction began. Consequently, it created no lock, staging area, backup, journal, manifest change, proxy change, or deployed files, and it left no transaction to roll forward, roll back, or recover.
-
-This is an external operator-owned blocker, not a successful deployment or promotion. The audit did not modify the proxy, deploy content, or restart OMP. Workspace test results do not substitute for deployment verification: P6 remains pending until the operator corrects the immutable pointer, a supervised managed deployment succeeds, OMP is restarted, and a live native session supplies the required runtime-origin and lifecycle proof.
----
-## 4. Operational Readiness & Session Management
-
-### 4.1 Khởi động lại session OMP (Nếu đang mở OMP CLI khác)
-- **Lý do kỹ thuật:** Vì Node.js và Bun thực hiện in-memory caching cho các modules/extensions khi khởi chạy process. 
-- **Thao tác:** Sau khi chạy `sync-baseline.bat`, bạn **phải tắt và mở lại terminal/session của OMP** để runtime nạp phiên bản code mới nhất vừa đồng bộ.
-
-### 4.2 Configuring the runtime environment
-Set `TYPESAFE_API_KEY` before starting the OMP process when remote TypeSafe judgments are required. A new key can clear credential cooldown when the extension actually observes that new value; changing a parent shell does not alter the environment of an already-running process. Restart the host after changing its inherited environment.
-
-For infrastructure source mutations, use only the authenticated host-owned, exact-scope grant workflow described above. No environment override or tool payload substitutes for that grant.
-
-**`TYPESAFE_PREDICT_MODEL`** may override the dedicated analysis model for the multi-persona predict loop (canonical default: `jev-latest`). Set it before starting the host.
-
 ---
 
-## 5. Emergency Troubleshooting Runbook
+## 4. Hướng dẫn Quy trình Xác thực Theo Giai đoạn (Staged Task Verification Workflow)
 
-### 5.1 Rejected destructive todo operation
-- **Cause:** A `drop`, `rm`, or replacing `init` did not receive a verified `AUTO_APPROVE`, or its native result did not apply the exact staged target effect.
-- **Recovery:** Do not pass `authorized`, `isHuman`, or `resetFailures` in the todo payload. `AUTO_REJECT` and `RECONCILE_PLAN` remain rejected. For `HUMAN_ESCALATION`, use the trusted host UI for fresh exact-target confirmation; no UI, denial, throw, stale state, or mismatched result does not mutate or clear debt.
+Trong kiến trúc hiện hành của `omp_extension`, công cụ `todo(op="done")` gốc chỉ thực hiện kiểm tra xác nhận đã chuẩn bị sẵn (preflight $<5\text{ms}$, không gọi HTTP, không chạy test, không sinh subagent). Để hoàn thành một task hợp lệ, Agent thực hiện tuần tự **5 bước chuẩn**:
 
-### 5.2 Rejected task needs to be blocked
-- **Cause:** Gate 1 or Gate 2 rejected `done`; failure/remediation debt remains attached to the task.
-- **Recovery:** Use the host UI to confirm blocking the exact task/phase target set. `block` records an obstacle but preserves the unfinished task and its debt. Later `unblock` or `start` does not authorize `done`; provide task-scoped evidence and obtain a valid matching native completion result.
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Agent as OMP Coding Agent
+    participant Bind as typesafe_bind_task
+    participant Ev as typesafe_collect_evidence
+    participant Rev as typesafe_review_task
+    participant Adv as typesafe_prepare_advisor + native task
+    participant Todo as native todo (op: "done")
 
-### 5.3 Credential rotation and recovery
-- Set the replacement `TYPESAFE_API_KEY` in the environment inherited by the OMP process and restart OMP so it observes the new value.
-- Credential cooldown is keyed to the observed key; transport recovery does not itself approve or reject a task. Re-run the same operation only after the service/key status is refreshed and the evidence remains current.
+    Agent->>Bind: 1. typesafe_bind_task({ task, phase, planPath })
+    Bind-->>Agent: BOUND (Chụp baseline snapshot trước khi sửa code)
 
-### 5.4 Actionable remediation guidance on blocked or rejected tasks
-- **Overview:** A rejected `todo done`/`todo drop` records its actual outcome category and concrete next action. The planner injects only deterministic, machine-actionable guidance tied to the rejected operation.
-  - **Deterministic micro-check failure:** Names the failed test command/exit status and requires a real clean run; deleting or weakening assertions is not a fix.
-  - **Semantic or evidence shortfall:** Names the uncovered criterion or missing proof and requires actual completion/evidence, not a prose rewrite or scope reduction.
-  - **Lifecycle authority:** The exact-target lifecycle change needs the trusted host surface; retrying with model-supplied authorization flags is invalid.
-  - **Service unavailable:** Distinguishes transport outage from an implementation defect and does not create rejection debt or license source edits.
-  - **Prompt injection defense:** Dynamic entities are escaped before remediation text enters the steering stream.
+    Note over Agent: Thực hiện sửa code & chạy kiểm thử cục bộ
 
-## 6. Source-Only Boundary Changes (2026-10-22)
+    Agent->>Ev: 2. typesafe_collect_evidence({ task, phase, commandId: "workspace-tests" })
+    Ev-->>Agent: EVIDENCE_COLLECTED (Gói bằng chứng <= 32KB + Receipt chạy test)
 
-These were verified against the workspace source only; none is a live host or deployment claim.
+    Agent->>Rev: 3. typesafe_review_task({ task, phase })
+    Rev-->>Agent: REVIEW_REQUIRED (Cổng 1 Đạt + Cổng 2 Biểu điểm M Đạt — chờ Cố vấn Độc lập)
 
-- **Process-tree cancellation:** POSIX verification commands are spawned as an owned process group and timeout/abort terminates the group. Windows tree termination remains the `taskkill /t /f` branch. POSIX behavior was not exercised in this Windows session.
-- **Advisor public envelope:** `authorizedFiles` and `evidenceRefs` are redacted as part of the final prompt. If any reference would change under redaction (for example a path containing the active credential), preparation fails with `advisor_public_reference_redaction_required` instead of publishing or silently rewriting the exact-SHA binding.
-- **Path privacy matching:** private path segments use a prototype-free lookup, so ordinary names such as `constructor` or `__proto__` are not falsely classified as private while `.env`, `.ssh`, `.claude` and session files still are.
-- **Lifecycle provenance:** the planner currently does not wire the lower-level automatic verified-drop callback, so this path is not enabled through the registered planner. If connected later, host-owned policy provenance must remain distinct from human confirmation and be verified end to end before enabling it.
-- **Limits:** real host UI, provider reasoning, deployed-runtime origin and Windows process-tree behavior need their own authorized evidence. Do not infer activation from workspace source changes.
+    Agent->>Adv: 4. typesafe_prepare_advisor({ task, phase })
+    Adv-->>Agent: Trả về tham số native task
+    Agent->>Adv: Gọi native task(...) thực thi Advisor độc lập (Read-Only)
+    Adv-->>Agent: Ghi nhận AdvisorReceipt hợp lệ trong lịch sử nhánh
+
+    Agent->>Rev: 5. typesafe_review_task({ task, phase }) (Ghép kết quả M và biên nhận Cố vấn)
+    Rev-->>Agent: APPROVED_PENDING_COMMIT (Đã tạo stage xác thực)
+
+    Agent->>Todo: 6. todo({ op: "done", task, phase })
+    Todo-->>Agent: COMPLETED (Tiền kiểm khớp stage và cam kết hoàn tất)
+```
+
+### 4.1 Bảng Tra cứu 16 Công cụ `typesafe_*` Đăng ký trong OMP
+
+| Nhóm | Tên Công cụ | Tham số chính | Chức năng & Kết quả trả về |
+|---|---|---|---|
+| **1. Ràng buộc & Bằng chứng** | `typesafe_bind_task` | `{ task, phase?, planPath?, phaseHeading?, originalUserEntryId? }` | Khóa mục tiêu `todo` hiện tại với yêu cầu gốc của người dùng và chụp ảnh nền (baseline snapshot) của workspace. |
+| | `typesafe_collect_evidence` | `{ task, phase?, commandId?, artifactPaths?, selections? }` | Thu thập diff, file mã nguồn, artifact ($\le 4,940\text{ B}$), và chạy lệnh kiểm thử được duyệt (`workspace-tests` $\rightarrow$ `bun test`) trong môi trường cô lập. |
+| | `typesafe_retrieve_evidence` | `{ task, phase?, path, fullFileDigest, spans? }` | Đọc chính xác các dòng mã nguồn từ bộ nhớ đệm snapshot (giới hạn $\le 16\text{ KB}$ sau khi lọc secret). |
+| **2. Kiểm duyệt & Advisor** | `typesafe_review_task` | `{ task, phase? }` | Chạy Gate 1 + Gate 2 (`M` rubric) và ghép kết quả với biên nhận `AdvisorReceipt`. Trả về `REVIEW_REQUIRED`, `APPROVED_PENDING_COMMIT`, `EVIDENCE_REQUIRED`, `REJECTED`, hoặc `UNAVAILABLE`. |
+| | `typesafe_prepare_advisor` | `{ mode: "task_review" \| "parent_review" \| "consultation", task?, phase?, question? }` | Chuẩn bị gói ngữ cảnh công khai đã lọc secret và trả về tham số gọi subagent `task` cho Advisor độc lập (chỉ đọc). |
+| | `typesafe_advisor` | `{ requestId, assessment }` | Công cụ nội bộ dành riêng cho subagent Advisor nộp kết quả thẩm định có cấu trúc. |
+| **3. Quản lý Vòng đời & Phục hồi** | `typesafe_prepare_todo_mutation` | `{ input, handoff? }` | Chuẩn bị quyền thực thi cho `block`, `drop`, `rm`, hoặc `init` thay thế ngoài luồng preflight. Tự động xuất báo cáo phục hồi khi `block`. |
+| | `typesafe_resolve_historical_debt` | `{ incarnationId, reason }` | Yêu cầu xác nhận từ người dùng trên UI để đối soát nợ lịch sử của các task cũ (`HUMAN_RECONCILED_NO_NATIVE_APPROVAL`). |
+| | `typesafe_recovery_report` | `{ task, phase? }` | Xuất file báo cáo phục hồi bền vững (`# TypeSafe recovery handoff`) chứa mục tiêu, người sở hữu, điều kiện gỡ chặn và lệnh tiếp tục. |
+| **4. Đánh giá Chuyên sâu & Tranh biện** | `typesafe_judge` | `{ state, questions, model? }` | Gửi truy vấn xác suất `noul`, phân loại `choice`, hoặc thang điểm `score` ($0\dots 3$) trực tiếp tới TypeSafe System One (`jev-latest`). |
+| | `typesafe_rerank` | `{ state, candidates, criteria, model? }` | Xếp hạng danh sách phương án ứng viên theo tiêu chí với điểm số và độ tự tin chuẩn hóa. |
+| | `typesafe_evaluate_multi` | `{ state, labels, instructions, model? }` | Đánh giá đồng thời nhiều nhãn xác suất (`noul`) trong một lượt gọi duy nhất. |
+| | `typesafe_elevate_plan` | `{ planTitle, planContent, userPrompt? }` | Kiểm tra tính cô lập `.claude`, cấu trúc kế hoạch và chấm điểm chất lượng kế hoạch trước khi thực thi. |
+| | `typesafe_verify_completion` | `{ taskId, criteria, planPath?, testCommand? }` | Công cụ kiểm chứng độc lập Gate 1 + Gate 2 trả về khối hướng dẫn `<remediation>` XML. |
+| | `typesafe_expert_review` | `{ role: "scope_arbiter" \| "drift_guard" \| "risk_security_triage", ... }` | Đánh giá chuyên sâu theo 3 vai trò chuyên gia: giữ phạm vi, chống trôi dạt kiến trúc, và phân loại rủi ro bảo mật. |
+| **5. Thực nghiệm Đối chứng** | `typesafe_eval_host` | `{ action: "identity" \| "authorize" \| "prepare" \| "collect", ... }` | Cầu nối chạy thực nghiệm đối chứng `M` (Monolithic) vs `H` (Atomic Shadow) có chữ ký Ed25519. |
+
+---
+
+## 5. Cấu hình Biến Môi trường (Environment Variables Reference)
+
+| Biến môi trường | Giá trị mặc định | Phạm vi tác động | Mô tả chi tiết |
+|---|---|---|---|
+| `TYPESAFE_API_KEY` | *(Bắt buộc)* | Toàn cục | Khóa xác thực Bearer gửi tới `https://api.typesafe.ai/v1/systemone`. |
+| `TYPESAFE_DEFAULT_MODEL` | `jev-latest` | Judge / Gate 2 | Model chuẩn của TypeSafe System One (hiện phân giải về `jev-1.14.0`). |
+| `TYPESAFE_PREDICT_MODEL` | `jev-latest` | Multi-Persona Debate | Model dùng cho vòng tranh biện 5 góc nhìn (`ck:predict`). |
+| `TYPESAFE_AUTO_APPROVAL_THRESHOLD` | `0.80` | `verification-gate.ts` | Ngưỡng xác suất `meets_criteria` tối thiểu để tự động phê duyệt ở chế độ standalone. |
+| `TYPESAFE_ALLOW_MODIFICATION` | *(Không bật)* | Integrity Shield | Đặt `=1` khi người vận hành cần cho phép chỉnh sửa các file hạ tầng được bảo vệ. |
+| `OMP_WORKSPACE_DIR` | Thư mục repo gốc | `sync-baseline.cjs` | Ghi đè đường dẫn workspace nguồn khi chạy kiểm thử hoặc đồng bộ tùy chỉnh. |
+| `OMP_TARGET_DIR` | `C:/Users/<user>/Projects/omp_extension` | `sync-baseline.cjs` | Ghi đè đường dẫn thư mục đích triển khai. |
+| `OMP_EXTENSION_POINTER` | `~/.omp/agent/extensions/typesafe-planner.ts` | `sync-baseline.cjs` | Đường dẫn tới file proxy trampoline bất biến của OMP. |
+
+---
+
+## 6. Sổ tay Xử lý Tình huống Thực tế (Operational Runbook)
+
+### 6.1 Khi Task bị Từ chối Ngữ nghĩa (`REJECTED` ở Gate 2)
+1. **Tuyệt đối không gọi lại `typesafe_review_task` hoặc `todo done` với cùng bằng chứng cũ** (Same-evidence retry ratchet sẽ chặn ngay mà không tốn cuộc gọi mạng).
+2. Chạy `typesafe_prepare_advisor` để lấy chẩn đoán độc lập từ Advisor (chỉ đọc).
+3. Sửa mã nguồn tại agent cha theo đúng các mục khuyến nghị của Advisor.
+4. Chạy lại test cục bộ và gọi `typesafe_collect_evidence` để tạo gói bằng chứng có mã băm (`evaluatedTreeDigest`) mới, sau đó mới gọi lại `typesafe_review_task`.
+
+### 6.2 Khi Cần Tạm dừng Task Do Chờ Tác nhân Bên ngoài (`block`)
+1. Chuẩn bị báo cáo bàn giao (`handoff`) gồm đầy đủ: `goal` (mục tiêu gốc), `owner` (người phụ trách), `nextAction` (hành động tiếp theo), `unblockCondition` (điều kiện mở khóa quan sát được), và `resumeCommand` (lệnh chạy lại).
+2. Gọi `typesafe_prepare_todo_mutation({ input: { op: "block", task, reason }, handoff })`.
+3. Xác nhận trên hộp thoại UI của Host (nếu được yêu cầu), sau đó gọi lệnh `todo({ op: "block", task, reason })`.
+
+### 6.3 Khi Thay đổi hoặc Xoay vòng `TYPESAFE_API_KEY`
+1. Nếu key cũ bị lỗi `401`/`403`, `AuthManager` và `checkCredentialCooldown` sẽ đưa hash của key cũ vào trạng thái khóa/cooldown để tránh spam API.
+2. Cập nhật `TYPESAFE_API_KEY` mới vào môi trường hệ thống và **khởi động lại phiên OMP**. Khi nhận thấy mã băm SHA-256 (16 ký tự đầu) của key mới khác với key cũ, hệ thống tự động mở khóa trạng thái xác thực.

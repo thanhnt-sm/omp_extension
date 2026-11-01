@@ -6,7 +6,8 @@ import { nativeAdvisorPrompt } from "./advisor-native-prompt";
 import type { NativeMutationDelegationRuntime } from "./advisor-mutation-delegation";
 
 type InitializeHost = (context: AdvisorHostExecuteContext) => Promise<void>;
-export function installAdvisorHostHooks(api: AdvisorHostAPI, services: AdvisorHostServices, initialize: InitializeHost, mutation?: NativeMutationDelegationRuntime): void {
+export function installAdvisorHostHooks(api: AdvisorHostAPI, services: AdvisorHostServices, initialize: InitializeHost, mutation?: NativeMutationDelegationRuntime,
+  isProjectExcluded: (context: AdvisorHostExecuteContext) => boolean = () => false): void {
   const protectedChild = (context: AdvisorHostExecuteContext) => context?.agent?.kind === "sub" && advisorAgent(context.agent.name);
   const guard = async (raw: AdvisorHostExecuteContext) => {
     const route = routeChild(api, raw);
@@ -16,7 +17,14 @@ export function installAdvisorHostHooks(api: AdvisorHostAPI, services: AdvisorHo
     return { route, context: { ...hostContext(raw, route.parentEpoch), sessionEpoch: route.parentEpoch } };
   };
   const subscribe = (name: string, handler: (event: unknown, context: AdvisorHostExecuteContext) => unknown | Promise<unknown>) => {
-    api.on(name, handler); noteAdvisorHook(api, name);
+    api.on(name, (event, context) => {
+      // Explicit exclusion disables only TypeSafe mediation. Native wrapper
+      // registration/lifecycle still runs so task/read/write/Advisor remain
+      // ordinary host operations; child mediation is intentionally untouched
+      // by this extension in excluded sessions.
+      if (isProjectExcluded(context) && !["session_start", "session_branch", "session_tree", "session_switch"].includes(name)) return undefined;
+      return handler(event, context);
+    }); noteAdvisorHook(api, name);
   };
   subscribe("session_start", async (_event, context) => {
     await initialize(context);
@@ -31,9 +39,11 @@ export function installAdvisorHostHooks(api: AdvisorHostAPI, services: AdvisorHo
     if (!frame || frame.scope.context.sessionManager !== context.sessionManager || frame.scope.sessionId !== context.sessionManager.getSessionId()
       || !frame.scope.active || frame.scope.api !== api || advisorHub(api).roots.get(context.sessionManager) !== frame.scope
       || frame.toolCallId !== frame.request.parentToolCallId || frame.scope.epoch !== frame.request.sessionEpoch || event.invocationKind !== "task"
-      || event.spawnKey !== `${frame.toolCallId}:${frame.request.itemIndex}`
+      || typeof event.spawnKey !== "string" || !event.spawnKey.trim()
+      || frame.allocatedName !== undefined && event.spawnKey !== frame.allocatedName
       || event.agent !== frame.request.agent || frame.spawnAuthorized || !(await frame.scope.services.isCurrent(frame.request, frame.scope.context))) return { block: true, reason: "advisor_approved_actual_native_task_dispatch_required" };
     frame.spawnAuthorized = true;
+    frame.spawnKey = event.spawnKey;
     return undefined;
   });
   subscribe("before_agent_start", async (event, raw) => {

@@ -167,20 +167,22 @@ Therefore phases 1–7 are **verify-then-extend**, not create-from-scratch:
 |---|---------|----------|-------------|------------|
 | 1 | Plan materially stale; all "Create" targets exist and are wired | Critical | Accept | plan.md Re-Scope; Phases 1–7 |
 | 2 | Stale `file:line` anchors presented as current | Critical | Accept | Phases 2, 3, 4, 6 |
-| 3 | `sync-baseline` lock derived from stale `initialPlan` | Critical | Accept | Phase 4 |
-| 4 | EGC protected-config scan only inside writer-tool branch | High | Accept | Phase 3 |
-| 5 | `uncontracted:"allow"` permits unfalsifiable completion | High | Accept | Phase 3 |
+| 3 | `sync-baseline` lock derived from stale `initialPlan` | Critical | Accept | Phase 4 (2026-10-26: Fixed by TYPESAFE_REVIEW_FIX_JEV_TEST_PLAN.md Phase 2, commit 0580327) |
+| 4 | EGC protected-config scan only inside writer-tool branch | High | Accept | Phase 3 (2026-10-26: Fixed by TYPESAFE_REVIEW_FIX_JEV_TEST_PLAN.md Phase 3, commit 0580327) |
+| 5 | `uncontracted:"allow"` permits unfalsifiable completion | High | Accept | Phase 3 (2026-10-26: Fixed by TYPESAFE_REVIEW_FIX_JEV_TEST_PLAN.md Phase 3, commit 0580327) |
 | 6 | Phase-9 consumes Phase-8 strategy decision with `dependencies: [7]` | High | Accept | Phases 8, 9 |
 | 7 | Interface consumers under-enumerated | High | Accept | Phases 4, 6 |
 | 8 | Phase-5 re-migrates an already-consolidated debate path | High | Accept | Phase 5 |
-| 9 | Unbounded drain of abort-signalled operation in `advisor-native-budget.ts` | High | Accept | Phase 6 |
-| 10 | Windows cancellation kills `cmd.exe` wrapper, not the test tree | High | Accept | Phase 4 |
+| 9 | Unbounded drain of abort-signalled operation in `advisor-native-budget.ts` | High | Accept | Phase 6 (2026-10-26: Fixed by TYPESAFE_REVIEW_FIX_JEV_TEST_PLAN.md Phase 4, commit 0580327) |
+| 10 | Windows cancellation kills `cmd.exe` wrapper, not the test tree | High | Accept | Phase 4 (2026-10-26: Fixed by TYPESAFE_REVIEW_FIX_JEV_TEST_PLAN.md Phase 2, commit 0580327) |
 | 11 | Advisor read scope relies on request-self-attested digest | High | Accept (Medium) | Phase 7 |
-| 12 | `advisorApplicabilityDigest` strips `dispatchId` | Medium | Accept | Phase 7 |
-| 13 | Child-env secret screen covers only the active key literal | Medium | Accept | Phase 4 |
-| 14 | Oversized required file maps to UNAVAILABLE, not EVIDENCE_REQUIRED | Medium | Accept | Phases 2, 3 |
-| 15 | `[id]`-shape-only native target identity | Medium | Accept | Phase 3 |
+| 12 | `advisorApplicabilityDigest` strips `dispatchId` | Medium | Accept | Phase 7 (2026-10-26: Fixed by TYPESAFE_REVIEW_FIX_JEV_TEST_PLAN.md Phase 4, commit 0580327) |
+| 13 | Child-env secret screen covers only the active key literal | Medium | Accept | Phase 4 (2026-10-26: Fixed by TYPESAFE_REVIEW_FIX_JEV_TEST_PLAN.md Phase 4, commit 0580327) |
+| 14 | Oversized required file maps to UNAVAILABLE, not EVIDENCE_REQUIRED | Medium | Accept | Phases 2, 3 (2026-10-26: Fixed by TYPESAFE_REVIEW_FIX_JEV_TEST_PLAN.md Phase 3, commit 0580327) |
+| 15 | `[id]`-shape-only native target identity | Medium | Accept | Phase 3 (2026-10-26: Fixed by TYPESAFE_REVIEW_FIX_JEV_TEST_PLAN.md Phase 3, commit 0580327) |
 | — | "250 ms per-attempt fetch timeout kills live JEV" | Critical | Reject | — |
 
 **Rejected rationale:** `timeoutMs: Math.min(250, remaining)` at `src/typesafe-api-client.cjs:549` is passed only into `cancelBodyBounded`; the real fetch timeout is `Math.min(timeoutMs, remaining)` in `withTimeout` at `:554`. No live-request abort path exists at 250 ms.
+
+**Remediation (2026-10-26):** findings #3, #4, #5, #9, #10, #12, #13, #14 and #15 are scheduled for concrete fixes in [`TYPESAFE_REVIEW_FIX_JEV_TEST_PLAN.md`](../../TYPESAFE_REVIEW_FIX_JEV_TEST_PLAN.md) (Phases 1–5). That plan narrows #15 (exact-content matching already exists at `src/egc-native.ts:33`) and resolves #12 as an invariant test, not a digest change. This plan's phases stay pending; their scopes are broader.
 

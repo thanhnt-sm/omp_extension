@@ -23,7 +23,7 @@ export interface HostScope {
 }
 export interface ChildRoute { scope: HostScope; request: AdvisorRequest; childSessionId: string; childSessionManager: object; childAgentId: string; parentEpoch: string }
 export interface HostHub { roots: Map<object, HostScope>; children: Map<string, ChildRoute> }
-export interface DispatchFrame { scope: HostScope; request: AdvisorRequest; toolCallId: string; spawnAuthorized: boolean }
+export interface DispatchFrame { scope: HostScope; request: AdvisorRequest; toolCallId: string; spawnAuthorized: boolean; spawnKey?: string; allocatedName?: string }
 export const advisorDispatchFrame = new AsyncLocalStorage<DispatchFrame>();
 const hubs = new WeakMap<object, HostHub>();
 const hookProof = new WeakMap<object, Set<string>>();
@@ -123,6 +123,8 @@ export function routeChild(api: AdvisorHostAPI, raw: AdvisorHostExecuteContext, 
   if (view.agent.kind !== "sub" || !advisorAgent(view.agent.name) || !nonempty(prompt)) return undefined;
   const frame = advisorDispatchFrame.getStore();
   if (!frame || !frame.spawnAuthorized || !frame.scope.active || frame.scope.epoch !== frame.request.sessionEpoch
+    || (frame.allocatedName ? frame.spawnKey !== frame.allocatedName || view.agent.id !== frame.allocatedName
+      : frame.spawnKey !== `${frame.toolCallId}:${frame.request.itemIndex}` && frame.spawnKey !== view.agent.id)
     || advisorHub(frame.scope.api).roots.get(frame.scope.context.sessionManager) !== frame.scope
     || frame.scope.inflight.get(frame.toolCallId)?.requestId !== frame.request.requestId || nativeAdvisorPrompt(frame.request.publicPrompt) !== prompt
     || view.agent.name !== frame.request.agent || view.agent.parentId !== frame.scope.context.agent.id) return undefined;

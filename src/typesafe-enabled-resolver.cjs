@@ -11,7 +11,7 @@
  *
  * Precedence (first match wins):
  *   1. No non-empty TYPESAFE_API_KEY in env                       -> off ('no-key')
- *   2. Global <homeDir>/.claude/.ck.json EXISTS but can't be read/
+ *   2. Global <homeDir>/.omp/agent/typesafe.json EXISTS but can't be read/
  *      parsed (bad JSON, UTF-16 content, non-object top level,
  *      after stripping a leading BOM)                              -> off ('global-config-unreadable')
  *   3. Global typesafe === false, or typesafe present but not a
@@ -87,18 +87,16 @@
  * (OMP and other tools' extra keys stay tolerated) and only produces a warning
  * line for SessionStart - never a fail-closed result.
  *
- * S4 #6 (opt-in = global allowlist only): a project's own
- * `<gitRoot>/.claude/.ck.json` is NEVER read by this resolver. Before this
- * change, a project could commit `typesafe.enabled: true` in its own
- * `.claude/.ck.json` and thereby opt EVERY clone of that repo into sending
- * data to TypeSafe - the opt-in decision must live somewhere a project
- * itself cannot control, i.e. only in the GLOBAL config. The kill switch
- * (`typesafe.enabled: false` globally) still always wins.
+ * Opt-in is global allowlist only: project-local configuration is NEVER
+ * read. A project must not be able to opt every clone into sending data to
+ * TypeSafe. Consent belongs in the user's OMP-owned activation file, separate
+ * from native modelRoles and authentication. There is no legacy config fallback
+ * or automatic import. The global kill switch still always wins.
  *
- * IMPORTANT: the global config file is read RAW (JSON.parse, never merged
- * via ck-config-utils.cjs's loadConfig() deep-merge, which exists for a
- * different, non-security-sensitive purpose). `readGlobalConfig` is exported
- * so the SessionStart diagnostics reuse this one parser.
+ * IMPORTANT: the global config is read RAW with JSON.parse, never merged with
+ * project defaults. `readGlobalConfig` remains exported for diagnostics.
+ * This resolver uses the default OMP profile only; PI_CODING_AGENT_DIR is not
+ * interpreted until native profile path semantics are explicitly validated.
  */
 
 'use strict';
@@ -157,7 +155,7 @@ function stripBOM(text) {
 }
 
 /**
- * Read the GLOBAL `.ck.json` config file, distinguishing "file does not
+ * Read the GLOBAL OMP `typesafe.json` activation file, distinguishing "file does not
  * exist" (ENOENT/ENOTDIR - unset, no effect on resolution) from "file
  * exists but could not be read/parsed" (BOM-mangled UTF-16, trailing
  * commas, non-object JSON, permission errors, etc. — must fail CLOSED per
@@ -174,7 +172,7 @@ function readGlobalConfig(configPath) {
     raw = fs.readFileSync(configPath, 'utf8');
   } catch (err) {
     // ENOENT: no such file. ENOTDIR: a path SEGMENT above it (e.g.
-    // <homeDir>/.claude itself) is a file, not a directory - both mean
+    // <homeDir>/.omp itself) is a file, not a directory - both mean
     // "there is no config here", not "unreadable". Anything else
     // (permission errors, EISDIR on configPath itself, etc.) is a genuine
     // read failure and must fail CLOSED.
@@ -418,12 +416,12 @@ function makeKeys(projectDir) {
  * matching against every candidate (see the module header). Fails closed when
  * the owner-root read was unreadable.
  */
-function excludeListMatches(entries, keys) {
+function excludeListMatches(entries, keys, unreadableMatches = true) {
   if (entries.includes(WILDCARD)) return true;
   if (entries.length === 0) return false;
 
   const { list, unreadable } = keys.candidates();
-  if (unreadable) return true;
+  if (unreadable && unreadableMatches) return true;
 
   return entries.some((entry) => {
     const forms = [foldPath(path.resolve(entry)), foldPath(realpathOrResolve(entry))];
@@ -476,17 +474,38 @@ function typeSafeConfigWarnings(config) {
     .map((key) => {
       const suggestion = /exclu/i.test(key) ? 'excludeProjects' : 'projects';
       return (
-        `TypeSafe config warning: unknown key "typesafe.${key}" in ~/.claude/.ck.json is ignored while ` +
+        `TypeSafe config warning: unknown key "typesafe.${key}" in ~/.omp/agent/typesafe.json is ignored while ` +
         `typesafe.projects contains "*" - did you mean "${suggestion}"? Nothing is excluded by it.`
       );
     });
 }
 
 /**
+ * Credential-independent, affirmative project exclusion for native delegation.
+ * Unlike transport fail-closed resolution, missing credentials, malformed config
+ * and unreadable git metadata never grant an exclusion bypass. The caller must
+ * snapshot this decision for its native session; this function does not cache.
+ */
+function resolveTypeSafeProjectExclusion(projectDir, { homeDir = os.homedir() } = {}) {
+  try {
+    const result = readGlobalConfig(path.join(homeDir, '.omp', 'agent', 'typesafe.json'));
+    if (result.unreadable) return { excluded: false, reason: 'global-config-unreadable' };
+    if (globalKillSwitchTriggered(result.config)) return { excluded: false, reason: 'global-kill-switch' };
+    const ts = result.config && isPlainObject(result.config.typesafe) ? result.config.typesafe : null;
+    if (!ts || !hasOwn(ts, 'excludeProjects')) return { excluded: false, reason: 'not-excluded' };
+    if (!isValidExcludeList(ts.excludeProjects)) return { excluded: false, reason: 'global-exclude-invalid' };
+    const excluded = excludeListMatches(ts.excludeProjects, makeKeys(projectDir), false);
+    return { excluded, reason: excluded ? 'global-excluded' : 'not-excluded' };
+  } catch (_) {
+    return { excluded: false, reason: 'exclusion-resolution-unavailable' };
+  }
+}
+
+/**
  * Resolve TypeSafe enabled/disabled state for a project directory.
  *
  * @param {string} projectDir - Directory to resolve TypeSafe status for
- *   (e.g. CLAUDE_PROJECT_DIR or process.cwd()).
+ *   (e.g. the OMP session working directory).
  * @param {Object} [opts]
  * @param {Object} [opts.env=process.env] - Environment to read TYPESAFE_API_KEY
  *   from (injectable so tests never touch the real process env).
@@ -502,7 +521,7 @@ function resolveTypeSafeEnabled(projectDir, { env = process.env, homeDir = os.ho
       return { enabled: false, reason: 'no-key' };
     }
 
-    const globalConfigPath = path.join(homeDir, '.claude', '.ck.json');
+    const globalConfigPath = path.join(homeDir, '.omp', 'agent', 'typesafe.json');
     const globalResult = readGlobalConfig(globalConfigPath);
 
     // 2. Global file EXISTS but can't be read/parsed -> fail CLOSED. Never
@@ -533,8 +552,8 @@ function resolveTypeSafeEnabled(projectDir, { env = process.env, homeDir = os.ho
 
     // 5. Global allowlist: on iff typesafe.projects has "*" (any git repo) or
     // lists this project's git root (not raw cwd, so a session started from a
-    // subdirectory still resolves to the same root). A project's own
-    // `.claude/.ck.json` is never read here (S4 #6) - see module header.
+    // subdirectory still resolves to the same root). Project-local configuration
+    // is never read here - see the security boundary in the module header.
     if (ts && hasOwn(ts, 'projects') && Array.isArray(ts.projects) && projectListMatches(ts.projects, keys)) {
       return { enabled: true, reason: 'global-allowlist' };
     }
@@ -549,6 +568,7 @@ function resolveTypeSafeEnabled(projectDir, { env = process.env, homeDir = os.ho
 
 module.exports = {
   resolveTypeSafeEnabled,
+  resolveTypeSafeProjectExclusion,
   findGitRoot,
   readGlobalConfig,
   typeSafeConfigWarnings,

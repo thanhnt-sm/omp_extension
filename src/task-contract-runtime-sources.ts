@@ -106,11 +106,15 @@ export function parentSourceCriteriaIdentity(parent: FrozenParentSourceContext |
 }
 
 export function trustedNativeTaskKind(goal: string, originalUserText: string): TaskContract["taskKind"] {
-  if (/^(?:implement|repair|fix|refactor|build|create|integrate|wire|migrate|add|update)\b/i.test(goal)) return "implementation";
-  if (/^(?:review|verify|audit|inspect|evaluate|assess|read[- ]only)\b/i.test(goal)) return "review";
-  if (/^(?:map|research|investigate|analy[sz]e|trace|reproduce|diagnose|document|write (?:a )?(?:report|analysis))\b/i.test(goal)) return "research";
-  if (/^(?:run|execute|release|deploy|promote|sync|restart)\b/i.test(goal)) return "operations";
-  return /\bread[- ]only\b|^(?:research|review|investigate|inspect|analy[sz]e)\b/i.test(originalUserText) ? "research" : "implementation";
+  if (/^(?:implement|repair|fix|refactor|build|create|integrate|wire|migrate|add|update)\b/i.test(goal)
+    || /^(?:triển khai|sửa|sửa lỗi|khắc phục|tạo|xây dựng|tích hợp|cập nhật|bổ sung)\b/i.test(goal)) return "implementation";
+  if (/^(?:review|verify|audit|inspect|evaluate|assess|read[- ]only)\b/i.test(goal)
+    || /^(?:thẩm định|đánh giá|kiểm tra|rà soát|đối chiếu)\b/i.test(goal)) return "review";
+  if (/^(?:map|research|investigate|analy[sz]e|trace|reproduce|diagnose|document|write (?:a )?(?:report|analysis))\b/i.test(goal)
+    || /^(?:nghiên cứu|tìm kiếm|điều tra|phân tích|chẩn đoán|tái hiện|viết báo cáo|tài liệu hóa)\b/i.test(goal)) return "research";
+  if (/^(?:run|execute|release|deploy|promote|sync|restart)\b/i.test(goal)
+    || /^(?:chạy|thực thi|phát hành|triển khai giao dịch|đồng bộ|khởi động lại)\b/i.test(goal)) return "operations";
+  return /\bread[- ]only\b|^(?:research|review|investigate|inspect|analy[sz]e|nghiên cứu|rà soát|đánh giá)\b/i.test(originalUserText) ? "research" : "implementation";
 }
 
 export function approvedContractScope(

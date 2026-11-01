@@ -556,4 +556,20 @@ describe("Task-relative snapshot fidelity", () => {
       expect(JSON.stringify(evidence)).not.toContain("confidential other-task criterion");
     } finally { await fs.rm(cwd, { recursive: true, force: true }); await fs.rm(external, { recursive: true, force: true }); }
   });
+
+  // Integration test exercising real OS process-tree termination (taskkill) against the platform clock; fake timers cannot hold a child OS process open.
+  test.skipIf(process.platform !== "win32")("Windows timeout kills long-lived grandchild process tree and settles within 10s", async () => {
+    const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "typesafe-win-kill-"));
+    try {
+      const started = Date.now();
+      const cmd = `"${process.execPath}" -e "require('child_process').spawn(process.execPath,['-e','setTimeout(()=>{},60000)'],{stdio:'inherit'});setTimeout(()=>{},60000)"`;
+      const res = await executeTestCommand(cmd, cwd, 500);
+      const elapsedMs = Date.now() - started;
+      expect(res.timedOut).toBe(true);
+      expect(res.terminationObserved).toBe(true);
+      expect(elapsedMs).toBeLessThan(10_000);
+    } finally {
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
+  });
 });

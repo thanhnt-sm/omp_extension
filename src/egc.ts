@@ -53,6 +53,9 @@ function lintContract(contract: Contract): string[] {
   if (!contract.final?.length) problems.push("no final suite");
   return problems;
 }
+class EgcEvidenceRefusal extends Error {
+  constructor(readonly code: string, readonly path: string) { super(`${code} ${path}`); }
+}
 function parseContract(value: unknown): Contract {
   const object = egcRecord(boundedEgcJson(value));
   for (const name of ["mode", "isolation", "setup", "base", "uncontracted"]) if (object[name] !== undefined && typeof object[name] !== "string") throw new Error("egc_invalid_contract");
@@ -130,7 +133,13 @@ export default function egc(pi: ExtensionAPI) {
     let diff = diffResult.out;
     const added = diff.split("\n").filter((line) => line.startsWith("+") && !line.startsWith("+++")).map((line) => line.slice(1));
     for (const path of untracked) {
-      const { bytes } = readWorkspaceFile(cwd, path, { maxBytes: 131072 });
+      let bytes: Buffer;
+      try { bytes = readWorkspaceFile(cwd, path, { maxBytes: 131072 }).bytes; }
+      catch (error) {
+        const code = String(egcRecord(error).code ?? "");
+        if (code === "FILE_TOO_LARGE" || code === "FILE_MISSING") throw new EgcEvidenceRefusal(code, path);
+        throw error;
+      }
       const text = bytes.toString("utf8"); added.push(...text.split("\n")); diff += `\n+++ NEW ${path}\n${text}`;
     }
     return { files: [...new Set([...names, ...untracked])].sort(), added, diff };
@@ -149,8 +158,10 @@ export default function egc(pi: ExtensionAPI) {
         try { bytes = readWorkspaceFile(cwd, path, { maxBytes: 131072 }).bytes; }
         catch (error) {
           // Only Git-proven deletions may omit bytes; all unsafe/unreadable files fail closed.
+          const code = String(egcRecord(error).code ?? "");
           const deleted = git(["diff", "--name-only", "--diff-filter=D", "-z", base, "--"]);
-          if (egcRecord(error).code === "FILE_MISSING" && deleted.code === 0 && deleted.out.split("\0").includes(path)) { rmSync(join(dir, path), { force: true }); continue; }
+          if (code === "FILE_MISSING" && deleted.code === 0 && deleted.out.split("\0").includes(path)) { rmSync(join(dir, path), { force: true }); continue; }
+          if (code === "FILE_TOO_LARGE" || code === "FILE_MISSING") throw new EgcEvidenceRefusal(code, path);
           throw error;
         }
         const destination = join(dir, path);
@@ -186,7 +197,15 @@ export default function egc(pi: ExtensionAPI) {
     if (!spec.allowProtected && files.some((path) => protectedPaths.some((pattern) => pattern.test(path)) && atBase(path))) fail.push("PROTECTED oracle files modified; restore the oracle and fix product code.");
     if (HARD.some((pattern) => added.some((line) => pattern.test(line)))) fail.push("Evasion pattern in added lines.");
     soft.push(...SOFT.filter((pattern) => added.some((line) => pattern.test(line))).map(String));
-    for (const path of spec.planFiles ?? []) { readWorkspaceFile(cwd, path, { maxBytes: 131072 }); if (!files.includes(path)) fail.push(`Plan file NOT changed: ${path}`); }
+    for (const path of spec.planFiles ?? []) {
+      try { readWorkspaceFile(cwd, path, { maxBytes: 131072 }); }
+      catch (error) {
+        const code = String(egcRecord(error).code ?? "");
+        if (code === "FILE_TOO_LARGE" || code === "FILE_MISSING") throw new EgcEvidenceRefusal(code, path);
+        throw error;
+      }
+      if (!files.includes(path)) fail.push(`Plan file NOT changed: ${path}`);
+    }
     if (!files.length) fail.push("Empty diff: no implementation evidence.");
     let log = "", unavailable = false;
     const environment = prepare(files, !!spec.allowProtected);
@@ -198,7 +217,7 @@ export default function egc(pi: ExtensionAPI) {
         if (result.code !== 0) fail.push(holdout ? "HOLDOUT verification failed (details withheld)." : `Verification failed: ${command}`);
       }
     } finally { environment.done(); }
-    if (!spec.verify?.length && !spec.holdout?.length && (contract?.uncontracted ?? "defaults") !== "allow") fail.push("No verification command: completion is unfalsifiable.");
+    if (!spec.verify?.length && !spec.holdout?.length && !(contract?.uncontracted === "allow" && contract?.jev?.mode === "enforce" && (spec.requirements?.length ?? 0) > 0)) fail.push("No verification command: completion is unfalsifiable.");
     const judge = contract?.jev ?? {}, mode = judge.mode ?? "shadow";
     if (!quick && !fail.length && mode !== "off") {
       const requirements = Object.fromEntries((spec.requirements ?? []).map((requirement, index) => [`r${index + 1}`, requirement]));
@@ -224,13 +243,27 @@ export default function egc(pi: ExtensionAPI) {
       task.fp = result.fp; task.best = Math.min(task.best, result.score); task.note = result.fail.join("; ");
       if (task.stalls >= (contract?.maxStalls ?? 2)) task.lifecycle = "stalled";
       save(); return `EGC REFUSED: ${task.note}. Change relevant evidence before fresh evaluation.`;
-    } catch (error) { task.assessment = "unavailable"; task.passFp = ""; return `EGC UNAVAILABLE: ${egcBoundaryCode(error)}. Required proof was not accepted.`; }
+    } catch (error) {
+      if (error instanceof EgcEvidenceRefusal) {
+        const fp = sha(error.code + error.path), score = 1;
+        task.attempts++;
+        task.assessment = "rejected";
+        task.stalls = fp === task.fp || score >= task.best ? task.stalls + 1 : 0;
+        task.fp = fp; task.best = Math.min(task.best, score); task.note = `EVIDENCE_REQUIRED: ${error.code} ${error.path}`;
+        if (task.stalls >= (contract?.maxStalls ?? 2)) task.lifecycle = "stalled";
+        save(); return `EGC REFUSED: ${task.note}. Change relevant evidence before fresh evaluation.`;
+      }
+      task.assessment = "unavailable"; task.passFp = ""; return `EGC UNAVAILABLE: ${egcBoundaryCode(error)}. Required proof was not accepted.`;
+    }
   };
   host.on("tool_call", async (raw, ctx) => {
     if (!contract) return;
     try {
       const event = egcRecord(boundedEgcJson(raw));
       if (typeof event.toolName !== "string") return { block: true, reason: "EGC: invalid tool identity." };
+      if (contract.mode !== "shadow" && TODO_TOOLS[event.toolName] && /"unsandboxed"\s*:\s*true/.test(JSON.stringify(event.input ?? {}))) {
+        return { block: true, reason: "EGC: protected configuration or unsandboxed operation denied." };
+      }
       if (!TODO_TOOLS[event.toolName]) {
         if (WRITERS[event.toolName]) { ledger.revoke(); cache.clear(); finalOk = !contract.final?.length; }
         if (contract.mode !== "shadow" && WRITERS[event.toolName]) {
@@ -259,6 +292,7 @@ export default function egc(pi: ExtensionAPI) {
         const targets = selectNativeTargets(projection.targets, operation);
         if (operation.op === "done") {
           if (!targets.length) problems.push("EGC: completion target not found in matched native history.");
+          else if (targets.length > 1) { problems.push("EGC: ambiguous completion target; specify exact phase and task content."); continue; }
           for (const target of targets) {
             const task = ledger.debts.get(target.key);
             if (!task) { problems.push("EGC: target incarnation has no obligation record."); continue; }

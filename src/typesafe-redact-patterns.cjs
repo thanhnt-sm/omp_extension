@@ -80,7 +80,7 @@ function isHighEntropyMatch(match) {
 // NOT raw entropy-of-the-whole-run, which false-positived on long real
 // paths/URLs purely because concatenating many low-entropy words produces a
 // high aggregate entropy by accident.
-const PATH_SEGMENT_SHAPE_RE = /^(?:[a-z0-9]+|[A-Z0-9]+|[A-Z][a-z0-9]+)(?:[-_](?:[a-z0-9]+|[A-Z0-9]+|[A-Z][a-z0-9]+))*$/;
+const PATH_SEGMENT_SHAPE_RE = /^_*(?:[a-z0-9]+|[A-Z0-9]+|[A-Z][a-z0-9]+)(?:[-_]+(?:[a-z0-9]+|[A-Z0-9]+|[A-Z][a-z0-9]+))*_*$/;
 
 /** True if `match` should be treated as a path/URL-shaped candidate at all:
  * contains a '/' (multiple segments) and no '+'/'=' (still std-base64-

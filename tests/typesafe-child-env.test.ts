@@ -12,7 +12,7 @@ test("real child receives minimal policy rather than provider, hook, proxy, home
   const source = hostSource(Object.fromEntries(forbidden.map((name) => [name, "sentinel-private-config"])));
   for (const purpose of ["verification", "egc-setup"] as const) {
     const built = policy.buildChildEnvironment(purpose, source);
-    for (const name of forbidden) if (name !== "GIT_CONFIG_COUNT") expect(Object.hasOwn(built, name), `${purpose}:${name}`).toBe(false);
+    for (const name of forbidden) if (name !== "GIT_CONFIG_COUNT") expect(Object.prototype.hasOwnProperty.call(built, name), `${purpose}:${name}`).toBe(false);
   }
   const probe = `const names=${JSON.stringify(forbidden)}; console.log(JSON.stringify(names.map(name=>process.env[name]==='sentinel-private-config')))`;
   for (const purpose of ["verification", "egc-setup", "evidence-git", "deployment-acl", "deployment-verify", "pointer-editor"] as const) {
@@ -118,4 +118,34 @@ test("synchronous spawn preserves successful stderr, failed status and policy is
   const shell = policy.spawnChildSync("egc-setup", "git --version", [], { shell: true, encoding: "utf8" });
   expect(shell.status).toBe(0);
   expect(shell.stdout).toContain("git version");
+});
+
+test("RT#13: named secrets and long suffix-matched secrets are rejected in allowlisted values while short flags are allowed", () => {
+  const baseEnv = hostSource();
+  const pathKey = Object.keys(baseEnv).find((name) => name.toUpperCase() === "PATH");
+  if (!pathKey) throw new Error("Host PATH is required");
+
+  // (a) GITHUB_TOKEN="ghp_" + 32 chars appended to PATH -> UNSAFE_ALLOWED_VALUE
+  const ghToken = "ghp_" + "a".repeat(32);
+  const srcA = hostSource({ GITHUB_TOKEN: ghToken });
+  srcA[pathKey] = `${srcA[pathKey]}${path.delimiter}${ghToken}`;
+  expect(() => policy.buildChildEnvironment("verification", srcA)).toThrow("UNSAFE_ALLOWED_VALUE");
+
+  // (b) MY_SERVICE_SECRET (16 chars) inside TEMP -> UNSAFE_ALLOWED_VALUE
+  const svcSecret = "secret_val_12345";
+  const srcB = hostSource({ MY_SERVICE_SECRET: svcSecret, TEMP: `/tmp/${svcSecret}` });
+  expect(() => policy.buildChildEnvironment("verification", srcB)).toThrow("UNSAFE_ALLOWED_VALUE");
+
+  // (c) CI_FLAG_TOKEN="1" does not reject a PATH containing "1"
+  const srcC = hostSource({ CI_FLAG_TOKEN: "1" });
+  srcC[pathKey] = `${srcC[pathKey]}${path.delimiter}C:\\bin1`;
+  expect(() => policy.buildChildEnvironment("verification", srcC)).not.toThrow();
+
+  // (d) createVerificationHome().environment("verification", src) rejects case (a)
+  const home = policy.createVerificationHome();
+  try {
+    expect(() => home.environment("verification", srcA)).toThrow("UNSAFE_ALLOWED_VALUE");
+  } finally {
+    home.cleanup();
+  }
 });

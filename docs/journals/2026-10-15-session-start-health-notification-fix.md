@@ -1,19 +1,19 @@
-# Technical Journal: Session-Start Health Notification Fix
+# Nhật ký Kỹ thuật: Sửa lỗi Thông báo Sức khỏe lúc Khởi động Phiên (Technical Journal: Session-Start Health Notification Fix)
 
-- **Date**: 2026-10-15
-- **Workspace**: `D:/100.Software/Github/omp_extension`
-- **Scope**: Session-start TypeSafe health-origin notification transport.
+- **Ngày (Date)**: 2026-10-15
+- **Không gian làm việc (Workspace)**: `D:/100.Software/Github/omp_extension`
+- **Phạm vi (Scope)**: Tầng truyền tải thông báo nguồn gốc sức khỏe TypeSafe lúc khởi động phiên (Session-start TypeSafe health-origin notification transport).
 
 ---
 
-## Root Cause and Fix
+## Nguyên nhân Gốc rễ và Bản Sửa lỗi (Root Cause and Fix)
 
-The session-start notification directly used `await pi.sendMessage(...).catch(...)`, assuming the host returned a Promise. It crashed when the host returned `undefined`.
+Thông báo lúc khởi động phiên (session-start notification) trước đây gọi trực tiếp `await pi.sendMessage(...).catch(...)`, với giả định rằng máy chủ (host) luôn trả về một đối tượng `Promise`. Đoạn mã này bị sập (crashed) khi máy chủ trả về giá trị đồng bộ `undefined`.
 
-The notification paths now use the existing `safeSendMessage`. It checks that the transport is callable, awaits `Promise.resolve(...)`, and swallows notification-transport failures at that boundary.
+Các luồng gửi thông báo hiện đã chuyển sang sử dụng hàm bọc an toàn `safeSendMessage` sẵn có. Hàm này kiểm tra xem phương thức truyền tải có thể gọi được hay không (callable), chờ kết quả qua `Promise.resolve(...)`, và nuốt an toàn các lỗi tầng truyền tải thông báo (notification-transport failures) ngay tại ranh giới đó.
 
-## Regression Coverage and Verification
+## Độ Bao phủ Hồi quy và Xác minh (Regression Coverage and Verification)
 
-`tests/health-watchdog.test.ts` covers absent `sendMessage`, synchronous `undefined`, rejected transport results, and successful health notifications. The health module passed 9 tests; the full suite passed 321 tests across 35 files; `node tools/sync-baseline.cjs` reported `DEPLOYED_VERIFIED`.
+Tập tin kiểm thử `tests/health-watchdog.test.ts` bao phủ đầy đủ các trường hợp: thiếu phương thức `sendMessage`, trả về `undefined` đồng bộ (synchronous `undefined`), kết quả truyền tải bị từ chối (rejected transport results), và gửi thông báo sức khỏe thành công. Mô-đun kiểm tra sức khỏe đã vượt qua 9 bài kiểm thử; toàn bộ bộ kiểm thử vượt qua 321 bài kiểm thử trên 35 tập tin; lệnh `node tools/sync-baseline.cjs` báo cáo trạng thái `DEPLOYED_VERIFIED`.
 
-OMP must restart to load the deployed extension.
+Tiến trình máy chủ OMP cần được khởi động lại để nạp phần mở rộng đã triển khai mới nhất.

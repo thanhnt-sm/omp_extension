@@ -13,6 +13,14 @@ export interface AdvisorPublicContextOptions {
   /** Host guard authorization, not permission inferred from a file name in the request. */
   isAuthorizedSource(path: string, sha256: string): boolean;
 }
+/** Hashes authenticated by the host are identities, not arbitrary high-entropy prose. */
+function validatePublicReferences(client: RedactionClient, references: { authorizedFiles: readonly { path: string; sha256: string }[]; evidenceRefs: readonly string[] }, privacy: { apiKey?: string; homeDirs?: readonly string[] }, generatedDigests: readonly string[] = []): void {
+  const digests = [...new Set([...references.authorizedFiles.map(file => file.sha256), ...generatedDigests])];
+  if (digests.some(digest => !/^[a-f0-9]{64}$/.test(digest) || privacy.apiKey && digest.includes(privacy.apiKey))) throw new Error("advisor_public_reference_redaction_required");
+  const masked = JSON.stringify(references).replace(/[a-f0-9]{64}/g, digest => digests.includes(digest) ? `host-hash-${digests.indexOf(digest)}` : digest);
+  const publicReferences = client.redactEvidenceState(JSON.parse(masked), privacy);
+  if (canonicalDigest(publicReferences) !== canonicalDigest(JSON.parse(masked))) throw new Error("advisor_public_reference_redaction_required");
+}
 /** Complete guarded packet, shared secret redaction, no ambient history or raw reasoning. */
 export function prepareAdvisorPublicContext(packet: JudgeEvidencePacket, options: AdvisorPublicContextOptions): PreparedAdvisorPublicContext {
   if (packet.omissions.some(omission => omission.required) || !packet.criteria.length || !options.question.trim()) throw new Error("advisor_complete_public_packet_required");
@@ -33,9 +41,8 @@ export function prepareAdvisorPublicContext(packet: JudgeEvidencePacket, options
   const integrationEvidenceRefs = [...new Set((packet.integrationReceipts ?? []).map(receipt => receipt.receiptId))];
   const evidenceRefs = [...new Set([...packet.obligations.flatMap(obligation => obligation.evidenceIds), ...authorizedFiles.map(file => `source:${file.path}:${file.sha256}`), ...integrationEvidenceRefs])];
   if (!evidenceRefs.length) throw new Error("advisor_evidence_manifest_required");
-  const publicReferences = client.redactEvidenceState({ authorizedFiles, evidenceRefs }, { apiKey: options.apiKey ?? process.env.TYPESAFE_API_KEY, homeDirs: options.homeDirs }) as { authorizedFiles: readonly { path: string; sha256: string }[]; evidenceRefs: readonly string[] };
-  // A redacted path would break the exact-SHA read binding, so secret-bearing identities fail closed instead.
-  if (canonicalDigest(publicReferences) !== canonicalDigest({ authorizedFiles, evidenceRefs })) throw new Error("advisor_public_reference_redaction_required");
+  validatePublicReferences(client, { authorizedFiles, evidenceRefs }, { apiKey: options.apiKey ?? process.env.TYPESAFE_API_KEY, homeDirs: options.homeDirs });
+  const publicReferences = { authorizedFiles, evidenceRefs };
   const publicPrompt = JSON.stringify({ instruction: "Independently assess EVERY original criterion, not just those selected in the initial bounded packet. Preserve contradictions, omissions and uncovered obligations. Retrieve necessary source using guarded read/grep/glob against the exact authorized file SHA manifest; prefer explicit line ranges. A span/search result never proves global absence or whole-file correctness. Assess parent integration separately; child passes do not establish compatibility. Do not infer human approval or native commit. Submit one terminal yield with data matching outputSchema. No ambient history, shell, writes, web search or private context is authorized.", state, authorizedFiles: publicReferences.authorizedFiles, outputSchema: advisorOutputSchema });
   if (Buffer.byteLength(publicPrompt, "utf8") > maxContextBytes) throw new Error("advisor_complete_public_context_exceeds_budget");
   return { publicPrompt, publicContextDigest: canonicalDigest([{ role: "user", content: publicPrompt }]), packetDigest: canonicalDigest(packet), criterionIds: options.contract.criteria.map(criterion => criterion.id),
@@ -72,8 +79,8 @@ export function prepareAdvisorConsultationContext(input: AdvisorConsultationInpu
   const questionDigest = canonicalDigest({ state, authorizedFiles, selectedCriterionIds: privacy.criterionIds ?? null });
   const criterionIds = privacy.criterionIds ?? [`consultation:${questionDigest}`];
   const evidenceRefs = [`public-question:${questionDigest}`, ...authorizedFiles.map(file => `source:${file.path}:${file.sha256}`)];
-  const publicReferences = client.redactEvidenceState({ authorizedFiles, evidenceRefs }, { apiKey: privacy.apiKey ?? process.env.TYPESAFE_API_KEY, homeDirs: privacy.homeDirs }) as { authorizedFiles: readonly { path: string; sha256: string }[]; evidenceRefs: readonly string[] };
-  if (canonicalDigest(publicReferences) !== canonicalDigest({ authorizedFiles, evidenceRefs })) throw new Error("advisor_public_reference_redaction_required");
+  validatePublicReferences(client, { authorizedFiles, evidenceRefs }, { apiKey: privacy.apiKey ?? process.env.TYPESAFE_API_KEY, homeDirs: privacy.homeDirs }, [questionDigest]);
+  const publicReferences = { authorizedFiles, evidenceRefs };
   const publicPrompt = JSON.stringify({ instruction: "Give an independent read-only technical consultation, including research or repair advice when completion evidence is missing. No todo, mutation, completion, or human permission is authorized. Inspect only exact-SHA authorized files through guarded read/grep/glob. Missing proof stays explicit; an excerpt never establishes global absence. Cover the consultation criterion with actual public evidence references. Mark parent integration not_applicable: this consultation cannot approve parent integration or native completion. Submit a concrete recommendation, ranked options, findings, confidence, open questions and criterion coverage through one terminal yield(data).", state, authorizedFiles: publicReferences.authorizedFiles, criterionIds, evidenceRefs: publicReferences.evidenceRefs, outputSchema: advisorOutputSchema });
   const maxContextBytes = privacy.maxContextBytes ?? 262144;
   if (!Number.isSafeInteger(maxContextBytes) || maxContextBytes < 1 || maxContextBytes > 4194304) throw new Error("advisor_trusted_context_budget_invalid");

@@ -99,6 +99,11 @@ export function validateAdvisorRequestIdentity(request: unknown): request is Adv
   return request.schemaVersion === 1 && requestId === `advisor:${requestDigest}` && requestDigest === canonicalDigest(body)
     && request.bindingDigest === canonicalDigest(request.binding) && request.promptDigest === canonicalDigest(request.publicPrompt);
 }
+/**
+ * Invariant: cross-dispatch reuse is permitted only for an identical binding
+ * (contract/revision/evidence/policy), snapshot, scope, criteria and prompt;
+ * dispatchId is excluded by design so turn boundaries don't discard genuine reviews.
+ */
 export function advisorApplicabilityDigest(request: AdvisorRequest): string {
   const { provenance, ...binding } = request.binding;
   const { dispatchId: _dispatchId, ...origin } = provenance;

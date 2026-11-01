@@ -25,16 +25,20 @@ const PRIVATE_EVALUATION_ROOTS = [
 ];
 const MANIFEST_NAME = ".sync-manifest.json";
 const JOURNAL_NAME = ".sync-journal.json";
-const MANIFEST_SCHEMA_VERSION = 1;
+const MANIFEST_SCHEMA_VERSION = 2;
+const LEGACY_MANIFEST_SCHEMA_VERSION = 1;
 const ROOT_TARGET = "target";
-const ROOT_CLAUDE = "global_claude";
 const ROOT_AGENTS = "global_omp_agents";
+const LEGACY_ROOT_CLAUDE = "global_claude";
+// Metadata-only migration allowlist. Legacy destinations must never be resolved or touched.
+const LEGACY_CLAUDE_DESTINATIONS = new Set([
+  "hooks/lib/typesafe-enabled-resolver.cjs",
+  "mcp/typesafe/typesafe-api-client.cjs",
+  "mcp/typesafe/typesafe-redact.cjs",
+  "mcp/typesafe/typesafe-redact-patterns.cjs",
+  "mcp/typesafe/typesafe-policy-client.cjs",
+]);
 const ALLOWED_GLOBAL_COPIES = [
-  [ROOT_CLAUDE, "hooks/lib/typesafe-enabled-resolver.cjs", "src/typesafe-enabled-resolver.cjs"],
-  [ROOT_CLAUDE, "mcp/typesafe/typesafe-api-client.cjs", "src/typesafe-api-client.cjs"],
-  [ROOT_CLAUDE, "mcp/typesafe/typesafe-redact.cjs", "src/typesafe-redact.cjs"],
-  [ROOT_CLAUDE, "mcp/typesafe/typesafe-redact-patterns.cjs", "src/typesafe-redact-patterns.cjs"],
-  [ROOT_CLAUDE, "mcp/typesafe/typesafe-policy-client.cjs", "src/typesafe-policy-client.cjs"],
   [ROOT_AGENTS, "advisor.md", "agents/advisor.md"],
   [ROOT_AGENTS, "ck-advisor.md", "agents/ck-advisor.md"],
 ];
@@ -51,7 +55,14 @@ function normalizeForComparison(value) { const normalized = path.normalize(value
 function isSameOrNested(candidate, root) { const relative = path.relative(root, candidate); return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative)); }
 function isSafeRelative(relativePath) {
   return typeof relativePath === "string" && relativePath.length > 0 && !path.isAbsolute(relativePath)
-    && !relativePath.includes("\\") && relativePath.split("/").every((segment) => segment && segment !== "." && segment !== "..");
+    && !/[\\\x00-\x1f:]/.test(relativePath)
+    && relativePath.split("/").every((segment) => segment && segment !== "." && segment !== ".."
+      && !/[. ]$/.test(segment) && !/^\.claude$/i.test(segment) && !/^(con|prn|aux|nul|com[0-9]|lpt[0-9])(?:\.|$)/i.test(segment));
+}
+function assertNoLegacyPath(absolutePath, label) {
+  const resolved = path.resolve(absolutePath);
+  if (resolved.split(/[\\/]+/).some((segment) => segment.toLowerCase() === ".claude")) fail(`${label} may not use the legacy Claude root`);
+  return resolved;
 }
 
 function assertNoExistingLinks(absolutePath, label) {
@@ -155,19 +166,26 @@ function assertManifestEntryAllowed(entry, roots) {
   }
 }
 function validateManifest(value, roots) {
-  if (value === null) return { schemaVersion: MANIFEST_SCHEMA_VERSION, entries: [] };
-  if (!value || typeof value !== "object" || value.schemaVersion !== MANIFEST_SCHEMA_VERSION || !Array.isArray(value.entries)) fail("sync manifest is malformed");
+  if (!value || typeof value !== "object" || Array.isArray(value)) fail("sync manifest is malformed or has an unsupported schema");
+  const topLevelKeys = Object.keys(value).sort();
+  if (topLevelKeys.length !== 2 || topLevelKeys.some((key) => key !== "schemaVersion" && key !== "entries") || ![LEGACY_MANIFEST_SCHEMA_VERSION, MANIFEST_SCHEMA_VERSION].includes(value.schemaVersion) || !Array.isArray(value.entries)) fail("sync manifest is malformed or has an unsupported schema");
+  const legacy = value.schemaVersion === LEGACY_MANIFEST_SCHEMA_VERSION;
   const seen = new Set(); const entries = value.entries.map((entry) => {
-    if (!entry || typeof entry !== "object" || ![ROOT_TARGET, ROOT_CLAUDE, ROOT_AGENTS].includes(entry.root) || !isSafeRelative(entry.relativePath) || !/^[a-f0-9]{64}$/.test(entry.deployedHash)) fail("sync manifest has an invalid entry");
-    assertManifestEntryAllowed(entry, roots);
-    const key = manifestKey(entry.root, entry.relativePath);
+    const entryKeys = entry && typeof entry === "object" && !Array.isArray(entry) ? Object.keys(entry).sort() : [];
+    if (entryKeys.length !== 3 || entryKeys.some((key) => key !== "deployedHash" && key !== "relativePath" && key !== "root") || !entry || typeof entry !== "object" || Array.isArray(entry) || ![ROOT_TARGET, ROOT_AGENTS, ...(legacy ? [LEGACY_ROOT_CLAUDE] : [])].includes(entry.root) || !isSafeRelative(entry.relativePath) || typeof entry.deployedHash !== "string" || !/^[a-f0-9]{64}$/.test(entry.deployedHash)) fail("sync manifest has an invalid entry");
+    if (entry.root === LEGACY_ROOT_CLAUDE) {
+      if (!LEGACY_CLAUDE_DESTINATIONS.has(entry.relativePath)) fail("sync manifest references a non-allowlisted legacy destination");
+    } else {
+      assertManifestEntryAllowed(entry, roots);
+    }
+    const key = normalizeForComparison(manifestKey(entry.root, entry.relativePath));
     if (seen.has(key)) fail("sync manifest has duplicate destinations"); seen.add(key);
     return { root: entry.root, relativePath: entry.relativePath, deployedHash: entry.deployedHash };
   });
-  return { schemaVersion: MANIFEST_SCHEMA_VERSION, entries: entries.sort((a, b) => manifestKey(a.root, a.relativePath).localeCompare(manifestKey(b.root, b.relativePath))) };
+  return { schemaVersion: value.schemaVersion, entries: entries.sort((a, b) => manifestKey(a.root, a.relativePath).localeCompare(manifestKey(b.root, b.relativePath))) };
 }
 function readManifest(targetDir, roots) {
-  const manifestPath = path.join(targetDir, MANIFEST_NAME); if (!fs.existsSync(manifestPath)) return validateManifest(null, roots);
+  const manifestPath = path.join(targetDir, MANIFEST_NAME); if (!fs.existsSync(manifestPath)) return { schemaVersion: MANIFEST_SCHEMA_VERSION, entries: [] };
   assertRegularFile(manifestPath, "sync manifest", { rejectHardlinks: true });
   try { return validateManifest(JSON.parse(readImage(manifestPath).bytes.toString("utf8")), roots); } catch { fail("sync manifest is malformed or unavailable"); }
 }
@@ -181,13 +199,18 @@ function buildDesiredEntries(workspaceDir, inventory) {
   return entries.sort((a, b) => manifestKey(a.root, a.relativePath).localeCompare(manifestKey(b.root, b.relativePath)));
 }
 function preflight(config) {
-  const workspaceDir = assertRealDirectory(config.workspaceDir, "workspace directory"); const targetDir = assertRealDirectory(config.targetDir, "target directory"); assertTreeSafe(targetDir, "target directory");
-  if (fs.existsSync(config.backupDir)) fail(`backup directory must not exist: ${config.backupDir}`);
-  const backupDir = canonicalPath(config.backupDir, "backup directory"); const homeDir = assertRealDirectory(config.homeDir, "OMP home directory");
-  const claudeRoot = canonicalPath(path.join(homeDir, ".claude"), "global Claude root"); const agentsRoot = canonicalPath(path.join(homeDir, ".omp", "agent", "agents"), "global OMP agents root"); const pointerPath = canonicalPath(config.pointerPath, "OMP extension pointer");
-  assertDisjoint([{ label: "workspace directory", value: workspaceDir }, { label: "target directory", value: targetDir }, { label: "backup directory", value: backupDir }, { label: "global Claude root", value: claudeRoot }, { label: "global OMP agents root", value: agentsRoot }]);
-  for (const mutableRoot of [workspaceDir, targetDir, backupDir, claudeRoot, agentsRoot]) if (isSameOrNested(pointerPath, mutableRoot)) fail("OMP extension pointer must be outside every mutable root");
-  assertStrictPointer(pointerPath, targetDir); const roots = { [ROOT_TARGET]: targetDir, [ROOT_CLAUDE]: claudeRoot, [ROOT_AGENTS]: agentsRoot };
+  const workspaceConfig = assertNoLegacyPath(config.workspaceDir, "workspace directory");
+  const targetConfig = assertNoLegacyPath(config.targetDir, "target directory");
+  const backupConfig = assertNoLegacyPath(config.backupDir, "backup directory");
+  const homeConfig = assertNoLegacyPath(config.homeDir, "OMP home directory");
+  const pointerConfig = assertNoLegacyPath(config.pointerPath, "OMP extension pointer");
+  const workspaceDir = assertRealDirectory(workspaceConfig, "workspace directory"); const targetDir = assertRealDirectory(targetConfig, "target directory"); assertTreeSafe(targetDir, "target directory");
+  if (fs.existsSync(backupConfig)) fail(`backup directory must not exist: ${backupConfig}`);
+  const backupDir = canonicalPath(backupConfig, "backup directory"); const homeDir = assertRealDirectory(homeConfig, "OMP home directory");
+  const agentsRoot = canonicalPath(path.join(homeDir, ".omp", "agent", "agents"), "global OMP agents root"); const pointerPath = canonicalPath(pointerConfig, "OMP extension pointer");
+  assertDisjoint([{ label: "workspace directory", value: workspaceDir }, { label: "target directory", value: targetDir }, { label: "backup directory", value: backupDir }, { label: "global OMP agents root", value: agentsRoot }]);
+  for (const mutableRoot of [workspaceDir, targetDir, backupDir, agentsRoot]) if (isSameOrNested(pointerPath, mutableRoot)) fail("OMP extension pointer must be outside every mutable root");
+  assertStrictPointer(pointerPath, targetDir); const roots = { [ROOT_TARGET]: targetDir, [ROOT_AGENTS]: agentsRoot };
   const inventory = buildInventory(workspaceDir); const desired = buildDesiredEntries(workspaceDir, inventory);
   for (const entry of desired) assertDestinationSafety(rootDestination(roots, entry.root, entry.relativePath));
   return { workspaceDir, targetDir, backupDir, roots, inventory, desired };
@@ -198,7 +221,10 @@ function createPlan(preflightPlan, config) {
   if (config.bootstrap && fs.existsSync(manifestPath)) {
     fail("bootstrap is allowed only when the target has no sync manifest");
   }
-  const previous = readManifest(preflightPlan.targetDir, preflightPlan.roots); const priorByKey = new Map(previous.entries.map((entry) => [manifestKey(entry.root, entry.relativePath), entry]));
+  const previous = readManifest(preflightPlan.targetDir, preflightPlan.roots);
+  // Validate the complete old manifest before retiring its legacy ownership, without file actions.
+  const managedPrevious = previous.entries.filter((entry) => entry.root !== LEGACY_ROOT_CLAUDE);
+  const priorByKey = new Map(managedPrevious.map((entry) => [manifestKey(entry.root, entry.relativePath), entry]));
   const desiredKeys = new Set(); const actions = []; const conflicts = [];
   for (const desired of preflightPlan.desired) {
     const key = manifestKey(desired.root, desired.relativePath); desiredKeys.add(key); const destination = rootDestination(preflightPlan.roots, desired.root, desired.relativePath); const sourceImage = imageMetadata(readImage(desired.source)); const sourceHash = sourceImage.sha256; const prior = priorByKey.get(key);
@@ -211,7 +237,7 @@ function createPlan(preflightPlan, config) {
       else conflicts.push(`${desired.root}/${desired.relativePath}`);
     }
   }
-  for (const prior of previous.entries) if (!desiredKeys.has(manifestKey(prior.root, prior.relativePath))) {
+  for (const prior of managedPrevious) if (!desiredKeys.has(manifestKey(prior.root, prior.relativePath))) {
     const destination = rootDestination(preflightPlan.roots, prior.root, prior.relativePath);
     if (!fs.existsSync(destination)) actions.push({ action: "NOOP_PRUNED", root: prior.root, relativePath: prior.relativePath, destination, priorHash: prior.deployedHash });
     else { assertDestinationSafety(destination); const destinationImage = currentImage(destination); const currentHash = destinationImage.sha256;
@@ -325,22 +351,34 @@ function plannedDirectories(destination, root) {
 function createDirectories(directories) {
   for (const directory of directories) fs.mkdirSync(directory, { mode: 0o700 });
 }
+function directoryNodeIdentity(directory) {
+  const stat = fs.lstatSync(directory, { bigint: true });
+  if (!stat.isDirectory() || stat.isSymbolicLink() || stat.ino === 0n) fail("directory identity unavailable");
+  return { dev: String(stat.dev), ino: String(stat.ino), mode: String(stat.mode) };
+}
 function directoryIdentity(directory) {
   assertRealDirectory(directory, "transaction directory");
-  const stat = fs.lstatSync(directory, { bigint: true });
-  if (stat.ino === 0n) fail("directory identity unavailable");
-  return { dev: String(stat.dev), ino: String(stat.ino), mode: String(stat.mode) };
+  return directoryNodeIdentity(directory);
 }
 function sameDirectory(directory, expected) { try { return JSON.stringify(directoryIdentity(directory)) === JSON.stringify(expected); } catch { return false; } }
 function captureParents(filePath) {
   const parents = []; let cursor = path.dirname(filePath);
   while (true) {
-    if (fs.existsSync(cursor)) parents.push({ path: cursor, identity: directoryIdentity(cursor) });
+    if (fs.existsSync(cursor)) parents.push({ path: cursor, identity: directoryNodeIdentity(cursor) });
     const next = path.dirname(cursor); if (next === cursor) break; cursor = next;
   }
+  // Resolving the deepest existing directory covers the complete inspected chain.
+  const deepest = parents[0];
+  if (deepest && normalizeForComparison(fs.realpathSync.native(deepest.path)) !== normalizeForComparison(deepest.path)) fail("transaction parent identity changed");
   return parents;
 }
-function assertParents(parents) { for (const entry of parents) if (!sameDirectory(entry.path, entry.identity)) fail("transaction parent identity changed"); }
+function assertParents(parents) {
+  for (const entry of parents) {
+    if (JSON.stringify(directoryNodeIdentity(entry.path)) !== JSON.stringify(entry.identity)) fail("transaction parent identity changed");
+  }
+  const deepest = parents[0];
+  if (deepest && normalizeForComparison(fs.realpathSync.native(deepest.path)) !== normalizeForComparison(deepest.path)) fail("transaction parent identity changed");
+}
 function cleanupStaging(staging) {
   try {
     assertParents(staging.parents);
@@ -521,12 +559,12 @@ function applyTransaction(plan, config, lock) {
 function sha256Text(text) { return crypto.createHash("sha256").update(text).digest("hex"); }
 function main() {
   const allowed = buildChildEnvironment("deployment-sync");
-  const { dryRun, bootstrap } = parseArgs(process.argv.slice(2)); const workspaceDir = allowed.OMP_WORKSPACE_DIR || path.resolve(__dirname, ".."); const homeDir = allowed.OMP_HOME_DIR || os.homedir(); const targetDir = allowed.OMP_TARGET_DIR || path.normalize("C:/Users/thant/Projects/omp_extension"); const pointerPath = allowed.OMP_EXTENSION_POINTER || path.join(homeDir, ".omp", "agent", "extensions", "typesafe-planner.ts");
+  const { dryRun, bootstrap } = parseArgs(process.argv.slice(2)); const workspaceDir = allowed.OMP_WORKSPACE_DIR || path.resolve(__dirname, ".."); const homeDir = allowed.OMP_HOME_DIR || os.homedir(); const targetDir = allowed.OMP_TARGET_DIR || path.join(homeDir, "Projects", "omp_extension"); const pointerPath = allowed.OMP_EXTENSION_POINTER || path.join(homeDir, ".omp", "agent", "extensions", "typesafe-planner.ts");
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-"); const backupDir = allowed.OMP_BACKUP_DIR || path.join(path.dirname(targetDir), `${path.basename(targetDir)}_backup_${timestamp}`); const config = { workspaceDir, targetDir, homeDir, pointerPath, backupDir, bunBin: allowed.OMP_BUN_BIN || "bun", skipVerifyTests: process.env.OMP_SKIP_VERIFY_TESTS === "1", bootstrap };
   const preflightPlan = preflight(config); const initialPlan = createPlan(preflightPlan, config); console.log(`Preflight succeeded for ${initialPlan.inventory.length} baseline files.`); console.log(`Managed actions: ${initialPlan.actions.map((action) => `${action.bootstrap ? "BOOTSTRAP_OVERWRITE" : action.action}:${action.root}/${action.relativePath}`).join(", ") || "none"}`);
   if (dryRun) { console.log("Dry run completed; no lock, backup, staging, journal, or filesystem mutation was performed."); return; }
   let lock; let retainLock = false;
-  try { lock = acquireLock(initialPlan); const plan = createPlan(preflight(config), config); const status = applyTransaction(plan, config, lock); console.log(`${status}. Backup and journal retained: ${plan.backupDir}`); }
+  try { lock = acquireLock(initialPlan); const plan = createPlan(preflight(config), config); if (normalizeForComparison(plan.targetDir) !== normalizeForComparison(initialPlan.targetDir) || normalizeForComparison(plan.workspaceDir) !== normalizeForComparison(initialPlan.workspaceDir) || normalizeForComparison(plan.backupDir) !== normalizeForComparison(initialPlan.backupDir)) fail("deployment plan changed after lock"); const status = applyTransaction(plan, config, lock); console.log(`${status}. Backup and journal retained: ${plan.backupDir}`); }
   catch (error) { retainLock = error.exitCode === 2; throw error; }
   finally { releaseLock(lock, retainLock); }
 }

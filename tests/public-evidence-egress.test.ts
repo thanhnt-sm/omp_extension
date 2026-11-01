@@ -173,4 +173,27 @@ describe("Public evidence at final production egress", () => {
     expectPublicOnly(packets[0]);
     expect(stateOf(packets[0]).deliverable_artifacts).toBe(ARTIFACT);
   });
+
+  test("redactEvidenceState preserves non-negative integer telemetry token counts while redacting strings, negative/fractional values, and non-telemetry token keys", () => {
+    const { redactEvidenceState } = createRequire(import.meta.url)("../src/typesafe-api-client.cjs") as {
+      redactEvidenceState: (value: unknown, options?: Record<string, unknown>) => Record<string, unknown>;
+    };
+    // (a) non-negative integer telemetry token counts survive
+    expect(
+      redactEvidenceState({ usage: { input_tokens: 10, output_tokens: 3, total_tokens: 13 } })
+    ).toEqual({
+      usage: { input_tokens: 10, output_tokens: 3, total_tokens: 13 },
+    });
+    // (b) string value under input_tokens is still redacted
+    const redactedString = redactEvidenceState({ usage: { input_tokens: "sk-abcdefghijklmnop" } }) as {
+      usage: { input_tokens: string };
+    };
+    expect(redactedString.usage.input_tokens).not.toContain("sk-abcdefghijklmnop");
+    expect(redactedString.usage.input_tokens).toContain("[REDACTED:");
+    // (c) api_token numeric value is still [REDACTED:kv]
+    expect(redactEvidenceState({ api_token: 12345678 })).toEqual({ api_token: "[REDACTED:kv]" });
+    // (d) negative and fractional input_tokens are still redacted
+    expect(redactEvidenceState({ input_tokens: -1 })).toEqual({ input_tokens: "[REDACTED:kv]" });
+    expect(redactEvidenceState({ input_tokens: 1.5 })).toEqual({ input_tokens: "[REDACTED:kv]" });
+  });
 });

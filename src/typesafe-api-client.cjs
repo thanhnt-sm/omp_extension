@@ -14,6 +14,94 @@
 /** @typedef {import('./payload-safety').TypeSafeJudgeResult} TypeSafeJudgeResult */
 
 const crypto = require('node:crypto');
+const https = require('node:https');
+const http = require('node:http');
+const { URL } = require('node:url');
+const { performance } = require('node:perf_hooks');
+
+function defaultNodeFetch(urlStr, options = {}) {
+  return new Promise((resolve, reject) => {
+    try {
+      const url = new URL(urlStr);
+      const transport = url.protocol === 'http:' ? http : https;
+      const req = transport.request(url, {
+        method: options.method || 'GET',
+        headers: options.headers || {},
+      }, (res) => {
+        const chunks = [];
+        res.on('data', (chunk) => chunks.push(chunk));
+        res.on('end', () => {
+          const text = Buffer.concat(chunks).toString('utf8');
+          resolve({
+            status: res.statusCode,
+            ok: res.statusCode >= 200 && res.statusCode < 300,
+            headers: {
+              get(name) { return res.headers[String(name).toLowerCase()] || null; }
+            },
+            text: async () => text,
+            json: async () => JSON.parse(text),
+            body: { cancel: async () => {} },
+          });
+        });
+      });
+      req.on('error', reject);
+      if (options.signal) {
+        if (options.signal.aborted) {
+          req.destroy();
+          const err = new Error('The operation was aborted');
+          err.name = 'AbortError';
+          return reject(err);
+        }
+        options.signal.addEventListener('abort', () => {
+          req.destroy();
+          const err = new Error('The operation was aborted');
+          err.name = 'AbortError';
+          reject(err);
+        }, { once: true });
+      }
+      if (options.body) req.write(options.body);
+      req.end();
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+function resolveFetch(supplied) {
+  if (typeof supplied === 'function') return supplied;
+  if (typeof globalThis.fetch === 'function') return globalThis.fetch;
+  return defaultNodeFetch;
+}
+const SafeAbortController = typeof globalThis.AbortController === 'function' ? globalThis.AbortController : class SafeAbortController {
+  constructor() {
+    const listeners = new Map();
+    this.signal = {
+      aborted: false,
+      addEventListener(type, listener, options) {
+        if (!listeners.has(type)) listeners.set(type, new Set());
+        listeners.get(type).add({ listener, once: Boolean(options?.once) });
+      },
+      removeEventListener(type, listener) {
+        const set = listeners.get(type);
+        if (!set) return;
+        for (const item of set) {
+          if (item.listener === listener) { set.delete(item); break; }
+        }
+      }
+    };
+    this._listeners = listeners;
+  }
+  abort() {
+    if (this.signal.aborted) return;
+    this.signal.aborted = true;
+    const set = this._listeners.get('abort');
+    if (set) {
+      for (const item of [...set]) {
+        try { item.listener(); } catch (_) {}
+      }
+    }
+  }
+};
 let preparePayload;
 function loadPreparePayload() {
   if (preparePayload) return preparePayload;
@@ -266,9 +354,16 @@ function prepareRequest(args, trustedLimits, redactionOptions = {}) {
       return { ok: false, code: 'policy_client_missing' };
     }
   }
-  const model = isNonEmptyString(args.model) ? args.model.trim() : MODEL;
+  const rawModel = isNonEmptyString(args.model) ? args.model.trim() : MODEL;
+  const normalizedModel = rawModel.replace(/^typesafe\//i, '');
   const allowed = trustedLimits?.provider?.allowedModels ?? [MODEL];
-  if (!Array.isArray(allowed) || !allowed.includes(model)) return { ok: false, code: 'model_not_allowed' };
+  const modelAllowed = Array.isArray(allowed) && (
+    allowed.includes(rawModel) ||
+    allowed.includes(normalizedModel) ||
+    (normalizedModel.startsWith('jev-') && allowed.some((m) => m === 'jev-latest' || m.startsWith('jev-')))
+  );
+  if (!modelAllowed) return { ok: false, code: 'model_not_allowed' };
+  const model = normalizedModel;
   try {
     // Infinity disables the legacy water-filling truncator, not the final hard
     // bound. Redaction may change secrets, never discard evidence or criteria.
@@ -304,7 +399,7 @@ function freezePrepared(value) {
   if (!value || typeof value !== 'object' || Object.isFrozen(value)) return;
   Object.freeze(value);
   for (const key in value) {
-    if (Object.hasOwn(value, key)) freezePrepared(value[key]);
+    if (Object.prototype.hasOwnProperty.call(value, key)) freezePrepared(value[key]);
   }
 }
 
@@ -488,7 +583,7 @@ async function requestWithRetry(options) {
   const o = options || {};
   const signals = [o.signal, o.reviewJob?.signal].filter(Boolean);
   const signal = signals.length > 1 ? AbortSignal.any(signals) : signals[0];
-  const fetchImpl = o.fetchImpl || globalThis.fetch;
+  const fetchImpl = resolveFetch(o.fetchImpl);
   const apiKey = o.apiKey;
   const body = o.body;
   if (typeof body !== 'string') return { kind: 'local_error', code: 'invalid_body', attempts: 0, attemptReceipts: [] };
@@ -544,7 +639,7 @@ async function requestWithRetry(options) {
       }
       attempts += 1;
       const startedAtMs = now();
-      const controller = new AbortController();
+      const controller = new SafeAbortController();
       try {
         outcome = await withTimeout(
           performRequest(fetchImpl, apiKey, body, controller.signal, wallNow, {
@@ -567,7 +662,7 @@ async function requestWithRetry(options) {
       if (attempts >= maxAttempts) break;
       const delay = nextRetryDelayMs(attempts, outcome.retryAfterMs, random);
       if (delay === null || now() + delay + MIN_USEFUL_ATTEMPT_MS > deadline) break;
-      const sleepController = new AbortController();
+      const sleepController = new SafeAbortController();
       await withTimeout(
         Promise.resolve(sleep(delay, sleepController.signal)),
         sleepController,
@@ -660,9 +755,10 @@ async function performRequest(fetchImpl, apiKey, body, signal, wallNowImpl, clea
  */
 async function judgeTypeSafe(options = {}) {
   const {
-    fetchImpl = globalThis.fetch, apiKey, args, homeDir, signal,
+    fetchImpl: suppliedFetch, apiKey, args, homeDir, signal,
     trustedPolicy, trustedLimits, purpose = 'judge',
   } = options;
+  const fetchImpl = resolveFetch(suppliedFetch);
   let policy;
   let policyClient;
   try {

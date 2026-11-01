@@ -134,8 +134,13 @@ export async function executeTestCommand(command: string, cwd: string, timeoutMs
       forced = result; forcedSuffix = suffix;
       if (!child) { finish(result, suffix); return; }
       if (child.pid && process.platform === "win32") {
-        try { spawnChild("evidence-git", "taskkill", ["/pid", String(child.pid), "/t", "/f"], { stdio: "ignore" }); }
-        catch { child.kill(); }
+        try {
+          const killer = spawnChild("evidence-git", "taskkill", ["/pid", String(child.pid), "/t", "/f"], { stdio: "ignore" });
+          const killTimer = setTimeout(() => child?.kill(), 5000);
+          killTimer.unref();
+          killer.once("exit", (code) => { clearTimeout(killTimer); if (code !== 0) child?.kill(); });
+          killer.once("error", () => { clearTimeout(killTimer); child?.kill(); });
+        } catch { child.kill(); }
       } else if (child.pid && process.platform !== "win32") {
         try { process.kill(-child.pid, "SIGKILL"); } catch { child.kill("SIGKILL"); }
       } else child.kill();
@@ -185,7 +190,7 @@ export async function collectTaskEvidence(options: TaskEvidenceOptions): Promise
   if (contract && (!usableBaseline || !sameContract(baseline.binding, contract) || baseline.originalRequestDigest !== contract.originalUserRequest.digest || baseline.contractDigest !== canonicalDigest(contract))) omissions.push({ reason: "BASELINE_CONTRACT_BINDING_REQUIRED", kind: "binding", required: true });
   if (usableBaseline && (baseline.mode !== after.mode || (baseline.headSha && !after.headSha))) omissions.push({ reason: "WORKSPACE_PROVENANCE_CHANGED", kind: "binding", required: true });
   let changedFiles: string[] = usableBaseline ? diffSnapshots(baseline, after) : [];
-  let gitStatus = ""; let gitDiff = "";
+  let gitStatus = ""; let gitDiff = ""; let statusObserved = false;
   let commitInterval: TaskEvidenceResult["commitInterval"];
   if (usableBaseline) {
     if (baseline.mode === "non-git" && after.mode === "non-git") {
@@ -220,7 +225,7 @@ export async function collectTaskEvidence(options: TaskEvidenceOptions): Promise
     }
   } else if (after.mode === "git" && after.complete) {
     try {
-      gitStatus = gitBytes(cwd, ["status", "--porcelain", "-uall"], timeoutMs).toString().trimEnd(); changedFiles = statusEvidencePaths(gitStatus);
+      gitStatus = gitBytes(cwd, ["status", "--porcelain", "-uall"], timeoutMs).toString().trimEnd(); statusObserved = true; changedFiles = statusEvidencePaths(gitStatus);
       const empty: WorkspaceSnapshot = { files: new Map(), truncated: false };
       // No historical scope is inferred from the latest commit. Current untracked proof still uses guarded bytes.
       gitDiff = gitBytes(cwd, ["diff", "--binary", "--no-ext-diff", ...(after.headSha ? [after.headSha] : [])], timeoutMs).toString();
@@ -260,13 +265,14 @@ export async function collectTaskEvidence(options: TaskEvidenceOptions): Promise
   let sourceBytes = 0;
   const changedSet = new Set(changedFiles);
   const readScope = options.readScopePaths ?? contract?.allowedMutationScope.paths ?? [];
-  const relevantFiles = new Set([...changedFiles, ...(options.readScopePaths || contract?.allowedMutationScope.operations.includes("read") ? [...after.files.keys()].filter((file) => pathInScope(file, readScope) && (!options.sourcePaths || options.sourcePaths.includes(file))) : [])]);
-  for (const file of [...relevantFiles].sort()) {
+  const relevantFiles = new Set([...changedFiles, ...(options.sourcePaths ? options.sourcePaths.filter((file) => pathInScope(file, readScope)) : options.readScopePaths || contract?.allowedMutationScope.operations.includes("read") ? [...after.files.keys()].filter((file) => pathInScope(file, readScope)) : [])]);
+  const sortedFiles = [...relevantFiles].sort((a, b) => (changedSet.has(a) === changedSet.has(b) ? a.localeCompare(b) : changedSet.has(a) ? -1 : 1));
+  for (const file of sortedFiles) {
     if (!after.files.has(file) || after.files.get(file) === "<deleted>") continue;
     try {
       const value = readEvidenceFile(cwd, file); if (value.sha256 !== after.files.get(file) || JSON.stringify(value.identity) !== JSON.stringify(after.fileIdentities?.[file])) throw new Error("SOURCE_CHANGED");
       sourceBytes += value.bytes.length;
-      if (sourceBytes > 1024 * 1024) { omissions.push({ path: file, reason: "FULL_SOURCE_BYTE_LIMIT", kind: "budget", required: true }); continue; }
+      if (sourceBytes > 1024 * 1024) { omissions.push({ path: file, reason: "FULL_SOURCE_BYTE_LIMIT", kind: "budget", required: changedSet.has(file) }); continue; }
       const binary = value.bytes.includes(0) || !isUtf8(value.bytes);
       sourceEvidence.push({ path: file, sha256: value.sha256, content: value.bytes.toString(binary ? "base64" : "utf8"), encoding: binary ? "base64" : "utf8", criterionIds: [], role: changedSet.has(file) ? "changed" : "context", beforeMode: baseline?.fileIdentities?.[file]?.mode, afterMode: after.fileIdentities?.[file]?.mode });
     }
@@ -277,8 +283,12 @@ export async function collectTaskEvidence(options: TaskEvidenceOptions): Promise
   const receipt = options.verificationReceipt;
   let cleanWorkingTree = false;
   if (after.mode === "git" && after.complete === true) {
-    try { cleanWorkingTree = gitBytes(cwd, ["status", "--porcelain", "-uall"], timeoutMs).length === 0; }
-    catch { omissions.push({ reason: "FINAL_GIT_STATUS_UNAVAILABLE", kind: "unavailable", required: true }); }
+    if (statusObserved && stable.complete && stable.treeDigest === after.treeDigest) {
+      cleanWorkingTree = gitStatus.length === 0;
+    } else {
+      try { cleanWorkingTree = gitBytes(cwd, ["status", "--porcelain", "-uall"], timeoutMs).length === 0; }
+      catch { omissions.push({ reason: "FINAL_GIT_STATUS_UNAVAILABLE", kind: "unavailable", required: true }); }
+    }
   }
   const result: TaskEvidenceResult = { gitStatus, gitDiff, changedFiles, criteria, criteriaSource, cleanWorkingTree,
     testExitCode: receipt?.applicability === "diagnostic" ? null : receipt?.result.exitCode ?? test?.exitCode ?? null, testOutput: receipt?.result.output ?? test?.output ?? "", timestamp: new Date().toISOString(), taskDoneProven: options.taskDoneProven, todoCompleted: options.todoCompleted,

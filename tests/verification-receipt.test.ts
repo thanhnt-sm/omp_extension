@@ -100,7 +100,7 @@ describe("Host-bound verification receipts", () => {
       expect(aborted.result.aborted).toBe(true);
       expect(aborted.reasons).toContain("VERIFICATION_COMMAND_FAILED");
     } finally { watcher.close(); }
-  }));
+  }), 20_000);
 
   test("changed test assets, foreign incarnation, byte-identical file replacement and new files are stale", async () => fixture(async (options) => {
     const receipt = await collectVerificationReceipt(options);

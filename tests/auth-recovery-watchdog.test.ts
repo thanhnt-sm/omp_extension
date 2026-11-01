@@ -48,8 +48,8 @@ describe("Phase 2: Dynamic Auth Recovery and Key Watchdog", () => {
     };
 
     const home = mkdtempSync(path.join(os.tmpdir(), "auth-recovery-home-"));
-    mkdirSync(path.join(home, ".claude"), { recursive: true });
-    writeFileSync(path.join(home, ".claude", ".ck.json"), JSON.stringify({ typesafe: { projects: ["*", process.cwd()], excludeProjects: [] } }));
+    mkdirSync(path.join(home, ".omp", "agent"), { recursive: true });
+    writeFileSync(path.join(home, ".omp", "agent", "typesafe.json"), JSON.stringify({ typesafe: { projects: ["*", process.cwd()], excludeProjects: [] } }));
     try {
     registerExtension(mockPi as unknown as Parameters<typeof registerExtension>[0], { homeDir: home });
     const judgeTool = registeredTools.get("typesafe_judge");

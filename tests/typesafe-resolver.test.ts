@@ -14,9 +14,9 @@ function makeFixture(config: object): { homeDir: string; projectDir: string; cle
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "typesafe-resolver-"));
   const homeDir = path.join(root, "home");
   const projectDir = path.join(root, "project");
-  fs.mkdirSync(path.join(homeDir, ".claude"), { recursive: true });
+  fs.mkdirSync(path.join(homeDir, ".omp", "agent"), { recursive: true });
   fs.mkdirSync(path.join(projectDir, ".git"), { recursive: true });
-  fs.writeFileSync(path.join(homeDir, ".claude", ".ck.json"), JSON.stringify(config));
+  fs.writeFileSync(path.join(homeDir, ".omp", "agent", "typesafe.json"), JSON.stringify(config));
   return { homeDir, projectDir, cleanup: () => fs.rmSync(root, { recursive: true, force: true }) };
 }
 
@@ -54,7 +54,7 @@ describe("bundled TypeSafe enabled resolver", () => {
         homeDir: allowed.homeDir,
       })).toEqual({ enabled: true, reason: "global-allowlist" });
 
-      fs.writeFileSync(path.join(excluded.homeDir, ".claude", ".ck.json"), JSON.stringify({
+      fs.writeFileSync(path.join(excluded.homeDir, ".omp", "agent", "typesafe.json"), JSON.stringify({
         typesafe: { projects: ["*"], excludeProjects: [excluded.projectDir] },
       }));
       expect(resolver.resolveTypeSafeEnabled(excluded.projectDir, {

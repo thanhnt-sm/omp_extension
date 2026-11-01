@@ -1,123 +1,137 @@
-# ADR-20261013-typesafe-bicameral-judge-alignment: Bicameral Advisor-JEV Consensus, Threshold Elimination, and Non-Blocking Adaptive Remediation
+# ADR-20261013-typesafe-bicameral-judge-alignment: Đồng thuận Lưỡng viện Cố vấn – JEV (Bicameral Advisor-JEV Consensus), Loại bỏ Ngưỡng Số học (Threshold Elimination) và Khắc phục Thích ứng Không Chặn (Non-Blocking Adaptive Remediation)
 
-Status: Decided
-Date: 2026-10-13
-Council: ai domain, 4 lenses (docs-fidelity, engineering, security, cost) + research
+- **Trạng thái (Status):** Đã quyết định (Decided)
+- **Ngày (Date):** 2026-10-13
+- **Hội đồng thẩm định (Council):** Lĩnh vực Trí tuệ Nhân tạo (AI Domain), 4 lăng kính chuyên gia: Độ trung thực Tài liệu (Docs-Fidelity), Kỹ thuật Phần mềm (Engineering), Bảo mật (Security), Chi phí (Cost) + Nghiên cứu (Research)
 
-## Question
+---
 
-How should Oh-My-Pi (OMP) and TypeSafe System One (JEV) govern task verification and lifecycle transitions (such as dropping obsolete tasks and completing deliverables) without relying on arbitrary client-side floating-point thresholds (e.g., 0.80 / 0.30), while ensuring autonomous agent progress, strict human sovereignty, and non-blocking plan adaptation?
+## 1. Câu hỏi Đặt ra (Question)
 
-## Context
+Làm thế nào để Oh-My-Pi (OMP) và TypeSafe System One (JEV) quản trị việc xác thực nhiệm vụ (task verification) và các bước chuyển đổi vòng đời (lifecycle transitions — chẳng hạn như hủy bỏ các nhiệm vụ đã lỗi thời và hoàn thành sản phẩm bàn giao) mà không phụ thuộc vào các ngưỡng số dấu phẩy động tùy tiện ở phía máy khách (arbitrary client-side floating-point thresholds như `0.80` / `0.30`), đồng thời vẫn đảm bảo tiến độ tự hành của tác tử (autonomous agent progress), chủ quyền tối cao của con người (strict human sovereignty), và khả năng thích ứng kế hoạch không gây chặn cứng (non-blocking plan adaptation)?
 
-In the current implementation, OMP's `typesafe-planner` extension and `cook-expert-judge` rely on hardcoded local numerical thresholds (`TYPESAFE_AUTO_APPROVAL_THRESHOLD = 0.80`, `DROP_REJECT_FLOOR = 0.30`) applied over remote JEV Bayesian `noul` probabilities.
+---
 
-This architecture has caused severe operational friction in real-world workflows:
-1. **Double-Guessing the Model**: When JEV calculates calibrated confidence (e.g. $P=0.75$ on code deliverables or $P=0.35$ on drop justification), client-side code forces the evaluation into an ambiguous "undecided gray zone" $[0.30, 0.80)$ or throws blocking exceptions.
-2. **Terminal Agent Deadlocks ("omp bị lỗi không thoát ra được")**: When an agent legitimately finishes work or seeks to drop redundant tasks after a successful clean build (e.g., a clean build with zero MSBuild errors), the client interceptor throws unrecoverable errors rather than synthesizing next actions or respecting human intent.
-3. **Configuration Sprawl**: Developers and users are forced to tune arbitrary environmental threshold variables (`TYPESAFE_AUTO_APPROVAL_THRESHOLD`) to bypass client-side barriers.
+## 2. Bối cảnh (Context)
 
-The user mandates an architecture where:
-- Numerical thresholds are eliminated in favor of autonomous model intelligence.
-- An Advisor evaluation stream and the OMP JEV Judge reach consensus.
-- Human escalation occurs **only** when there is a genuine conflict between Advisor and Judge.
-- Human decisions are sovereign, binding, and immediately unblocking.
-- Judge/Advisor findings and `nextaction` requirements are synthesized into adaptive plan updates rather than terminal execution blocks.
+Trong kiến trúc trước đây, tiện ích mở rộng `typesafe-planner` của OMP và mô-đun `src/cook-expert-judge.ts` phụ thuộc vào các ngưỡng số học cục bộ được mã hóa cứng (`TYPESAFE_AUTO_APPROVAL_THRESHOLD = 0.80`, `DROP_REJECT_FLOOR = 0.30`) áp đặt đè lên các xác suất `noul` theo trường phái Bayes từ máy chủ JEV.
 
-## Options considered
+Kiến trúc này đã gây ra những xung đột vận hành nghiêm trọng trong luồng công việc thực tế (real-world workflows):
+1. **Nghi ngờ Ngược lại Mô hình (Double-Guessing the Model):** Khi JEV tính toán độ tự tin đã được hiệu chuẩn (calibrated confidence — ví dụ: $P=0.75$ trên sản phẩm bàn giao mã nguồn hoặc $P=0.35$ trên lý do hủy bỏ nhiệm vụ), mã nguồn phía máy khách lại ép kết quả đánh giá rơi vào một "vùng xám bất định" (undecided gray zone) $[0.30, 0.80)$ hoặc ném ra các ngoại lệ gây chặn cứng (blocking exceptions).
+2. **Khóa chết Tác tử ở Trạng thái Cuối (Terminal Agent Deadlocks — "omp bị lỗi không thoát ra được"):** Khi một tác tử hoàn thành công việc hợp lệ hoặc tìm cách loại bỏ các nhiệm vụ dư thừa sau khi quá trình biên dịch sạch đã thành công (ví dụ: bản dựng sạch với 0 lỗi MSBuild), bộ chặn phía máy khách lại ném ra lỗi không thể phục hồi thay vì tổng hợp các hành động tiếp theo (`nextaction`) hoặc tôn trọng ý định của người dùng.
+3. **Phình đại Biến Cấu hình (Configuration Sprawl):** Các nhà phát triển và người dùng buộc phải tinh chỉnh thủ công các biến môi trường ngưỡng tùy tiện (`TYPESAFE_AUTO_APPROVAL_THRESHOLD`) chỉ để vượt qua các rào cản nhân tạo ở phía máy khách.
 
-| Option | Description |
+Người dùng yêu cầu một kiến trúc chuẩn mực trong đó:
+- Các ngưỡng số học cứng bị loại bỏ để nhường chỗ cho trí tuệ mô hình tự chủ (autonomous model intelligence).
+- Luồng đánh giá của Cố vấn (Advisor evaluation stream) và Thẩm phán JEV của OMP (OMP JEV Judge) cùng tham gia đạt đồng thuận (consensus).
+- Việc leo thang lên con người (human escalation) **chỉ** diễn ra khi có sự xung đột thực sự (genuine conflict) giữa Cố vấn và Thẩm phán.
+- Quyết định của con người mang tính chủ quyền tối cao, có hiệu lực ràng buộc ngay lập tức và giải phóng luồng thực thi (sovereign, binding, and immediately unblocking).
+- Các phát hiện của Thẩm phán/Cố vấn cùng yêu cầu hành động tiếp theo (`nextaction`) được tổng hợp thành các bản cập nhật kế hoạch thích ứng (adaptive plan updates) thay vì các lỗi chặn đứng tiến trình.
+
+---
+
+## 3. Phương án thay thế đã cân nhắc (Alternatives Considered)
+
+| Phương án (Option) | Mô tả chi tiết (Description) |
 |---|---|
-| **Option 1: Static Threshold Adjustment (Status Quo with Relaxed Defaults)** | Keep client-side numerical arithmetic; lower default threshold from 0.80 to 0.50 or allow arbitrary env overrides. |
-| **Option 2: Pure JEV Unicameral Authority (Direct Choice / Bayes Cutoff)** | Eliminate all client thresholds; convert JEV queries to categorical choice (`APPROVE`, `REJECT`) or standard Bayes majority ($P \ge 0.50$), with JEV acting as the single gatekeeper. |
-| **Option 3: Bicameral Advisor-JEV Consensus with Sovereign Human Override & Adaptive Next-Action Remediation (Recommended)** | Establish dual evaluation: **Advisor** (contextual work-log and user intent evaluation) + **TypeSafe JEV** (ground-truth Git diff, AST verification, and deliverable evaluation). If both agree $\implies$ auto-execute. If they conflict $\implies$ escalate to human. Human verdict is permanently authoritative and binding. Low scores or missing criteria trigger structured plan adaptation rather than terminal blocking errors. |
+| **Phương án 1: Điều chỉnh Ngưỡng Tĩnh (Option 1: Static Threshold Adjustment — Giữ nguyên hiện trạng với mặc định nới lỏng)** | Giữ lại tầng tính toán số học phía máy khách; hạ ngưỡng mặc định từ `0.80` xuống `0.50` hoặc cho phép ghi đè tùy ý qua biến môi trường. |
+| **Phương án 2: Thẩm quyền Đơn viện Thuần JEV (Option 2: Pure JEV Unicameral Authority — Lựa chọn Trực tiếp / Điểm cắt Bayes)** | Loại bỏ mọi ngưỡng máy khách; chuyển đổi các truy vấn JEV sang dạng lựa chọn phân loại (`APPROVE`, `REJECT`) hoặc ngưỡng đa số Bayes tiêu chuẩn ($P \ge 0.50$), với JEV đóng vai trò người gác cổng duy nhất. |
+| **Phương án 3: Đồng thuận Lưỡng viện Cố vấn – JEV kèm Quyền Ghi đè Chủ quyền của Con người & Khắc phục Hành động Tiếp theo Thích ứng (Option 3: Bicameral Advisor-JEV Consensus with Sovereign Human Override & Adaptive Next-Action Remediation — Được khuyến nghị)** | Thiết lập cơ chế đánh giá kép (dual evaluation): **Cố vấn (Advisor)** đánh giá nhật ký công việc theo ngữ cảnh và ý định người dùng + **TypeSafe JEV** đánh giá chân lý nền tảng từ Git diff, xác minh cây cú pháp trừu tượng (AST verification) và sản phẩm bàn giao. Nếu cả hai đồng thuận $\implies$ tự động thực thi (auto-execute). Nếu xung đột $\implies$ leo thang lên người dùng (escalate to human). Phán quyết của con người có thẩm quyền tối cao và ràng buộc vĩnh viễn. Điểm thấp hoặc thiếu tiêu chí sẽ kích hoạt thích ứng kế hoạch có cấu trúc thay vì ném lỗi chặn cứng. |
 
-## Lens verdicts
+### Phán quyết theo Lăng kính Chuyên gia (Lens Verdicts)
 
-| Lens | Verdict | Confidence |
+| Lăng kính (Lens) | Phán quyết & Lý giải (Verdict & Rationale) | Độ tin cậy (Confidence) |
 |---|---|---|
-| **docs-fidelity** | **Option 3.** TypeSafe official documentation (`skill://typesafe-ai`, `docs.typesafe.ai`) explicitly warns: *"Treat cookbook thresholds and demo results as examples to evaluate, not universal rules or permanent model limitations"*. It recommends using JEV for programmable common sense and typed judgments, delegating uncertainty to human or reasoning agents rather than hardcoded client filter bands. OMP's native judge (`xd://eval/judge`) is designed around typed categorical choices and clean fallbacks. | 0.95 |
-| **engineering** | **Option 3.** Eliminates the fragile arithmetic layer in `src/verification-gate.ts` and `src/cook-expert-judge.ts`. Replaces terminal `throw new Error(...)` exceptions with constructive plan/todo reconciliation loops. Resolves the recurring `omp bị lỗi không thoát ra được` bug by providing deterministic unblocking pathways. | 0.92 |
-| **security** | **Option 3.** Preserves the tighten-only lattice without artificial numbers. Requiring consensus between two independent lenses (Advisor checking intent/history and JEV checking ground-truth diff/AST) prevents single-agent spoofing (Attack 1 & 8). Sovereign human approval provides cryptographic and procedural fail-safe. | 0.90 |
-| **cost** | **Option 3.** Dramatically lowers $/completed-task economics. Prevents token-wasting retry storms where an agent repeatedly fails against a rigid 0.80 barrier. Single JEV pass + local Advisor evaluation costs substantially less than multiple failed cycles followed by stall ratchet escalations. | 0.94 |
+| **Độ trung thực Tài liệu (docs-fidelity)** | **Phương án 3.** Tài liệu chính thức của TypeSafe (`skill://typesafe-ai`, `docs.typesafe.ai`) cảnh báo rõ ràng: *"Hãy xem các ngưỡng trong sổ tay hướng dẫn (cookbook thresholds) và kết quả minh họa là những ví dụ để tham khảo đánh giá, không phải quy tắc phổ quát hay giới hạn vĩnh viễn của mô hình"*. Tài liệu khuyến nghị sử dụng JEV cho các phán đoán có kiểu dữ liệu tường minh (typed judgments) và ủy quyền sự bất định cho con người hoặc tác tử suy luận thay vì các dải lọc cứng ở máy khách. | `0.95` |
+| **Kỹ thuật Phần mềm (engineering)** | **Phương án 3.** Loại bỏ tầng số học dễ gãy vỡ trong `src/verification-gate.ts` và `src/cook-expert-judge.ts`. Thay thế các lệnh ném ngoại lệ `throw new Error(...)` bằng các vòng lặp đối soát kế hoạch/nhiệm vụ mang tính xây dựng (constructive plan/todo reconciliation loops). Giải quyết dứt điểm lỗi `omp bị lỗi không thoát ra được` bằng các nhánh giải phóng tất định. | `0.92` |
+| **Bảo mật (security)** | **Phương án 3.** Bảo toàn Lưới Chính sách Chỉ Thắt chặt (Tighten-Only Policy Lattice) mà không cần các con số nhân tạo. Việc yêu cầu đồng thuận giữa hai lăng kính độc lập (Cố vấn kiểm tra ý định/lịch sử và JEV kiểm tra chân lý nền tảng từ diff/AST) ngăn chặn hành vi giả mạo đơn tác tử (single-agent spoofing — Attack 1 & 8). Sự phê duyệt chủ quyền của con người cung cấp chốt chặn an toàn về mặt thủ tục. | `0.90` |
+| **Chi phí (cost)** | **Phương án 3.** Giảm mạnh chi phí trên mỗi nhiệm vụ hoàn thành ($\$/\text{completed-task}$). Ngăn chặn các cơn bão thử lại gây lãng phí token khi tác tử liên tục va vào bức tường `0.80` cứng nhắc. Một lượt gọi JEV kết hợp đánh giá Cố vấn tốn ít chi phí hơn nhiều so với hàng loạt chu kỳ thất bại dẫn tới khóa dừng. | `0.94` |
 
-## Evidence
+---
 
-| Claim | Source | Date | Type | Supports |
+## 4. Bằng chứng kiểm chứng (Verification Evidence)
+
+| Khẳng định (Claim) | Nguồn tham chiếu (Source) | Ngày (Date) | Phân loại (Type) | Phương án hỗ trợ (Supports) |
 |---|---|---|---|---|
-| TypeSafe thresholds are illustrative examples, not permanent model limits | `https://docs.typesafe.ai`, `skill://typesafe-ai` | 2026-10-13 | official | Option 3 |
-| OMP `judge` is designed as a typed primitive (`choice`, `bool`, `score`) returning direct verdicts | `xd://eval/judge` | 2026-10-13 | official | Option 2, Option 3 |
-| OMP TypeSafe judge supports automatic graceful fallback chains (`@tiny`, `@smol`, `@default`) | `skill://omp-typesafe-judge-setup` | 2026-10-13 | official | Option 3 |
-| Deleting numerical thresholds without a consensus replacement broke 10 test suites in target deployment | `tools/sync-baseline.bat` build log | 2026-10-13 | measured | Option 3 |
-| Human authorization bypass allows legitimate task drops when host context proves intent | `tests/todo-drop-gate.test.ts:400-430` | 2026-10-12 | measured | Option 3 |
+| Các ngưỡng mẫu của TypeSafe chỉ là ví dụ minh họa, không phải giới hạn mô hình vĩnh viễn | `https://docs.typesafe.ai`, `skill://typesafe-ai` | 2026-10-13 | Tài liệu chính thức (official) | Phương án 3 |
+| Nguyên hàm `judge` của OMP được thiết kế như một kiểu dữ liệu định danh (`choice`, `bool`, `score`) trả về phán quyết trực tiếp | `xd://eval/judge` | 2026-10-13 | Tài liệu chính thức (official) | Phương án 2, Phương án 3 |
+| Thẩm phán TypeSafe của OMP hỗ trợ chuỗi chuyển đổi dự phòng uyển chuyển tự động (`@tiny`, `@smol`, `@default`) | `skill://omp-typesafe-judge-setup` | 2026-10-13 | Tài liệu chính thức (official) | Phương án 3 |
+| Việc xóa bỏ đơn thuần các ngưỡng số học mà không có cơ chế đồng thuận thay thế đã làm gãy 10 bộ kiểm thử tại môi trường đích | Nhật ký dựng `tools/sync-baseline.bat` | 2026-10-13 | Đo đạc thực tế (measured) | Phương án 3 |
+| Cơ chế ủy quyền của người dùng máy chủ cho phép hủy bỏ nhiệm vụ hợp lệ khi ngữ cảnh chứng minh rõ ý định | `tests/todo-drop-gate.test.ts:400-430` | 2026-10-12 | Đo đạc thực tế (measured) | Phương án 3 |
 
-## Decision
+---
 
-**Adopt Option 3: Bicameral Advisor-JEV Consensus, Sovereign Human Override, and Adaptive Next-Action Remediation.**
+## 5. Quyết định (Decision)
 
-1. **Eliminate Client Thresholds**: Remove hardcoded client numerical comparisons (`< 0.80`, `< 0.30`) and the ambiguous "gray zone".
-2. **Bicameral Evaluation**:
-   - **Lobe 1 (Advisor / ck:advisor)**: Evaluates semantic intent, conversation context, user prompts, and agent work log. Returns `ALLOW` | `DISALLOW` | `UNCERTAIN`.
-   - **Lobe 2 (OMP Judge / TypeSafe JEV)**: Evaluates ground-truth Git diff, test execution exit codes, and AST boundaries via categorical verdict (`APPROVE` | `REJECT` | `NEXT_ACTION_REQUIRED`).
-3. **Consensus & Escalation Engine**:
-   - Both agree on approval $\implies$ **Auto-Approve** (proceed immediately, zero human intervention).
-   - Both agree on rejection $\implies$ **Synthesize Remediation** (actionable plan delta, no terminal exception).
-   - Dissent/Conflict between Advisor and JEV $\implies$ **Escalate to Human** with both viewpoints presented concisely.
-4. **Sovereign Human Invariant**:
-   - When the human confirms/approves (e.g. clicking Yes on drop or approving a plan change), the decision is recorded as authoritative `host-authorization`.
-   - The engine MUST immediately execute the approved mutation; subsequent gates are prohibited from re-blocking human-approved operations.
-5. **Non-Blocking Plan & Todo Reconciliation**:
-   - If JEV or Advisor identifies missing requirements (`NEXT_ACTION_REQUIRED`), the engine generates concrete `nextaction` items, automatically drafts updates to `todo` and `plan.md`, presents the proposed plan revision to the human, and continues execution upon approval.
+**Áp dụng Phương án 3: Đồng thuận Lưỡng viện Cố vấn – JEV (Bicameral Advisor-JEV Consensus), Quyền Ghi đè Chủ quyền của Con người (Sovereign Human Override), và Khắc phục Hành động Tiếp theo Thích ứng (Adaptive Next-Action Remediation).**
 
-## Rationale
+1. **Loại bỏ Ngưỡng Số học Máy khách (Eliminate Client Thresholds):** Xóa bỏ các phép so sánh số học cứng ở phía máy khách (`< 0.80`, `< 0.30`) và "vùng xám" (gray zone) gây mơ hồ.
+2. **Đánh giá Lưỡng viện (Bicameral Evaluation):**
+   - **Thùy 1 — Cố vấn (Lobe 1 — Advisor / `ck:advisor`):** Đánh giá ý định ngữ nghĩa (semantic intent), ngữ cảnh hội thoại (conversation context), lời nhắc của người dùng (user prompts) và nhật ký làm việc của tác tử (agent work log). Trả về `ALLOW` | `DISALLOW` | `UNCERTAIN`.
+   - **Thùy 2 — Thẩm phán OMP / TypeSafe JEV (Lobe 2 — OMP Judge / TypeSafe JEV):** Đánh giá chân lý nền tảng từ khác biệt Git (ground-truth Git diff), mã thoát thực thi kiểm thử (test execution exit codes), và ranh giới cây cú pháp trừu tượng (AST boundaries) thông qua phán quyết phân loại (`APPROVE` | `REJECT` | `NEXT_ACTION_REQUIRED`).
+3. **Bộ máy Đồng thuận & Leo thang (Consensus & Escalation Engine):**
+   - Cả hai cùng đồng thuận phê duyệt $\implies$ **Tự động Phê duyệt (Auto-Approve):** Tiếp tục thực thi ngay lập tức, không cần sự can thiệp của con người.
+   - Cả hai cùng đồng thuận từ chối $\implies$ **Tổng hợp Khắc phục (Synthesize Remediation):** Tạo chênh lệch kế hoạch có thể hành động (actionable plan delta), không ném ngoại lệ kết thúc phiên.
+   - Bất đồng / Xung đột giữa Cố vấn và JEV $\implies$ **Leo thang lên Con người (Escalate to Human):** Trình bày ngắn gọn cả hai góc nhìn để người dùng quyết định.
+4. **Bất biến Chủ quyền của Con người (Sovereign Human Invariant):**
+   - Khi người dùng xác nhận/phê duyệt (ví dụ: nhấn Đồng ý khi hủy bỏ nhiệm vụ hoặc chấp thuận thay đổi kế hoạch), quyết định đó được ghi nhận là ủy quyền máy chủ có thẩm quyền (`host-authorization`).
+   - Bộ máy BẮT BUỘC phải thực thi ngay thao tác biến đổi đã được phê duyệt; các cổng kiểm tra tiếp theo bị nghiêm cấm chặn lại các thao tác đã được con người thông qua.
+5. **Đối soát Kế hoạch & Danh sách Nhiệm vụ Không Chặn (Non-Blocking Plan & Todo Reconciliation):**
+   - Nếu JEV hoặc Cố vấn phát hiện còn thiếu yêu cầu (`NEXT_ACTION_REQUIRED`), bộ máy sẽ sinh ra các mục hành động tiếp theo (`nextaction`) cụ thể, tự động phác thảo cập nhật cho `todo` và `plan.md`, trình bày bản sửa đổi kế hoạch cho người dùng và tiếp tục thực thi sau khi được chấp thuận.
 
-The council unanimously agrees that mathematical filtering on the client side ($P \ge 0.80$) was an architectural misstep that contradicted both TypeSafe's official design philosophy and OMP's agent autonomy goals.
+---
 
-JEV System One models are trained for calibrated common-sense judgments. Second-guessing JEV with floating-point bands created a "bureaucratic filter" that locked agents into unrecoverable failure loops.
+## 6. Lý giải & Hệ quả (Rationale & Consequences)
 
-By pairing JEV's ground-truth code verification with the Advisor's intent understanding:
-- False positives (scaffolds/stubs with passing exit codes) are caught because JEV examines the AST and diff deliverables.
-- False negatives (reasonable drops of obsolete tasks after build success) are resolved because the Advisor verifies user intent and success conditions.
-- Human escalation is reserved exclusively for genuine ambiguity, eliminating notification fatigue.
+### Lý giải Kỹ thuật (Rationale)
+Hội đồng hoàn toàn nhất trí rằng việc lọc toán học ở phía máy khách ($P \ge 0.80$) là một sai lầm kiến trúc đi ngược lại triết lý thiết kế chính thức của TypeSafe lẫn mục tiêu tự hành của tác tử trong OMP. Các mô hình JEV System One đã được huấn luyện để đưa ra các phán đoán lẽ thường có hiệu chuẩn (calibrated common-sense judgments). Việc nghi ngờ ngược lại JEV bằng các dải số dấu phẩy động đã tạo ra một "bộ lọc quan liêu" (bureaucratic filter) khóa chặt các tác tử vào vòng lặp thất bại không lối thoát.
 
-## Risks & mitigations
+Bằng cách ghép đôi khả năng xác minh mã nguồn thực tế của JEV với khả năng thấu hiểu ý định của Cố vấn:
+- **Dương tính giả (False Positives — mã khung/stub rỗng nhưng có mã thoát kiểm thử bằng 0)** bị bắt giữ vì JEV kiểm tra trực tiếp AST và sản phẩm bàn giao trong bản diff.
+- **Âm tính giả (False Negatives — hủy bỏ hợp lý các nhiệm vụ đã lỗi thời sau khi dựng thành công)** được giải quyết vì Cố vấn xác nhận ý định của người dùng và điều kiện thành công thực tế.
+- **Leo thang lên con người (Human Escalation)** được dành riêng cho các trường hợp mơ hồ thực sự, xóa bỏ tình trạng mệt mỏi vì thông báo (notification fatigue).
 
-| Risk | Severity | Mitigation |
+### Rủi ro, Hệ quả & Biện pháp Giảm thiểu (Risks, Consequences & Mitigations)
+
+| Rủi ro (Risk) | Mức độ (Severity) | Biện pháp giảm thiểu (Mitigation) |
 |---|---|---|
-| **Agent hallucinating Advisor consensus** | High | Advisor evaluation runs in a controlled extension context or independent subagent sandbox; it cannot be spoofed by raw prompt text. |
-| **Breaking existing test assertions** | High | Progressively refactor existing unit test suites (`tests/todo-drop-gate.test.ts`, `tests/cook-expert-judge.test.ts`) to assert bicameral decision states rather than numeric 0.80 boundaries. |
-| **Unbounded plan update loops** | Medium | Cap automated plan adaptation cycles to at most 2 iterations before mandating human intervention. |
-| **Silent drop of critical tasks** | Critical | Enforce sovereign human confirmation whenever a contracted task has non-zero diff evidence unless JEV and Advisor both emit unconditional approval. |
+| **Tác tử ảo giác ra sự đồng thuận của Cố vấn (Agent Hallucinating Advisor Consensus)** | Cao (High) | Đánh giá của Cố vấn chạy trong ngữ cảnh tiện ích mở rộng được kiểm soát hoặc môi trường hộp cát tác tử con độc lập (independent subagent sandbox); không thể bị giả mạo bởi văn bản lời nhắc thô. |
+| **Làm gãy các khẳng định kiểm thử hiện hành (Breaking Existing Test Assertions)** | Cao (High) | Tái cấu trúc tuần차 các bộ kiểm thử đơn vị (`tests/todo-drop-gate.test.ts`, `tests/cook-expert-judge.test.ts`) để kiểm tra các trạng thái quyết định lưỡng viện thay vì ranh giới số `0.80`. |
+| **Vòng lặp cập nhật kế hoạch không giới hạn (Unbounded Plan Update Loops)** | Trung bình (Medium) | Khống chế số chu kỳ thích ứng kế hoạch tự động ở mức tối đa 2 vòng lặp trước khi bắt buộc có sự can thiệp của con người. |
+| **Hủy bỏ ngầm các nhiệm vụ trọng yếu (Silent Drop of Critical Tasks)** | Nghiêm trọng (Critical) | Cưỡng chế xác nhận chủ quyền của con người bấtất cứ khi nào một nhiệm vụ đã giao ước có bằng chứng diff khác rỗng trừ khi cả JEV và Cố vấn đều phát hành phê duyệt vô điều kiện. |
 
-## Implementation checklist
+---
 
-- [ ] **Phase 1: Decision Contract Refactoring**:
-  - Update `src/cook-expert-judge.ts` to convert `runDropJustificationCheck` and `runPhaseMacroCheck` questions to categorical verdicts (`APPROVE`, `REJECT`, `NEXT_ACTION_REQUIRED`).
-  - Deprecate `resolveAutoApprovalThreshold` and `DROP_REJECT_FLOOR`.
-- [ ] **Phase 2: Bicameral Evaluator Integration**:
-  - Implement `evaluateAdvisorIntent(ctx)` in `src/debate-evaluator.ts` or `src/plan-evaluator.ts`.
-  - Harmonize Advisor and JEV Judge outputs into `BicameralConsensusResult` (`auto_approve`, `auto_reject`, `human_escalation`).
-- [ ] **Phase 3: Sovereign Human Authority & Plan Reconciliation**:
-  - Update `handleTodoInterception` in `typesafe-planner.ts` to enforce unconditional execution when human approval is present.
-  - Implement non-blocking plan synthesis: on rejection or next-action directive, generate updated todo items and present for human review without throwing fatal errors.
-- [ ] **Phase 4: Regression Alignment & Deployment**:
-  - Update test suites in `tests/` to validate bicameral scenarios.
-  - Deploy baseline via `node tools/sync-baseline.cjs` and verify 100% pass across all target suites.
+## 7. Danh sách Kiểm tra Triển khai (Implementation Checklist)
 
-## Reopen conditions
+- [x] **Giai đoạn 1: Tái cấu trúc Hợp đồng Quyết định (Phase 1: Decision Contract Refactoring):**
+  - Cập nhật `src/cook-expert-judge.ts` để chuyển đổi các câu hỏi trong `runDropJustificationCheck` và `runPhaseMacroCheck` sang phán quyết phân loại (`APPROVE`, `REJECT`, `NEXT_ACTION_REQUIRED`).
+  - Ngừng sử dụng (deprecate) `resolveAutoApprovalThreshold` và `DROP_REJECT_FLOOR` làm rào cản chặn.
+- [x] **Giai đoạn 2: Tích hợp Bộ Đánh giá Lưỡng viện (Phase 2: Bicameral Evaluator Integration):**
+  - Triển khai `evaluateAdvisorIntent(ctx)` và mô-đun `src/bicameral-consensus.ts`.
+  - Hòa hợp đầu ra của Cố vấn và Thẩm phán JEV thành `BicameralConsensusResult` (`AUTO_APPROVE`, `AUTO_REJECT`, `PLAN_RECONCILIATION`, `HUMAN_ESCALATION`).
+- [x] **Giai đoạn 3: Thẩm quyền Chủ quyền của Con người & Đối soát Kế hoạch (Phase 3: Sovereign Human Authority & Plan Reconciliation):**
+  - Cập nhật `handleTodoInterception` trong `typesafe-planner.ts` để thực thi vô điều kiện khi có sự phê duyệt xác thực của người dùng.
+  - Triển khai tổng hợp kế hoạch không chặn: khi bị từ chối hoặc có chỉ thị hành động tiếp theo, sinh ra các mục nhiệm vụ cập nhật mà không làm sập phiên.
+- [x] **Giai đoạn 4: Đồng bộ Hồi quy & Triển khai (Phase 4: Regression Alignment & Deployment):**
+  - Cập nhật các bộ kiểm thử trong `tests/` để xác thực các kịch bản lưỡng viện.
+  - Triển khai cơ sở qua `node tools/sync-baseline.cjs` và xác minh tỷ lệ vượt qua 100% trên toàn bộ bộ kiểm thử đích.
 
-- TypeSafe releases a breaking API revision to `/v1/systemone` or alters primitive semantics.
-- Measured telemetry indicates an increase in unauthorized task drops under bicameral consensus.
-- Host human users report notification fatigue from conflict escalation rate exceeding 10% of total tool calls.
+---
 
-## Owners
+## 8. Điều kiện Mở lại & Quản trị (Reopen Conditions & Governance)
 
-- Architectural Owner: OMP TypeSafe Core Extension Team
-- Runtime Security: Red-Team & Verification Gate Maintainers
+### Điều kiện Mở lại (Reopen Conditions)
+- TypeSafe phát hành bản sửa đổi API gây đứt gãy cho `/v1/systemone` hoặc thay đổi ngữ nghĩa nguyên hàm (primitive semantics).
+- Số liệu đo đạc từ xa (telemetry) cho thấy sự gia tăng các lượt hủy bỏ nhiệm vụ trái phép dưới cơ chế đồng thuận lưỡng viện.
+- Người dùng máy chủ phản ánh tình trạng mệt mỏi vì thông báo (notification fatigue) do tỷ lệ leo thang xung đột vượt quá $10\%$ tổng số lệnh gọi công cụ.
 
-## Council metadata
+### Chủ sở hữu (Owners)
+- **Chủ sở hữu Kiến trúc (Architectural Owner):** Nhóm Tiện ích mở rộng Lõi OMP TypeSafe (OMP TypeSafe Core Extension Team).
+- **Bảo mật Thời gian chạy (Runtime Security):** Nhóm Bảo trì Cổng Xác thực & Kiểm thử Đối kháng (Red-Team & Verification Gate Maintainers).
 
-- Models used: 4 lenses (docs-fidelity, engineering, security, cost) + research (built-in harness analysis)
-- Cost estimate: ≈$0.50 (cached harness evaluation)
-- Lenses run: docs-fidelity, engineering, security, cost (domain: ai)
-- Generated by: `/ck:council` on 2026-10-13
+### Siêu dữ liệu Hội đồng (Council Metadata)
+- **Mô hình sử dụng (Models used):** 4 lăng kính (`docs-fidelity`, `engineering`, `security`, `cost`) + `research` (phân tích khung dây tích hợp sẵn).
+- **Chi phí ước tính (Cost estimate):** $\approx \$0.50$ (đánh giá khung dây có bộ nhớ đệm).
+- **Các lăng kính đã chạy (Lenses run):** `docs-fidelity`, `engineering`, `security`, `cost` (lĩnh vực: `ai`).
+- **Khởi tạo bởi (Generated by):** `/ck:council` vào ngày 2026-10-13.

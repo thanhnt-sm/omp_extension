@@ -7,15 +7,15 @@ describe("source-supported native Advisor host adapter (offline controls, not li
     await host.start();
     for (const name of ["task", "read", "grep", "glob"]) expect(host.tools.get(name)?.parameters).toBe(host.nativeSchemas.get(name));
     const shape = object(object(host.tools.get("typesafe_prepare_advisor")!.parameters).shape);
-    expect(Object.hasOwn(shape, "task")).toBe(true); expect(Object.hasOwn(shape, "phase")).toBe(true);
+    expect(Object.prototype.hasOwnProperty.call(shape, "task")).toBe(true); expect(Object.prototype.hasOwnProperty.call(shape, "phase")).toBe(true);
     expect((await host.prepare({ purpose: "shadow" }, false)).status).toBe("UNAVAILABLE");
     expect((await host.prepare({ purpose: "invented" }, false)).status).toBe("UNAVAILABLE");
   });
   test("binds only actual native task ID, routes separate child event buses, and waits for actual outer history", async () => {
     const host = new AdvisorHostFixture(); await host.start(); const pending = await host.prepare();
     expect(pending.status).toBe("REVIEW_REQUIRED"); expect(host.finalCalls).toEqual([]);
-    const params = object(pending.parameters); expect(Object.hasOwn(params, "blocking")).toBe(false);
-    expect(Object.hasOwn(object((params.tasks as unknown[])[0]), "blocking")).toBe(false);
+    const params = object(pending.parameters); expect(Object.prototype.hasOwnProperty.call(params, "blocking")).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(object((params.tasks as unknown[])[0]), "blocking")).toBe(false);
     const result = await host.nativeReview(params);
     expect(host.nativeCalls).toBe(1); expect(host.finalCalls).toEqual(["actual-native-task-id"]);
     expect(host.child?.events).not.toBe(host.events); expect(host.providerCalls).toBe(1);
