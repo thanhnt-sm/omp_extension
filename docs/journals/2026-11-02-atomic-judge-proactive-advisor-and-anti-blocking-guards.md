@@ -51,8 +51,8 @@ Người dùng ghi nhận sự ức chế nghiêm trọng trong các phiên làm
 2. **Kiểm thử Toàn diện Toàn bộ Kho Mã nguồn (Full Workspace Suite)**:
    - `bun test`: **982 pass, 4 skip, 0 fail (5565 assertions)** trong 261.81s.
 3. **Triển khai Giao dịch & Xác minh Toàn cầu (Deployment & 6-Layer Verification)**:
-   - `node tools/sync-baseline.cjs`: Đạt `DEPLOYED_VERIFIED`. Sao lưu tại `C:\Users\thant\Projects\omp_extension_backup_2026-11-02T01-48-13-240Z`.
+   - `node tools/sync-baseline.cjs`: Đạt `DEPLOYED_VERIFIED`. Sao lưu tại `C:\Users\thant\Projects\omp_extension_backup_2026-11-02T05-09-38-735Z`.
    - `node tools/verify-omp-global.cjs --json`:
      - `overallOk`: true.
-     - `pointer`: Immutable 1-line proxy trampoline verified (SHA-256 khớp).
-     - `manifest`: 528/528 tệp khớp 100%, 0 mismatch, 0 nonNoopActions.
+     - `pointer`: Immutable 1-line proxy trampoline verified (`c196f66ceb2bd08b5a09e0be90b93dd285085af9129dcda6b23ebc7561f143e3`).
+     - `manifest`: 534/534 tệp khớp 100% (target=532, global_omp_agents=2), 0 mismatch, 0 nonNoopActions.
