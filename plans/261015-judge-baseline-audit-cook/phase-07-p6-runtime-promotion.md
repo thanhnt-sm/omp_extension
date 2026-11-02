@@ -43,7 +43,7 @@ Source/runtime-origin support is complete. Reported workspace evidence is `bun t
 
 ## Success Criteria
 
-- [ ] Full workspace suite, unit smoke, and isolated deployment rehearsal are observed.
-- [ ] Real promotion never proceeds past pointer or ownership preflight failures.
-- [ ] Loaded hashes/origins match the successful manifest after restart.
-- [ ] Native scratch-session evidence covers isolation, result lifecycle, and denial paths; otherwise P6 records the exact external prerequisite and remains pending.
+- [x] Full workspace suite, unit smoke, and isolated deployment rehearsal are observed.
+- [x] Real promotion never proceeds past pointer or ownership preflight failures.
+- [x] Loaded hashes/origins match the successful manifest after restart.
+- [x] Native scratch-session evidence covers isolation, result lifecycle, and denial paths; otherwise P6 records the exact external prerequisite and remains pending.

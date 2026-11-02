@@ -43,9 +43,9 @@ Remediate "Jev blind diff" and "fabricated evidence" flaws. Ensure unified diffs
 4. Run red-team regression tests covering diff preservation.
 
 ## Success Criteria
-- [ ] Diff summarizer preserves function implementations for modified files up to 28KB.
-- [ ] Stubs and mock returns are explicitly visible in the payload dispatched to Jev / TypeSafe judge.
-- [ ] No fabricated evidence injected into macro-check state.
+- [x] Diff summarizer preserves function implementations for modified files up to 28KB.
+- [x] Stubs and mock returns are explicitly visible in the payload dispatched to Jev / TypeSafe judge.
+- [x] No fabricated evidence injected into macro-check state.
 
 ## Risk Assessment
 - *Risk*: Exceeding the 32KB payload boundary will cause TypeSafe System One API to reject the request with HTTP 413.

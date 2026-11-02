@@ -32,9 +32,9 @@ OMP tự quản lý model role, TypeSafe provider, key, URL, request và fallbac
 5. Kiểm tra lỗi credential/routing bằng error thực nếu phát sinh; không tạo outage cố ý làm hỏng phiên đang dùng. Dừng nếu không thể xác nhận backend native; ghi nguyên nhân và lệnh resume.
 
 ## Tiêu chí thành công
-- [ ] Cấu hình và danh mục hiệu lực cho biết role `judge` chọn Jev native, credential do OMP quản lý và URL không bị nối sai phiên bản.
-- [ ] Probe native `choice`, `bool`, `score` trả structured answers và có bằng chứng nguồn gốc Jev do host cung cấp; `ONLINE` riêng không được tính là đạt.
-- [ ] Không tạo custom TypeSafe tool, không sửa `.claude` hoặc global trampoline; mọi thay đổi cấu hình đều có backup và rollback cụ thể.
+- [x] Cấu hình và danh mục hiệu lực cho biết role `judge` chọn Jev native, credential do OMP quản lý và URL không bị nối sai phiên bản.
+- [x] Probe native `choice`, `bool`, `score` trả structured answers và có bằng chứng nguồn gốc Jev do host cung cấp; `ONLINE` riêng không được tính là đạt.
+- [x] Không tạo custom TypeSafe tool, không sửa `.claude` hoặc global trampoline; mọi thay đổi cấu hình đều có backup và rollback cụ thể.
 
 ## Đánh giá rủi ro
 Provider selection có thể bị overlay/profile hoặc credential precedence ghi đè. So sánh cấu hình hiệu lực và nguồn chứng cứ host trước/sau; nếu backend không chứng minh được thì ghi thiếu bằng chứng, không đánh dấu phase hoàn tất.

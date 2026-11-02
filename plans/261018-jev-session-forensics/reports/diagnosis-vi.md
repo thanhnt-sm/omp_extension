@@ -1,3 +1,7 @@
+---
+title: "Chẩn đoán tiếng Việt — JEV Session Forensics"
+status: completed
+---
 # Chẩn đoán tiếng Việt — JEV Session Forensics
 
 ## Kết luận

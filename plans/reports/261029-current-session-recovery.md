@@ -1,3 +1,7 @@
+---
+title: "Phục hồi đúng phiên Core và lỗi Advisor trước dispatch"
+status: completed
+---
 # Phục hồi đúng phiên Core và lỗi Advisor trước dispatch
 
 ## Bằng chứng hiện hành

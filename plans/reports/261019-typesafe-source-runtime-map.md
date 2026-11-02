@@ -1,3 +1,7 @@
+---
+title: "TypeSafe source/runtime map"
+status: completed
+---
 # TypeSafe source/runtime map
 
 Original task (verbatim): "Map source callsites and verify workspace/runtime identity for TypeSafe judge and todo gates."

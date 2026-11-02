@@ -1,3 +1,12 @@
+---
+title: "261003-planner-import-proxy"
+status: completed
+priority: P1
+effort: "completed"
+supersededBy: "261102-atomic-judge-proactive-advisor-healing"
+completedInCycle: "2026-11-02"
+verificationSuite: "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+---
 ## Context
 The `typesafe-planner.ts` OMP extension fails to load at session startup because it attempts to import `./src/plan-evaluator` (and 3 other modules). These are relative modules that do not exist in the global `~/.omp/agent/extensions/` directory. This breaks the TypeSafe judge functionality.
 

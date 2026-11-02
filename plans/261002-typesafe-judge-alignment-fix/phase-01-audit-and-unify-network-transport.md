@@ -70,11 +70,11 @@ Unify all outbound TypeSafe traffic through a single, hardened transport pipelin
    - Mock global `fetch` in test suite and assert that every intercepted tool call targets `https://api.typesafe.ai/v1/systemone` with body containing `model: "jev-latest"`.
 
 ## Success Criteria
-- [ ] 100% of outgoing TypeSafe calls target `https://api.typesafe.ai/v1/systemone`.
-- [ ] Zero calls are made to `/v1/judge`.
-- [ ] All request payloads contain `"model": "jev-latest"`.
-- [ ] `src/` directory is unmodified.
-- [ ] Verification command: `bun test typesafe-planner.test.ts` passes with 0 failures.
+- [x] 100% of outgoing TypeSafe calls target `https://api.typesafe.ai/v1/systemone`.
+- [x] Zero calls are made to `/v1/judge`.
+- [x] All request payloads contain `"model": "jev-latest"`.
+- [x] `src/` directory is unmodified.
+- [x] Verification command: `bun test typesafe-planner.test.ts` passes with 0 failures.
 
 ## Risk Assessment
 - **Risk:** Base helper functions might expect specific response shapes.

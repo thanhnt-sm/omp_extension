@@ -86,10 +86,10 @@ Author exhaustive automated tests verifying threshold boundary conditions, fail-
    - Run plan completion check; observe strict gating until tasks are resolved.
 
 ## Success Criteria
-- [ ] Boundary tests pass for 0.29, 0.30, 0.35, 0.79, 0.80, 0.95.
-- [ ] Plan-completion backdoor tests pass and confirm fail-closed behavior.
-- [ ] Full test suite passes cleanly with zero failures.
-- [ ] `sync-baseline.cjs` completes successfully with target validation verified.
+- [x] Boundary tests pass for 0.29, 0.30, 0.35, 0.79, 0.80, 0.95.
+- [x] Plan-completion backdoor tests pass and confirm fail-closed behavior.
+- [x] Full test suite passes cleanly with zero failures.
+- [x] `sync-baseline.cjs` completes successfully with target validation verified.
 
 ## Risk Assessment
 - Risk: Changes in local workspace not taking effect in active OMP session.

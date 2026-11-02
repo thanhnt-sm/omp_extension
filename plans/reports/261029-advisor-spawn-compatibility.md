@@ -1,3 +1,7 @@
+---
+title: "Tương thích định danh Advisor trên OMP 18.13.3"
+status: completed
+---
 # Tương thích định danh Advisor trên OMP 18.13.3
 
 ## Nguyên nhân và sửa đổi

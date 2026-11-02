@@ -9,6 +9,9 @@ tags: [typesafe, jev-latest, bicameral-consensus, todo-done, calibration, stub-f
 blockedBy: []
 blocks: []
 created: 2026-10-14
+supersededBy: "261102-atomic-judge-proactive-advisor-healing"
+completedInCycle: "2026-11-02"
+verificationSuite: "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
 ---
 
 # TypeSafe Todo Done Verdict Fidelity and Calibration Alignment

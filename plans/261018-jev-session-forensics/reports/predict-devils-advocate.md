@@ -1,3 +1,7 @@
+---
+title: "Devil's Advocate Assessment — JEV Session Forensics"
+status: completed
+---
 # Devil's Advocate Assessment — JEV Session Forensics
 
 ## Scope and evidentiary boundary

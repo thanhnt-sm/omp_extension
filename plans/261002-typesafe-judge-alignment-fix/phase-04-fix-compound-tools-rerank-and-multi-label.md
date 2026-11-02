@@ -89,10 +89,10 @@ Eliminate **Question ID Blindness** in `typesafe_rerank` and convert non-binary 
    - Test `typesafe_evaluate_multi`: verify that questions have yes/no instructions and structured `{ true, false }` criteria.
 
 ## Success Criteria
-- [ ] In `typesafe_rerank`, every question's `instructions` contains the exact candidate backtick index `candidates[${i}]`.
-- [ ] In `typesafe_evaluate_multi`, every question is framed as a verifiable yes/no question with `{ true, false }` criteria.
-- [ ] `src/` directory is unmodified.
-- [ ] Verification command: `bun test typesafe-planner.test.ts` passes with 0 failures.
+- [x] In `typesafe_rerank`, every question's `instructions` contains the exact candidate backtick index `candidates[${i}]`.
+- [x] In `typesafe_evaluate_multi`, every question is framed as a verifiable yes/no question with `{ true, false }` criteria.
+- [x] `src/` directory is unmodified.
+- [x] Verification command: `bun test typesafe-planner.test.ts` passes with 0 failures.
 
 ## Risk Assessment
 - **Risk:** Existing callers might expect unranked raw scores.

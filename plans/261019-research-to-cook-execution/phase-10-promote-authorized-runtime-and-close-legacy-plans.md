@@ -39,12 +39,12 @@ Final workspace verification → fresh managed preflight → trusted release aut
 10. Produce final durable handoff for every actual external remainder: original obligation, exact task/phase, last verified revision, failure category, evidence paths, owner, next executable action, release condition, resume checks and unresolved authority. Internal actionable blockers require an executor and concrete clearing task, not passive permanent blocked status.
 
 ## Success Criteria
-- [ ] Final source/full-suite/smoke/review evidence and fresh dry-run correspond to the exact release candidate.
-- [ ] No direct global-proxy write, unauthorized deployment/config mutation/restart or fabricated live-runtime identity occurred.
-- [ ] If authorized, transactional sync and target verification succeed; restart/load evidence and actual native recovery chain are captured.
-- [ ] Actual human/default/cancel behavior is verified on its surface or remains explicitly unverified with owner/action; headless simulation is not passed UI acceptance.
-- [ ] Every legacy objective is reconciled individually; genuine unfulfilled phase8 or activation criteria remain open without stopping unrelated ready work.
-- [ ] Final report distinguishes implemented workspace, empirical evaluation, deployed files, loaded process, human authority and authoritative native commit.
+- [x] Final source/full-suite/smoke/review evidence and fresh dry-run correspond to the exact release candidate.
+- [x] No direct global-proxy write, unauthorized deployment/config mutation/restart or fabricated live-runtime identity occurred.
+- [x] If authorized, transactional sync and target verification succeed; restart/load evidence and actual native recovery chain are captured.
+- [x] Actual human/default/cancel behavior is verified on its surface or remains explicitly unverified with owner/action; headless simulation is not passed UI acceptance.
+- [x] Every legacy objective is reconciled individually; genuine unfulfilled phase8 or activation criteria remain open without stopping unrelated ready work.
+- [x] Final report distinguishes implemented workspace, empirical evaluation, deployed files, loaded process, human authority and authoritative native commit.
 
 ## Verification
 Use real sync CLI/target tests/host interactions only after their respective authority gates. Planning implies no production test or deployment. Source/runtime/UI/native evidence remain distinct.

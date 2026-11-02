@@ -1,3 +1,7 @@
+---
+title: "Prediction Report: omp_extension Codebase Architecture & Integrity Evaluation"
+status: completed
+---
 # Prediction Report: omp_extension Codebase Architecture & Integrity Evaluation
 
 ## Verdict: CAUTION

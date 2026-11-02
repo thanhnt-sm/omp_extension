@@ -81,10 +81,10 @@ Enforce 100% compliance with TypeSafe System One API specifications (`docs.types
    - Add test cases verifying that legacy array criteria passed into `typesafe_judge` or `typesafe_expert_review` are transparently normalized to TypeSafe-compliant payloads and evaluated without errors.
 
 ## Success Criteria
-- [ ] `validateInput()` returns `{ ok: true }` for all tool calls and intercepted verification gates.
-- [ ] Base directory (`src/`) has zero modified files (`git diff src/` is empty).
-- [ ] `typesafe-planner.test.ts` passes all tests verifying normalization of Choice and Noul criteria.
-- [ ] Verification command: `bun test typesafe-planner.test.ts` passes with 0 failures.
+- [x] `validateInput()` returns `{ ok: true }` for all tool calls and intercepted verification gates.
+- [x] Base directory (`src/`) has zero modified files (`git diff src/` is empty).
+- [x] `typesafe-planner.test.ts` passes all tests verifying normalization of Choice and Noul criteria.
+- [x] Verification command: `bun test typesafe-planner.test.ts` passes with 0 failures.
 
 ## Risk Assessment
 - **Risk:** Complex regex parsing of `KEY: Description` might fail if criteria string has no colon.

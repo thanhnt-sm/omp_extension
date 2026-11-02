@@ -1,3 +1,7 @@
+---
+title: "Telemetry, Transcripts & Payloads: 5 Most Recent oh-my-pi Sessions"
+status: completed
+---
 # Telemetry, Transcripts & Payloads: 5 Most Recent oh-my-pi Sessions
 
 Complete extraction of the 5 most recent `oh-my-pi` sessions across all workspaces (`archive.sessions({ project: "*" })`):

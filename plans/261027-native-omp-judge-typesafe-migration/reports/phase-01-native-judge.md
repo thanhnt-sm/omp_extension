@@ -1,3 +1,7 @@
+---
+title: "Báo cáo Giai đoạn 1: Cấu hình và Xác minh Judge Bản địa OMP (Phase 1 Report: Native OMP Judge Configuration & Verification)"
+status: completed
+---
 # Báo cáo Giai đoạn 1: Cấu hình và Xác minh Judge Bản địa OMP (Phase 1 Report: Native OMP Judge Configuration & Verification)
 
 ## 1. Mục tiêu Giai đoạn (Phase Goal)

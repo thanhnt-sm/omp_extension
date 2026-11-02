@@ -78,11 +78,11 @@ Implement an intelligent State Preprocessor and Diff Summarizer within `typesafe
    - Test that a 50KB git diff passed into `typesafe_expert_review` is summarized to under 8KB without losing assertion deletion signals.
 
 ## Success Criteria
-- [ ] Any `state` passing through `executeTypeSafe` is capped to $\le 8\text{KB}$.
-- [ ] No raw stringified JSON is sent as `state`; native JSON objects are sent whenever valid JSON is provided.
-- [ ] Question instructions utilize backtick paths for nested state fields.
-- [ ] `src/` directory is unmodified.
-- [ ] Verification command: `bun test typesafe-planner.test.ts` passes with 0 failures.
+- [x] Any `state` passing through `executeTypeSafe` is capped to $\le 8\text{KB}$.
+- [x] No raw stringified JSON is sent as `state`; native JSON objects are sent whenever valid JSON is provided.
+- [x] Question instructions utilize backtick paths for nested state fields.
+- [x] `src/` directory is unmodified.
+- [x] Verification command: `bun test typesafe-planner.test.ts` passes with 0 failures.
 
 ## Risk Assessment
 - **Risk:** Truncating a diff might accidentally remove context needed to judge `meets_criteria`.

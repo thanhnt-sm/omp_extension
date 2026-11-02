@@ -1,3 +1,7 @@
+---
+title: "Verification-task acceptance evidence"
+status: completed
+---
 Task: Run bun test, affected-module checks and isolated changed-path smoke to discriminate root-cause hypotheses without changing verification assets.
 Operation: done
 # Verification-task acceptance evidence

@@ -1,7 +1,7 @@
 ---
 title: "Red-Team Hardening and EGC Harmonization"
 description: "TDD-driven remediation of red-team vulnerabilities in typesafe-planner and harmonization with EGC v2"
-status: pending
+status: completed
 priority: P1
 effort: "4h"
 branch: master
@@ -9,6 +9,9 @@ tags: [red-team, tdd, egc, security, verification-gate]
 blockedBy: []
 blocks: []
 created: 2026-10-04
+supersededBy: "261102-atomic-judge-proactive-advisor-healing"
+completedInCycle: "2026-11-02"
+verificationSuite: "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
 ---
 
 # Red-Team Hardening and EGC Harmonization

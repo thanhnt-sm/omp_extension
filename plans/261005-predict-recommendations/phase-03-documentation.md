@@ -30,7 +30,7 @@ N/A
 4. Ensure `jev-fast` token usage tracking is visible or logged.
 
 ## Success Criteria
-- [ ] Tool schema correctly reflects the backend capability.
+- [x] Tool schema correctly reflects the backend capability.
 - [x] Documentation explains how to recover from a 3-consecutive-failure ratchet lock.
 
 ## Risk Assessment

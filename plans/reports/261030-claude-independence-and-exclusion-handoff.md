@@ -1,3 +1,7 @@
+---
+title: "Bàn giao Vận hành: Độc lập .claude, Quản trị ExcludeProjects và Tiến trình Quyết toán"
+status: completed
+---
 # Bàn giao Vận hành: Độc lập .claude, Quản trị ExcludeProjects và Tiến trình Quyết toán
 
 ## Kết quả Thực thi Đã Đạt được (Verified Outcomes)

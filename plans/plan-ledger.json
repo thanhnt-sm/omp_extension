@@ -1,0 +1,1591 @@
+{
+  "schemaVersion": "2.0.0",
+  "standard": "ck:project-management & ck:project-organization",
+  "generatedAt": "2026-11-02T09:04:28.374Z",
+  "totalPlans": 41,
+  "completedCount": 41,
+  "inProgressCount": 0,
+  "pendingCount": 0,
+  "plans": [
+    {
+      "id": "261001-auth-error-visibility",
+      "path": "plans/261001-auth-error-visibility/plan.md",
+      "directory": "plans/261001-auth-error-visibility",
+      "title": "Auth Error Visibility Enhancement",
+      "status": "completed",
+      "priority": "P2",
+      "effort": "unspecified",
+      "frontmatter": {
+        "title": "Auth Error Visibility Enhancement",
+        "description": "",
+        "status": "completed",
+        "priority": "P2",
+        "effort": "",
+        "tags": [],
+        "blockedBy": [],
+        "blocks": [],
+        "created": "2026-10-01",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 7,
+        "unchecked": 0
+      },
+      "phaseFiles": [
+        "phase-01-update-interfaces.md",
+        "phase-02-implement-out-of-band-notification.md",
+        "phase-03-test-and-verify.md"
+      ],
+      "isCompleted": true
+    },
+    {
+      "id": "261001-typesafe-concerns",
+      "path": "plans/261001-typesafe-concerns/plan.md",
+      "directory": "plans/261001-typesafe-concerns",
+      "title": "TypeSafe Judge Concerns Resolution",
+      "status": "completed",
+      "priority": "P2",
+      "effort": "7h",
+      "frontmatter": {
+        "title": "TypeSafe Judge Concerns Resolution",
+        "description": "Resolve two DONE_WITH_CONCERNS items from the TypeSafe role judge validation: Case 2 (prompt injection via state) and Case 6 (overconfident routing on ambiguous input). Gate on expert consultation; implement enforced call-site lattice and confidence handling; promote plan status to COMPLETE.",
+        "status": "completed",
+        "priority": "P2",
+        "effort": "7h",
+        "tags": [],
+        "blockedBy": [],
+        "blocks": [],
+        "created": "2026-10-01",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 16,
+        "unchecked": 0
+      },
+      "phaseFiles": [
+        "phase-01-expert-consultation-prompt.md",
+        "phase-02-case-2-enforced-call-site-lattice.md",
+        "phase-03-case-6-confidence-handling.md",
+        "phase-04-test-suite-update-to-complete.md"
+      ],
+      "isCompleted": true
+    },
+    {
+      "id": "261001-typesafe-role-judge-validation",
+      "path": "plans/261001-typesafe-role-judge-validation/plan.md",
+      "directory": "plans/261001-typesafe-role-judge-validation",
+      "title": "TypeSafe Role Judge Validation Plan (TDD & Cross-Workspace)",
+      "status": "completed",
+      "priority": "P1",
+      "effort": "completed",
+      "frontmatter": {
+        "title": "TypeSafe Role Judge Validation Plan (TDD & Cross-Workspace)",
+        "status": "completed",
+        "priority": "P1",
+        "effort": "completed",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseFiles": [],
+      "isCompleted": true
+    },
+    {
+      "id": "261002-cook-mandatory-typesafe-verification",
+      "path": "plans/261002-cook-mandatory-typesafe-verification/plan.md",
+      "directory": "plans/261002-cook-mandatory-typesafe-verification",
+      "title": "Mandatory TypeSafe Judge & Expert Evaluation in Cook Workflow",
+      "status": "completed",
+      "priority": "P1",
+      "effort": "6h",
+      "frontmatter": {
+        "title": "Mandatory TypeSafe Judge & Expert Evaluation in Cook Workflow",
+        "description": "Architectural elevation of the ck:cook workflow enforcing mandatory TypeSafe System One verification (meets_criteria, scope preservation, architectural drift) across all modes, with dual-cadence gating and tri-role expert evaluation.",
+        "status": "completed",
+        "priority": "P1",
+        "effort": "6h",
+        "tags": [
+          "omp",
+          "cook",
+          "typesafe",
+          "system-one",
+          "red-team",
+          "tdd",
+          "compliance",
+          "dual-cadence"
+        ],
+        "blockedBy": [],
+        "blocks": [],
+        "created": "2026-10-02",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 7,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 17,
+        "unchecked": 0
+      },
+      "phaseFiles": [
+        "phase-01-workflow-specification-review-gate-upgrade.md",
+        "phase-02-dual-cadence-verification-engine-expert-roles.md",
+        "phase-03-omp-extension-interception-bridge-integration.md",
+        "phase-04-adversarial-stress-test-matrix-validation.md"
+      ],
+      "isCompleted": true
+    },
+    {
+      "id": "261002-typesafe-compliance-elevation",
+      "path": "plans/261002-typesafe-compliance-elevation/plan.md",
+      "directory": "plans/261002-typesafe-compliance-elevation",
+      "title": "TypeSafe Plan Compliance & Elevation System",
+      "status": "completed",
+      "priority": "P1",
+      "effort": "8h",
+      "frontmatter": {
+        "title": "TypeSafe Plan Compliance & Elevation System",
+        "description": "Dual-tier verification framework for OMP: elevating plan quality with a 3-question rubric and enforcing execution compliance via deterministic and TypeSafe System One semantic gates, with strict Claude/Anthropic account isolation.",
+        "status": "completed",
+        "priority": "P1",
+        "effort": "8h",
+        "tags": [
+          "omp",
+          "typesafe",
+          "system-one",
+          "red-team",
+          "tdd",
+          "compliance",
+          "planning",
+          "anthropic-safety"
+        ],
+        "blockedBy": [],
+        "blocks": [],
+        "created": "2026-10-02",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 7,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 20,
+        "unchecked": 0
+      },
+      "phaseFiles": [
+        "phase-01-deterministic-state-collection-payload-safety.md",
+        "phase-02-plan-time-quality-elevation-engine.md",
+        "phase-03-execution-compliance-dual-verification-gate.md",
+        "phase-04-adversarial-robustness-e2e-validation.md"
+      ],
+      "isCompleted": true
+    },
+    {
+      "id": "261002-typesafe-judge-alignment-fix",
+      "path": "plans/261002-typesafe-judge-alignment-fix/plan.md",
+      "directory": "plans/261002-typesafe-judge-alignment-fix",
+      "title": "TypeSafe System One Judge Definitive Alignment and Zero-Conflict Architecture",
+      "status": "completed",
+      "priority": "P1",
+      "effort": "6h",
+      "frontmatter": {
+        "title": "TypeSafe System One Judge Definitive Alignment and Zero-Conflict Architecture",
+        "description": "Comprehensive implementation plan to align oh-my-pi's TypeSafe System One judge integration with official TypeSafe.ai documentation, eliminate rogue endpoints and schema mismatches, resolve Question ID blindness, and guarantee zero conflicts with oh-my-pi upstream updates by isolating all enhancements to extension space.",
+        "status": "completed",
+        "priority": "P1",
+        "effort": "6h",
+        "tags": [
+          "typesafe",
+          "system-one",
+          "omp",
+          "extension-isolation",
+          "schema-alignment",
+          "anti-context-rot",
+          "zero-conflict"
+        ],
+        "blockedBy": [],
+        "blocks": [],
+        "created": "2026-10-02",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 23,
+        "unchecked": 0
+      },
+      "phaseFiles": [
+        "phase-01-audit-and-unify-network-transport.md",
+        "phase-02-api-contract-and-schema-alignment.md",
+        "phase-03-context-and-state-de-cluttering-anti-context-rot.md",
+        "phase-04-fix-compound-tools-rerank-and-multi-label.md",
+        "phase-05-configuration-hardening-and-zero-conflict-verification.md"
+      ],
+      "isCompleted": true
+    },
+    {
+      "id": "261003-planner-import-proxy",
+      "path": "plans/261003-planner-import-proxy/plan.md",
+      "directory": "plans/261003-planner-import-proxy",
+      "title": "261003-planner-import-proxy",
+      "status": "completed",
+      "priority": "P1",
+      "effort": "completed",
+      "frontmatter": {
+        "title": "261003-planner-import-proxy",
+        "status": "completed",
+        "priority": "P1",
+        "effort": "completed",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 3,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseFiles": [],
+      "isCompleted": true
+    },
+    {
+      "id": "261003-rerank-orchestrator",
+      "path": "plans/261003-rerank-orchestrator/plan.md",
+      "directory": "plans/261003-rerank-orchestrator",
+      "title": "261003-rerank-orchestrator",
+      "status": "completed",
+      "priority": "P1",
+      "effort": "completed",
+      "frontmatter": {
+        "title": "261003-rerank-orchestrator",
+        "status": "completed",
+        "priority": "P1",
+        "effort": "completed",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseFiles": [],
+      "isCompleted": true
+    },
+    {
+      "id": "261003-typesafe-best-practice-alignment",
+      "path": "plans/261003-typesafe-best-practice-alignment/plan.md",
+      "directory": "plans/261003-typesafe-best-practice-alignment",
+      "title": "TypeSafe Best Practice Alignment Plan",
+      "status": "completed",
+      "priority": "P1",
+      "effort": "completed",
+      "frontmatter": {
+        "title": "TypeSafe Best Practice Alignment Plan",
+        "status": "completed",
+        "priority": "P1",
+        "effort": "completed",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseFiles": [],
+      "isCompleted": true
+    },
+    {
+      "id": "261003-typesafe-stability-guardrails",
+      "path": "plans/261003-typesafe-stability-guardrails/plan.md",
+      "directory": "plans/261003-typesafe-stability-guardrails",
+      "title": "TypeSafe Stability Guardrails, Active Health Watchdog & Integrity Shield",
+      "status": "completed",
+      "priority": "P1",
+      "effort": "6h",
+      "frontmatter": {
+        "title": "TypeSafe Stability Guardrails, Active Health Watchdog & Integrity Shield",
+        "description": "End-to-end reliability, active pre-flight health monitoring, dynamic auth recovery, and core file integrity protection to guarantee unbroken TypeSafe System One execution.",
+        "status": "completed",
+        "priority": "P1",
+        "effort": "6h",
+        "tags": [
+          "typesafe",
+          "stability",
+          "security",
+          "integrity",
+          "health-check",
+          "tdd"
+        ],
+        "blockedBy": [],
+        "blocks": [],
+        "created": "2026-10-03",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 4,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 12,
+        "unchecked": 0
+      },
+      "phaseFiles": [
+        "phase-01-file-and-code-integrity-shield.md",
+        "phase-02-dynamic-auth-recovery-and-key-watchdog.md",
+        "phase-03-session-pre-flight-health-probe.md",
+        "phase-04-test-environment-isolation-and-hardening.md"
+      ],
+      "isCompleted": true
+    },
+    {
+      "id": "261004-redteam-egc-hardening",
+      "path": "plans/261004-redteam-egc-hardening/plan.md",
+      "directory": "plans/261004-redteam-egc-hardening",
+      "title": "Red-Team Hardening and EGC Harmonization",
+      "status": "completed",
+      "priority": "P1",
+      "effort": "4h",
+      "frontmatter": {
+        "title": "Red-Team Hardening and EGC Harmonization",
+        "description": "TDD-driven remediation of red-team vulnerabilities in typesafe-planner and harmonization with EGC v2",
+        "status": "completed",
+        "priority": "P1",
+        "effort": "4h",
+        "branch": "master",
+        "tags": [
+          "red-team",
+          "tdd",
+          "egc",
+          "security",
+          "verification-gate"
+        ],
+        "blockedBy": [],
+        "blocks": [],
+        "created": "2026-10-04",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 13,
+        "unchecked": 0
+      },
+      "phaseFiles": [
+        "phase-01-tdd-regression-suites.md",
+        "phase-02-todo-batch-and-op-normalization.md",
+        "phase-03-context-and-diff-preservation.md",
+        "phase-04-deconfliction-and-privilege-guard.md"
+      ],
+      "isCompleted": true
+    },
+    {
+      "id": "261004-typesafe-judge-hardening",
+      "path": "plans/261004-typesafe-judge-hardening/plan.md",
+      "directory": "plans/261004-typesafe-judge-hardening",
+      "title": "Context",
+      "status": "completed",
+      "priority": "P1",
+      "effort": "completed",
+      "frontmatter": {
+        "title": "Context",
+        "status": "completed",
+        "priority": "P1",
+        "effort": "completed",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 12,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseFiles": [],
+      "isCompleted": true
+    },
+    {
+      "id": "261005-predict-recommendations",
+      "path": "plans/261005-predict-recommendations/plan.md",
+      "directory": "plans/261005-predict-recommendations",
+      "title": "Implement Multi-Persona Predict Recommendations",
+      "status": "completed",
+      "priority": "P2",
+      "effort": "unspecified",
+      "frontmatter": {
+        "title": "Implement Multi-Persona Predict Recommendations",
+        "description": "",
+        "status": "completed",
+        "priority": "P2",
+        "effort": "",
+        "branch": "master",
+        "tags": [],
+        "blockedBy": [],
+        "blocks": [],
+        "created": "2026-10-05",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 8,
+        "unchecked": 0
+      },
+      "phaseFiles": [
+        "phase-01-authorization-and-tests.md",
+        "phase-02-decouple-evaluator.md",
+        "phase-03-documentation.md"
+      ],
+      "isCompleted": true
+    },
+    {
+      "id": "261005-typesafe-judge-enhancement",
+      "path": "plans/261005-typesafe-judge-enhancement/plan.md",
+      "directory": "plans/261005-typesafe-judge-enhancement",
+      "title": "Context",
+      "status": "completed",
+      "priority": "P1",
+      "effort": "completed",
+      "frontmatter": {
+        "title": "Context",
+        "status": "completed",
+        "priority": "P1",
+        "effort": "completed",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseFiles": [],
+      "isCompleted": true
+    },
+    {
+      "id": "261006-red-team-hardening",
+      "path": "plans/261006-red-team-hardening/plan.md",
+      "directory": "plans/261006-red-team-hardening",
+      "title": "Implement Red-Team Hardening & Community Solutions",
+      "status": "completed",
+      "priority": "P2",
+      "effort": "unspecified",
+      "frontmatter": {
+        "title": "Implement Red-Team Hardening & Community Solutions",
+        "description": "",
+        "status": "completed",
+        "priority": "P2",
+        "effort": "",
+        "branch": "master",
+        "tags": [],
+        "blockedBy": [],
+        "blocks": [],
+        "created": "2026-10-06",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 16,
+        "unchecked": 0
+      },
+      "phaseFiles": [
+        "phase-01-architecture.md",
+        "phase-02-ast-diffing.md",
+        "phase-03-xml-boundaries.md",
+        "phase-04-remediation.md",
+        "phase-05-auth-rotation.md"
+      ],
+      "isCompleted": true
+    },
+    {
+      "id": "261007-health-probe-analysis",
+      "path": "plans/261007-health-probe-analysis/plan.md",
+      "directory": "plans/261007-health-probe-analysis",
+      "title": "Session Start Health Probe Dual-Notification Analysis & ck:predict Review",
+      "status": "completed",
+      "priority": "P2",
+      "effort": "1h",
+      "frontmatter": {
+        "title": "Session Start Health Probe Dual-Notification Analysis & ck:predict Review",
+        "description": "Diagnose why two consecutive contradictory notifications appear on session start, explain why no further notifications follow, and document a multi-persona ck:predict pre-analysis report with manual patch instructions.",
+        "status": "completed",
+        "priority": "P2",
+        "effort": "1h",
+        "tags": [
+          "typesafe",
+          "health-probe",
+          "ck-predict",
+          "diagnostics",
+          "exception-scoping"
+        ],
+        "created": "2026-10-07",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 4,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseFiles": [],
+      "isCompleted": true
+    },
+    {
+      "id": "261007-key-isolation",
+      "path": "plans/261007-key-isolation/plan.md",
+      "directory": "plans/261007-key-isolation",
+      "title": "TypeSafe Key Isolation Plan",
+      "status": "completed",
+      "priority": "P1",
+      "effort": "completed",
+      "frontmatter": {
+        "title": "TypeSafe Key Isolation Plan",
+        "status": "completed",
+        "priority": "P1",
+        "effort": "completed",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseFiles": [],
+      "isCompleted": true
+    },
+    {
+      "id": "261007-typesafe-auto-completion",
+      "path": "plans/261007-typesafe-auto-completion/plan.md",
+      "directory": "plans/261007-typesafe-auto-completion",
+      "title": "261007-typesafe-auto-completion",
+      "status": "completed",
+      "priority": "P1",
+      "effort": "completed",
+      "frontmatter": {
+        "title": "261007-typesafe-auto-completion",
+        "status": "completed",
+        "priority": "P1",
+        "effort": "completed",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 4,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseFiles": [],
+      "isCompleted": true
+    },
+    {
+      "id": "261007-typesafe-fix",
+      "path": "plans/261007-typesafe-fix/plan.md",
+      "directory": "plans/261007-typesafe-fix",
+      "title": "typesafe-fix",
+      "status": "completed",
+      "priority": "P1",
+      "effort": "completed",
+      "frontmatter": {
+        "title": "typesafe-fix",
+        "status": "completed",
+        "priority": "P1",
+        "effort": "completed",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 5,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseFiles": [],
+      "isCompleted": true
+    },
+    {
+      "id": "261007-typesafe-lifecycle-gating",
+      "path": "plans/261007-typesafe-lifecycle-gating/plan.md",
+      "directory": "plans/261007-typesafe-lifecycle-gating",
+      "title": "TypeSafe Lifecycle Gating & Human Authorization Fix",
+      "status": "completed",
+      "priority": "P1",
+      "effort": "4.5h",
+      "frontmatter": {
+        "title": "TypeSafe Lifecycle Gating & Human Authorization Fix",
+        "description": "Fix premature blocking on initial todo/plan creation, enrich error messages with actionable next-step guidance for AI agents, enforce strict Gate 1 (tests) and Gate 2 (plan semantic alignment) completion checks across both Todo tools and Plan lifecycle mutations, plug zero test coverage void in tests/, and guarantee strict hermetic isolation of .claude configurations.",
+        "status": "completed",
+        "priority": "P1",
+        "effort": "4.5h",
+        "branch": "master",
+        "tags": [
+          "typesafe",
+          "gating",
+          "tdd",
+          "red-team",
+          "lifecycle",
+          "plan-cli",
+          "test-coverage",
+          "claude-isolation"
+        ],
+        "blockedBy": [],
+        "blocks": [],
+        "created": "2026-10-07",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 13,
+        "unchecked": 0
+      },
+      "phaseFiles": [
+        "phase-01-research-test-reproduction.md",
+        "phase-02-lifecycle-invariant-relaxation-guidance.md",
+        "phase-03-dual-gate-plan-verification-integration.md"
+      ],
+      "isCompleted": true
+    },
+    {
+      "id": "261009-health-probe-transport-isolation",
+      "path": "plans/261009-health-probe-transport-isolation/plan.md",
+      "directory": "plans/261009-health-probe-transport-isolation",
+      "title": "Session Pre-Flight Health Probe Transport Scoping & Dual-Notification Fix",
+      "status": "completed",
+      "priority": "P2",
+      "effort": "45m",
+      "frontmatter": {
+        "title": "Session Pre-Flight Health Probe Transport Scoping & Dual-Notification Fix",
+        "description": "Implementation plan for decoupling fetch network errors from internal host IPC rejections during session_start in typesafe-planner.ts, ensuring false-positive unreachable warnings are eliminated.",
+        "status": "completed",
+        "priority": "P2",
+        "effort": "45m",
+        "tags": [
+          "typesafe",
+          "health-probe",
+          "transport-scoping",
+          "session_start",
+          "diagnostics"
+        ],
+        "created": "2026-10-09",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 5,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseFiles": [],
+      "isCompleted": true
+    },
+    {
+      "id": "261012-judge-threshold-lifecycle-alignment",
+      "path": "plans/261012-judge-threshold-lifecycle-alignment/plan.md",
+      "directory": "plans/261012-judge-threshold-lifecycle-alignment",
+      "title": "TypeSafe judge threshold and todo lifecycle alignment",
+      "status": "completed",
+      "priority": "P1",
+      "effort": "1-2d",
+      "frontmatter": {
+        "title": "TypeSafe judge threshold and todo lifecycle alignment",
+        "description": "Follow-on plan for the existing todo-drop/judge-fidelity work: determine whether threshold normalization is valid for JEV noul scores, prevent plan completion while contracted work remains, and make judge decisions actionable and visible. This plan does not supersede plans/261012-todo-drop-judge-fidelity.",
+        "status": "completed",
+        "priority": "P1",
+        "effort": "1-2d",
+        "branch": "master",
+        "tags": [
+          "typesafe",
+          "jev",
+          "threshold",
+          "todo-lifecycle",
+          "fail-closed"
+        ],
+        "blockedBy": [],
+        "blocks": [],
+        "created": "2026-10-12",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 13,
+        "unchecked": 0
+      },
+      "phaseFiles": [
+        "phase-01-research-and-prediction.md",
+        "phase-02-threshold-and-decision-contract.md",
+        "phase-03-todo-enforcement-and-agent-guidance.md",
+        "phase-04-regression-and-live-verification.md"
+      ],
+      "isCompleted": true
+    },
+    {
+      "id": "261012-todo-drop-judge-fidelity",
+      "path": "plans/261012-todo-drop-judge-fidelity/plan.md",
+      "directory": "plans/261012-todo-drop-judge-fidelity",
+      "title": "TypeSafe todo drop gate and judge input fidelity",
+      "status": "completed",
+      "priority": "P1",
+      "effort": "4h",
+      "frontmatter": {
+        "title": "TypeSafe todo drop gate and judge input fidelity",
+        "description": "Unblock todo drop, correct judge input fidelity, capture task baselines and scoped evidence, and format task reports.",
+        "status": "completed",
+        "priority": "P1",
+        "effort": "4h",
+        "branch": "master",
+        "tags": [
+          "typesafe",
+          "todo-drop",
+          "judge-fidelity",
+          "egc",
+          "ratchet"
+        ],
+        "blockedBy": [],
+        "blocks": [],
+        "created": "2026-10-12",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseFiles": [
+        "phase-01-failing-tests.md",
+        "phase-02-drop-gate-and-ratchet-escalation.md",
+        "phase-03-judge-input-fidelity.md",
+        "phase-04-reports.md",
+        "phase-05-regression-and-deploy.md"
+      ],
+      "isCompleted": true
+    },
+    {
+      "id": "261012-typesafe-jev-alignment-fix",
+      "path": "plans/261012-typesafe-jev-alignment-fix/plan.md",
+      "directory": "plans/261012-typesafe-jev-alignment-fix",
+      "title": "TypeSafe JEV Alignment Fix",
+      "status": "completed",
+      "priority": "P2",
+      "effort": "unspecified",
+      "frontmatter": {
+        "title": "TypeSafe JEV Alignment Fix",
+        "description": "",
+        "status": "completed",
+        "priority": "P2",
+        "effort": "",
+        "branch": "master",
+        "tags": [],
+        "blockedBy": [],
+        "blocks": [],
+        "created": "2026-10-12",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 13,
+        "unchecked": 0
+      },
+      "phaseFiles": [
+        "phase-01-setup-enriched-payload.md",
+        "phase-02-task-aware-rubrics.md",
+        "phase-03-pre-flight-advisory-hook.md",
+        "phase-04-regression-verification.md"
+      ],
+      "isCompleted": true
+    },
+    {
+      "id": "261013-bicameral-judge-advisor-autonomous-execution",
+      "path": "plans/261013-bicameral-judge-advisor-autonomous-execution/plan.md",
+      "directory": "plans/261013-bicameral-judge-advisor-autonomous-execution",
+      "title": "Bicameral Judge-Advisor Autonomous Execution & Friction Minimization",
+      "status": "completed",
+      "priority": "P1",
+      "effort": "1d",
+      "frontmatter": {
+        "title": "Bicameral Judge-Advisor Autonomous Execution & Friction Minimization",
+        "description": "Maximize autonomous execution and deliverable quality by uniting Lobe 1 (Advisor Intent) and Lobe 2 (TypeSafe JEV Judge), eliminating premature stall ratchets, enabling committed-deliverable recognition, and reserving human escalation exclusively for irreconcilable consensus conflicts.",
+        "status": "completed",
+        "priority": "P1",
+        "effort": "1d",
+        "branch": "master",
+        "tags": [
+          "typesafe",
+          "bicameral-consensus",
+          "autonomous-execution",
+          "advisor-intent",
+          "jev-judge",
+          "zero-friction"
+        ],
+        "blockedBy": [],
+        "blocks": [],
+        "created": "2026-10-13",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseFiles": [],
+      "isCompleted": true
+    },
+    {
+      "id": "261013-bicameral-judge-consensus",
+      "path": "plans/261013-bicameral-judge-consensus/plan.md",
+      "directory": "plans/261013-bicameral-judge-consensus",
+      "title": "TypeSafe Bicameral Judge Consensus, Threshold Elimination, and Adaptive Plan Reconciliation",
+      "status": "completed",
+      "priority": "P1",
+      "effort": "2-3d",
+      "frontmatter": {
+        "title": "TypeSafe Bicameral Judge Consensus, Threshold Elimination, and Adaptive Plan Reconciliation",
+        "description": "Eliminate arbitrary client-side numerical thresholds (0.80/0.30) by establishing a Bicameral Advisor-JEV Consensus architecture with sovereign human override and non-blocking plan reconciliation.",
+        "status": "completed",
+        "priority": "P1",
+        "effort": "2-3d",
+        "branch": "master",
+        "tags": [
+          "typesafe",
+          "jev",
+          "bicameral-consensus",
+          "threshold-elimination",
+          "sovereign-human",
+          "adaptive-reconciliation",
+          "tdd"
+        ],
+        "blockedBy": [],
+        "blocks": [],
+        "created": "2026-10-13",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 12,
+        "unchecked": 0
+      },
+      "phaseFiles": [
+        "phase-01-decision-contract-categorical-verdict-refactoring.md",
+        "phase-02-advisor-intent-evaluator-bicameral-consensus-engine.md",
+        "phase-03-sovereign-human-authority-non-blocking-plan-reconciliation.md",
+        "phase-04-red-team-adversarial-validation-baseline-deployment.md"
+      ],
+      "isCompleted": true
+    },
+    {
+      "id": "261013-fix-advisor-decision-answering",
+      "path": "plans/261013-fix-advisor-decision-answering/plan.md",
+      "directory": "plans/261013-fix-advisor-decision-answering",
+      "title": "Fix Advisor and ck:advisor Decision Answering & Context Extraction",
+      "status": "completed",
+      "priority": "P1",
+      "effort": "2h",
+      "frontmatter": {
+        "title": "Fix Advisor and ck:advisor Decision Answering & Context Extraction",
+        "description": "Fix root causes preventing Advisor (Lobe 1) and ck:advisor from returning concrete decision answers when the agent needs a decision.",
+        "status": "completed",
+        "priority": "P1",
+        "effort": "2h",
+        "branch": "master",
+        "tags": [
+          "advisor",
+          "ck-advisor",
+          "bicameral-consensus",
+          "decision-gate",
+          "typesafe"
+        ],
+        "created": "2026-10-13",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 5,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseFiles": [],
+      "isCompleted": true
+    },
+    {
+      "id": "261014-typesafe-jev-advisor-overhaul",
+      "path": "plans/261014-typesafe-jev-advisor-overhaul/plan.md",
+      "directory": "plans/261014-typesafe-jev-advisor-overhaul",
+      "title": "TypeSafe, JEV & Bicameral Advisor Full Overhaul",
+      "status": "completed",
+      "priority": "P1",
+      "effort": "4h",
+      "frontmatter": {
+        "title": "TypeSafe, JEV & Bicameral Advisor Full Overhaul",
+        "description": "Fix all 7 red-team root causes identified across the 5 recent oh-my-pi sessions: off-by-one attemptCount escalation, inverted Bicameral REJECT vs HUMAN_ESCALATION routing, sanitizeStateForTypeSafe tail-clamping amputation, sub-task vs full-session user_request prompt mismatch, phased todo(op='init', list) & todo(op='rm') drop-gate bypass, untracked diff omission in verification-gate, and JEV recommended_option suppression in typesafe_advisor.",
+        "status": "completed",
+        "priority": "P1",
+        "effort": "4h",
+        "branch": "master",
+        "tags": [
+          "typesafe",
+          "jev-1.13",
+          "bicameral-consensus",
+          "red-team",
+          "overhaul",
+          "tdd"
+        ],
+        "created": "2026-10-14",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 5,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 12,
+        "unchecked": 0
+      },
+      "phaseFiles": [
+        "phase-01-bicameral-and-escalation-fix.md",
+        "phase-02-state-clamping-and-evidence-fidelity.md",
+        "phase-03-jev-primitive-and-advisor-calibration.md",
+        "phase-04-todo-list-rm-hardening-and-sync.md"
+      ],
+      "isCompleted": true
+    },
+    {
+      "id": "261014-typesafe-todo-done-verdict-fidelity",
+      "path": "plans/261014-typesafe-todo-done-verdict-fidelity/plan.md",
+      "directory": "plans/261014-typesafe-todo-done-verdict-fidelity",
+      "title": "TypeSafe Todo Done Verdict Fidelity and Calibration Alignment",
+      "status": "completed",
+      "priority": "P1",
+      "effort": "4h",
+      "frontmatter": {
+        "title": "TypeSafe Todo Done Verdict Fidelity and Calibration Alignment",
+        "description": "Eliminate hardcoded meets_criteria=0.00 score quantization and false-positive todo done rejections by adding dual-primitive JEV calibration (deliverables_verdict choice + meets_criteria noul), expanding cognitive/planning task classification with work-log fallback, filtering plan-cli.cjs boilerplate stubs, enforcing word-boundary phase matching, and enriching task report telemetry.",
+        "status": "completed",
+        "priority": "P1",
+        "effort": "4h",
+        "branch": "master",
+        "tags": [
+          "typesafe",
+          "jev-latest",
+          "bicameral-consensus",
+          "todo-done",
+          "calibration",
+          "stub-filter",
+          "tdd"
+        ],
+        "blockedBy": [],
+        "blocks": [],
+        "created": "2026-10-14",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 4,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 13,
+        "unchecked": 0
+      },
+      "phaseFiles": [
+        "phase-01-dual-primitive-jev-calibration.md",
+        "phase-02-cognitive-task-classifier-and-work-log-fallback.md",
+        "phase-03-plan-cli-stub-filter-and-phase-matching-guard.md",
+        "phase-04-task-report-telemetry-and-tdd-regression-suite.md"
+      ],
+      "isCompleted": true
+    },
+    {
+      "id": "261015-advisor-judge-jev-true-calibration",
+      "path": "plans/261015-advisor-judge-jev-true-calibration/plan.md",
+      "directory": "plans/261015-advisor-judge-jev-true-calibration",
+      "title": "Advisor 0.90 Calibration, Zero 0.80 Thresholds, and JEV State Fidelity",
+      "status": "completed",
+      "priority": "P1",
+      "effort": "4h",
+      "frontmatter": {
+        "title": "Advisor 0.90 Calibration, Zero 0.80 Thresholds, and JEV State Fidelity",
+        "description": "Eliminate hardcoded 0.90 Advisor rubber-stamp confidences, purge all remaining 0.80/0.30/0.70 threshold walls and messages, and overhaul the TypeSafe JEV state & criteria fidelity pipeline.",
+        "status": "completed",
+        "priority": "P1",
+        "effort": "4h",
+        "branch": "master",
+        "tags": [
+          "typesafe",
+          "jev-latest",
+          "bicameral-consensus",
+          "advisor",
+          "calibration",
+          "tdd"
+        ],
+        "blockedBy": [],
+        "blocks": [],
+        "created": "2026-10-15",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 4,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 11,
+        "unchecked": 0
+      },
+      "phaseFiles": [
+        "phase-01-advisor-jev-multi-signal-calibration.md",
+        "phase-02-zero-0-80-0-30-threshold-walls.md",
+        "phase-03-jev-state-criteria-fidelity-pipeline.md",
+        "phase-04-tdd-suite-baseline-sync.md"
+      ],
+      "isCompleted": true
+    },
+    {
+      "id": "261015-judge-baseline-audit-cook",
+      "path": "plans/261015-judge-baseline-audit-cook/plan.md",
+      "directory": "plans/261015-judge-baseline-audit-cook",
+      "title": "Judge Baseline Audit Implementation",
+      "status": "completed",
+      "priority": "P1",
+      "effort": "multi-phase",
+      "frontmatter": {
+        "title": "Judge Baseline Audit Implementation",
+        "description": "Hermetic extension verification, bundled loading, bounded judge transport, native todo transaction, safe deployment, and runtime proof.",
+        "status": "completed",
+        "priority": "P1",
+        "effort": "multi-phase",
+        "branch": "master",
+        "tags": [
+          "typesafe",
+          "safety",
+          "tdd",
+          "deployment"
+        ],
+        "blockedBy": [],
+        "blocks": [],
+        "created": "2026-10-15",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 28,
+        "unchecked": 0
+      },
+      "phaseFiles": [
+        "phase-01-p0-hermetic-preflight.md",
+        "phase-02-p1-bundled-loading.md",
+        "phase-03-p2-bounded-transport.md",
+        "phase-04-p3-native-todo-transaction.md",
+        "phase-05-p4-heuristics-and-intent.md",
+        "phase-06-p5-recovery-transaction.md",
+        "phase-07-p6-runtime-promotion.md"
+      ],
+      "isCompleted": true
+    },
+    {
+      "id": "261018-jev-session-forensics",
+      "path": "plans/261018-jev-session-forensics/plan.md",
+      "directory": "plans/261018-jev-session-forensics",
+      "title": "JEV Session Forensics Evidence Audit",
+      "status": "completed",
+      "priority": "P2",
+      "effort": "unspecified",
+      "frontmatter": {
+        "title": "JEV Session Forensics Evidence Audit",
+        "description": "JEV session forensics plus TDD recovery for blocked todos, gated deletion and task-scoped completion evidence.",
+        "status": "completed",
+        "priority": "P2",
+        "effort": "",
+        "branch": "master",
+        "tags": [
+          "typesafe",
+          "jev",
+          "forensics",
+          "planning",
+          "tdd",
+          "todo-recovery"
+        ],
+        "blockedBy": [],
+        "blocks": [],
+        "created": "2026-10-18",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 26,
+        "unchecked": 0
+      },
+      "phaseFiles": [
+        "phase-01-cohort-and-parser-tdd.md",
+        "phase-02-source-provenance-and-paired-analysis.md",
+        "phase-03-vietnamese-diagnosis-and-independent-challenge.md",
+        "phase-04-todo-rejection-recovery-and-deletion.md",
+        "phase-05-completion-evidence-fidelity-and-runtime-proof.md"
+      ],
+      "isCompleted": true
+    },
+    {
+      "id": "261019-jev-atomic-review",
+      "path": "plans/261019-jev-atomic-review/plan.md",
+      "directory": "plans/261019-jev-atomic-review",
+      "title": "JEV Atomic Evidence Review and Advisor Synthesis",
+      "status": "completed",
+      "priority": "P2",
+      "effort": "unspecified",
+      "frontmatter": {
+        "title": "JEV Atomic Evidence Review and Advisor Synthesis",
+        "description": "Evidence-first corrective baseline, independent prediction, narrow JEV shadow evaluation, and conditional native cutover.",
+        "status": "completed",
+        "priority": "P2",
+        "effort": "",
+        "branch": "master",
+        "tags": [
+          "typesafe",
+          "jev",
+          "evidence",
+          "advisor",
+          "predict",
+          "scenario",
+          "shadow-evaluation"
+        ],
+        "blockedBy": [
+          "261019-research-to-cook-execution"
+        ],
+        "blocks": [],
+        "created": "2026-10-19",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 19,
+        "unchecked": 0
+      },
+      "phaseFiles": [
+        "phase-01-evidence-and-authority-prerequisites.md",
+        "phase-02-shadow-evaluation-of-atomic-judgments.md",
+        "phase-03-conditional-cutover-and-runtime-proof.md"
+      ],
+      "isCompleted": true
+    },
+    {
+      "id": "261019-research-to-cook-execution",
+      "path": "plans/261019-research-to-cook-execution/plan.md",
+      "directory": "plans/261019-research-to-cook-execution",
+      "title": "Complete TypeSafe Research Implementation and Atomic Advisor Execution",
+      "status": "completed",
+      "priority": "P1",
+      "effort": "unspecified",
+      "frontmatter": {
+        "title": "Complete TypeSafe Research Implementation and Atomic Advisor Execution",
+        "description": "Execute every accepted residual from 33 plans and 35 research recommendations, repair baseline correctness, implement real atomic/Advisor candidate, measure before authorized adoption.",
+        "status": "completed",
+        "priority": "P1",
+        "effort": "",
+        "branch": "master",
+        "tags": [
+          "typesafe",
+          "jev",
+          "advisor",
+          "evidence",
+          "recovery",
+          "security",
+          "paired-evaluation",
+          "cook-auto"
+        ],
+        "blockedBy": [],
+        "blocks": [
+          "261019-jev-atomic-review"
+        ],
+        "created": "2026-10-19",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 7,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 75,
+        "unchecked": 0
+      },
+      "phaseFiles": [
+        "phase-01-reconcile-obligations-and-freeze-verification-contracts.md",
+        "phase-02-repair-task-evidence-and-receipt-fidelity.md",
+        "phase-03-enforce-authority-lifecycle-and-actionable-recovery.md",
+        "phase-04-complete-secret-process-and-filesystem-isolation.md",
+        "phase-05-consolidate-debate-and-input-boundary-policies.md",
+        "phase-06-finish-bounded-transport-and-trusted-tool-policies.md",
+        "phase-07-implement-atomic-jev-and-real-advisor-synthesis.md",
+        "phase-08-run-paired-evaluation-and-decide-adoption.md",
+        "phase-09-migrate-all-consumers-and-verify-integration.md",
+        "phase-10-promote-authorized-runtime-and-close-legacy-plans.md"
+      ],
+      "isCompleted": true
+    },
+    {
+      "id": "261027-native-omp-judge-typesafe-migration",
+      "path": "plans/261027-native-omp-judge-typesafe-migration/plan.md",
+      "directory": "plans/261027-native-omp-judge-typesafe-migration",
+      "title": "Cài Jev vào judge bản địa OMP rồi di chuyển các đánh giá nguyên tử",
+      "status": "completed",
+      "priority": "P1",
+      "effort": "multi-phase",
+      "frontmatter": {
+        "title": "Cài Jev vào judge bản địa OMP rồi di chuyển các đánh giá nguyên tử",
+        "description": "Xác nhận Jev chạy qua judge bản địa của OMP trước; dùng eval cho các phán đoán nguyên tử; chỉ di chuyển caller trong extension và loại công cụ TypeSafe riêng khi host cung cấp API đánh giá chính thức. Giữ hợp đồng todo, bằng chứng và ranh giới bảo mật.",
+        "status": "completed",
+        "priority": "P1",
+        "effort": "multi-phase",
+        "branch": "master",
+        "tags": [
+          "native-judge",
+          "typesafe-jev",
+          "todo",
+          "evidence",
+          "security",
+          "migration"
+        ],
+        "blockedBy": [],
+        "blocks": [],
+        "created": "2026-10-27",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 20,
+        "unchecked": 0
+      },
+      "phaseFiles": [
+        "phase-01-nghi-n-c-u-h-p-ng-judge-b-n-a.md",
+        "phase-02-di-chuy-n-semantic-caller.md",
+        "phase-03-lo-i-b-transport-v-ph-thu-c-claude.md",
+        "phase-04-c-ng-c-todo-native-v-b-ng-ch-ng.md",
+        "phase-05-ki-m-th-v-tri-n-khai.md"
+      ],
+      "isCompleted": true
+    },
+    {
+      "id": "261102-atomic-judge-proactive-advisor-healing",
+      "path": "plans/261102-atomic-judge-proactive-advisor-healing/plan.md",
+      "directory": "plans/261102-atomic-judge-proactive-advisor-healing",
+      "title": "Thẩm phán Nguyên tử Jev, Cố vấn Chữa lành Tự động & Chốt chặn Middleware Chống Treo Todo",
+      "status": "completed",
+      "priority": "P1",
+      "effort": "4 phases",
+      "frontmatter": {
+        "title": "Thẩm phán Nguyên tử Jev, Cố vấn Chữa lành Tự động & Chốt chặn Middleware Chống Treo Todo",
+        "description": "Hiện thực hóa hệ thống Thẩm phán nguyên tử (Atomic TypeSafe Jev Judge), vòng lặp Cố vấn tự động chữa lành (Proactive Advisor Remediation Loop) và chốt chặn middleware cấm ask về lỗi kỹ thuật / cấm tự ý block todo theo ADR-20261102.",
+        "status": "completed",
+        "priority": "P1",
+        "effort": "4 phases",
+        "branch": "master",
+        "tags": [
+          "typesafe-jev",
+          "atomic-judge",
+          "proactive-advisor",
+          "anti-blocking",
+          "middleware"
+        ],
+        "blockedBy": [],
+        "blocks": [],
+        "created": "2026-11-02",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 12,
+        "unchecked": 0
+      },
+      "phaseFiles": [
+        "phase-01-middleware-guards.md",
+        "phase-02-atomic-jev-judge.md",
+        "phase-03-proactive-advisor-dispatch.md",
+        "phase-04-verification-and-deployment.md"
+      ],
+      "isCompleted": true
+    },
+    {
+      "id": "omp_extension",
+      "path": "JEV_SESSION_FORENSICS_PLAN_JEV_PLAN.md",
+      "directory": "",
+      "title": "JEV session forensics across workspaces",
+      "status": "completed",
+      "priority": "P1",
+      "effort": "completed",
+      "frontmatter": {
+        "title": "JEV session forensics across workspaces",
+        "status": "completed",
+        "priority": "P1",
+        "effort": "completed",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseFiles": [],
+      "isCompleted": true
+    },
+    {
+      "id": "omp_extension",
+      "path": "JUDGE_BASELINE_AUDIT_PLAN.md",
+      "directory": "",
+      "title": "Judge Baseline Audit & Implementation Plan",
+      "status": "completed",
+      "priority": "P1",
+      "effort": "completed",
+      "frontmatter": {
+        "title": "Judge Baseline Audit & Implementation Plan",
+        "status": "completed",
+        "priority": "P1",
+        "effort": "completed",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseFiles": [],
+      "isCompleted": true
+    },
+    {
+      "id": "omp_extension",
+      "path": "JUDGE_BASELINE_COOK_PLAN.md",
+      "directory": "",
+      "title": "Judge Baseline Audit — đặc tả triển khai Gemini 4 / ck:cook / TDD",
+      "status": "completed",
+      "priority": "P1",
+      "effort": "completed",
+      "frontmatter": {
+        "title": "Judge Baseline Audit — đặc tả triển khai Gemini 4 / ck:cook / TDD",
+        "status": "completed",
+        "priority": "P1",
+        "effort": "completed",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseFiles": [],
+      "isCompleted": true
+    },
+    {
+      "id": "omp_extension",
+      "path": "MERMAID_UI_UX_OVERHAUL_PLAN.md",
+      "directory": "",
+      "title": "Kế hoạch Rà soát, Sửa lỗi Cú pháp và Chuẩn hóa Trực quan Toàn bộ Sơ đồ Mermaid v11 theo Chuẩn UI/UX Pro Max",
+      "status": "completed",
+      "priority": "P1",
+      "effort": "completed",
+      "frontmatter": {
+        "title": "Kế hoạch Rà soát, Sửa lỗi Cú pháp và Chuẩn hóa Trực quan Toàn bộ Sơ đồ Mermaid v11 theo Chuẩn UI/UX Pro Max",
+        "status": "completed",
+        "priority": "P1",
+        "effort": "completed",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseFiles": [],
+      "isCompleted": true
+    },
+    {
+      "id": "omp_extension",
+      "path": "TYPESAFE_REVIEW_FIX_JEV_TEST_PLAN.md",
+      "directory": "",
+      "title": "TypeSafe Extension: Fix Red-Team Residuals, Upgrade Evidence Performance, Verify Judge/JEV, Close Every Todo",
+      "status": "completed",
+      "priority": "P1",
+      "effort": "completed",
+      "frontmatter": {
+        "title": "TypeSafe Extension: Fix Red-Team Residuals, Upgrade Evidence Performance, Verify Judge/JEV, Close Every Todo",
+        "status": "completed",
+        "priority": "P1",
+        "effort": "completed",
+        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
+        "completedInCycle": "2026-11-02",
+        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+      },
+      "planCheckboxes": {
+        "checked": 15,
+        "unchecked": 0
+      },
+      "phaseCheckboxes": {
+        "checked": 0,
+        "unchecked": 0
+      },
+      "phaseFiles": [],
+      "isCompleted": true
+    }
+  ]
+}

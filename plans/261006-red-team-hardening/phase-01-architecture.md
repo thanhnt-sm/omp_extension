@@ -33,9 +33,9 @@ Establish the foundational types, error classes, and test infrastructure require
 4. **Run Tests**: Execute `bun test tests/architecture.test.ts`.
 
 ## Success Criteria
-- [ ] `TypeSafeError` extends native `Error` and is instantiable.
-- [ ] Security domain types compile without errors.
-- [ ] `bun test tests/architecture.test.ts` passes with exit code 0.
+- [x] `TypeSafeError` extends native `Error` and is instantiable.
+- [x] Security domain types compile without errors.
+- [x] `bun test tests/architecture.test.ts` passes with exit code 0.
 
 ## Risk Assessment
 - Risk: Over-engineering the type system.

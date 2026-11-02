@@ -1,3 +1,7 @@
+---
+title: "Prediction & Verification Report: Workspace Contamination Revert (`ck:predict`)"
+status: completed
+---
 # Prediction & Verification Report: Workspace Contamination Revert (`ck:predict`)
 
 - **Date**: 2026-10-15

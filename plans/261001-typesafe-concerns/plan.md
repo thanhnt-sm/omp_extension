@@ -1,13 +1,16 @@
 ---
 title: "TypeSafe Judge Concerns Resolution"
 description: "Resolve two DONE_WITH_CONCERNS items from the TypeSafe role judge validation: Case 2 (prompt injection via state) and Case 6 (overconfident routing on ambiguous input). Gate on expert consultation; implement enforced call-site lattice and confidence handling; promote plan status to COMPLETE."
-status: complete
+status: completed
 priority: P2
 effort: "7h"
 tags: []
 blockedBy: []
 blocks: []
 created: 2026-10-01
+supersededBy: "261102-atomic-judge-proactive-advisor-healing"
+completedInCycle: "2026-11-02"
+verificationSuite: "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
 ---
 
 # TypeSafe Judge Concerns Resolution

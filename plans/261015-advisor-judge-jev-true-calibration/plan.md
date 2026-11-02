@@ -1,7 +1,7 @@
 ---
 title: "Advisor 0.90 Calibration, Zero 0.80 Thresholds, and JEV State Fidelity"
 description: "Eliminate hardcoded 0.90 Advisor rubber-stamp confidences, purge all remaining 0.80/0.30/0.70 threshold walls and messages, and overhaul the TypeSafe JEV state & criteria fidelity pipeline."
-status: in-progress
+status: completed
 priority: P1
 effort: "4h"
 branch: master
@@ -9,6 +9,9 @@ tags: [typesafe, jev-latest, bicameral-consensus, advisor, calibration, tdd]
 blockedBy: []
 blocks: []
 created: 2026-10-15
+supersededBy: "261102-atomic-judge-proactive-advisor-healing"
+completedInCycle: "2026-11-02"
+verificationSuite: "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
 ---
 
 # Advisor 0.90 Calibration, Zero 0.80 Thresholds, and JEV State Fidelity
@@ -30,10 +33,10 @@ End-to-end architectural and implementation overhaul (`ADR-20261015`) resolving 
 | 4 | [TDD Suite & Baseline Sync](./phase-04-tdd-suite-baseline-sync.md) | Completed |
 
 ## Success Criteria
-- [ ] Advisor (`evaluateAdvisorIntent`, `evaluateAdvisorDecision`, `runBicameralDecisionCheck`, `runBicameralMacroCheck`, `runBicameralDropCheck`) computes continuous multi-signal and JEV-backed confidence instead of hardcoded `0.90` constants, and emits `DISALLOW` when tests fail or required code evidence is missing.
-- [ ] Zero `0.80`, `0.30`, or `0.70` threshold walls or messages remain in `src/verification-gate.ts`, `src/cook-expert-judge.ts`, `src/plan-evaluator.ts`, or `typesafe-planner.ts`.
-- [ ] `extractCriteriaFromPlan`, `constructGateQuestions`, `sanitizeStateForTypeSafe`, `summarizeUnifiedDiff`, `collectConversationContext`, and `truncatePayloadState` deliver clean, task-scoped state and valid dict `criteria` to TypeSafe System One (`jev-latest`).
-- [ ] All unit and integration test suites pass (`bun test` exit code 0) and baseline is synchronized via `node tools/sync-baseline.cjs`.
+- [x] Advisor (`evaluateAdvisorIntent`, `evaluateAdvisorDecision`, `runBicameralDecisionCheck`, `runBicameralMacroCheck`, `runBicameralDropCheck`) computes continuous multi-signal and JEV-backed confidence instead of hardcoded `0.90` constants, and emits `DISALLOW` when tests fail or required code evidence is missing.
+- [x] Zero `0.80`, `0.30`, or `0.70` threshold walls or messages remain in `src/verification-gate.ts`, `src/cook-expert-judge.ts`, `src/plan-evaluator.ts`, or `typesafe-planner.ts`.
+- [x] `extractCriteriaFromPlan`, `constructGateQuestions`, `sanitizeStateForTypeSafe`, `summarizeUnifiedDiff`, `collectConversationContext`, and `truncatePayloadState` deliver clean, task-scoped state and valid dict `criteria` to TypeSafe System One (`jev-latest`).
+- [x] All unit and integration test suites pass (`bun test` exit code 0) and baseline is synchronized via `node tools/sync-baseline.cjs`.
 
 ## Execution reconciliation — 2026-10-19
 

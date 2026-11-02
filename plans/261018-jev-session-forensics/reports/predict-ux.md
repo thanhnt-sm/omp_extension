@@ -1,3 +1,7 @@
+---
+title: "UX assessment — JEV session forensics"
+status: completed
+---
 # UX assessment — JEV session forensics
 
 ## Scope and method

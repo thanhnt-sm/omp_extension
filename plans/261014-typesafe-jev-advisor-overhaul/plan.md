@@ -7,6 +7,9 @@ effort: "4h"
 branch: master
 tags: [typesafe, jev-1.13, bicameral-consensus, red-team, overhaul, tdd]
 created: 2026-10-14
+supersededBy: "261102-atomic-judge-proactive-advisor-healing"
+completedInCycle: "2026-11-02"
+verificationSuite: "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
 ---
 
 # TypeSafe, JEV & Bicameral Advisor Full Overhaul

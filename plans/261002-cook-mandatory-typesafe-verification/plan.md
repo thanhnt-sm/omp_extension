@@ -8,6 +8,9 @@ tags: ["omp", "cook", "typesafe", "system-one", "red-team", "tdd", "compliance",
 blockedBy: []
 blocks: []
 created: 2026-10-02
+supersededBy: "261102-atomic-judge-proactive-advisor-healing"
+completedInCycle: "2026-11-02"
+verificationSuite: "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
 ---
 
 # Mandatory TypeSafe Judge & Expert Evaluation in Cook Workflow

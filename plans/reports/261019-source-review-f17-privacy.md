@@ -1,3 +1,7 @@
+---
+title: "F17 follow-up: private-context export"
+status: completed
+---
 Task: Review every discovered source subsystem and substantiate defects with executable or trace evidence.
 # F17 follow-up: private-context export
 Deployed typesafe-planner.ts763-764 includes assistant thinking in worklog; native1808 sends it to cook-expert-judge.ts224. Actual deployed-helper/production-preparation probe retained a SYNTHETIC marker in both projected and prepared state: exit0,zero network/native calls. No actual private reasoning was read/persisted; historical transmission/score causality unknown. Evidence:261019-private-context-export-evidence.json. Before further remote completion checks: authorize/test public-only context projection; activate only with obligation/debt preservation. No gate bypass.

@@ -35,8 +35,8 @@ Completely eliminate all remaining `0.80` (`resolveAutoApprovalThreshold`), `0.3
    - Update `formatTaskReport` in `typesafe-planner.ts:774` to print `Judge: drop_justified=${r.scores.dropJustified.toFixed(2)}` without `(reject < 0.30)`.
 
 ## Success Criteria
-- [ ] `grep` across `src/` and `typesafe-planner.ts` confirms zero `0.80` threshold walls or `(reject < 0.30)` strings.
-- [ ] `bun test tests/cook-expert-judge.test.ts tests/verification-gate.test.ts tests/plan-evaluator.test.ts tests/todo-drop-gate.test.ts` passes with exit code 0.
+- [x] `grep` across `src/` and `typesafe-planner.ts` confirms zero `0.80` threshold walls or `(reject < 0.30)` strings.
+- [x] `bun test tests/cook-expert-judge.test.ts tests/verification-gate.test.ts tests/plan-evaluator.test.ts tests/todo-drop-gate.test.ts` passes with exit code 0.
 
 ## Related Files
 - Modify: `src/verification-gate.ts`

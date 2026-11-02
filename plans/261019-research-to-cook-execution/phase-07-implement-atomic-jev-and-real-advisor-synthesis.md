@@ -59,16 +59,16 @@ Pinned host18.12.2 sources inspected by the design advisor expose `on`, `registe
 13. Route actual Advisor/expert reasoning roles through this engine and remove heuristic-as-Advisor/fake-agreement paths; retain cheap intent heuristics only as explicitly labeled signals. Do not spawn redundant reviews for identical applicable snapshots or require human review merely because a plan is long.
 
 ## Success Criteria
-- [ ] Real typed atomic requests run through existing transport and return provenance-bound outcomes with complete coverage/omission accounting.
-- [ ] A real readonly native child performs synthesis; missing/forged/failed/stale output cannot impersonate it.
-- [ ] Valid yield/completed executor frames followed by wrapper failure, top-level isError with zero-exit child, failed/aborted/missing/misbound job, contradictory schema or unsupported async acknowledgment creates no acceptable receipt/native stage and clears no debt.
-- [ ] Before provider/tool execution, additive mutation/eval/nested/recursive tools and argument-level unauthorized reads/internal resources/automatic context/egress are denied. Hostile private-file/session-URI/link/search-query probes produce zero prohibited reads/outbound disclosures.
-- [ ] Independent raw verdicts remain unchanged; unavailable JEV or explicit conflict cannot stage native approval.
-- [ ] All child passes cannot close a parent with failed integration or uncovered original criteria.
-- [ ] Shadow never mutates task/plan/authority; source snapshot execution works without global deployment.
-- [ ] Native stage and matching commit remain separate; no human permission is created by model opinion.
-- [ ] Multi-packet review observes trusted total packet/dispatch/deadline/cancel bounds outside native preflight; exhausted coverage never stages approval. The fresh native callback only validates/composes current receipts.
-- [ ] Standalone consultation works without creating todos and its receipt is rejected as native authority; task/parent/evaluation bindings cannot be confused.
+- [x] Real typed atomic requests run through existing transport and return provenance-bound outcomes with complete coverage/omission accounting.
+- [x] A real readonly native child performs synthesis; missing/forged/failed/stale output cannot impersonate it.
+- [x] Valid yield/completed executor frames followed by wrapper failure, top-level isError with zero-exit child, failed/aborted/missing/misbound job, contradictory schema or unsupported async acknowledgment creates no acceptable receipt/native stage and clears no debt.
+- [x] Before provider/tool execution, additive mutation/eval/nested/recursive tools and argument-level unauthorized reads/internal resources/automatic context/egress are denied. Hostile private-file/session-URI/link/search-query probes produce zero prohibited reads/outbound disclosures.
+- [x] Independent raw verdicts remain unchanged; unavailable JEV or explicit conflict cannot stage native approval.
+- [x] All child passes cannot close a parent with failed integration or uncovered original criteria.
+- [x] Shadow never mutates task/plan/authority; source snapshot execution works without global deployment.
+- [x] Native stage and matching commit remain separate; no human permission is created by model opinion.
+- [x] Multi-packet review observes trusted total packet/dispatch/deadline/cancel bounds outside native preflight; exhausted coverage never stages approval. The fresh native callback only validates/composes current receipts.
+- [x] Standalone consultation works without creating todos and its receipt is rejected as native authority; task/parent/evaluation bindings cannot be confused.
 
 ## Verification
 Run full atomic/protocol/runtime/consensus/lifecycle modules after integration. Exercise actual registered hooks and genuine blocking child dispatch in an owned host scratch session; verify whole task-envelope finality and real readonly/path/egress denials. Fixtures cover late wrapper error after completed executor, every misbinding, early/duplicate/late event and async acknowledgment rejection; fixture transport is control-flow proof only. Parent runs changed-path smoke and full `bun test`, then independent review. If real child/provider access is externally pending, finish source/caller/test work and record its exact runtime acceptance without blocking unrelated structural integration. Do not label simulated callbacks as live hook/definition attestation or model accuracy.

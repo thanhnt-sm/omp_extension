@@ -13,7 +13,8 @@
     "oneclick": "powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File ./tools/oneclick-omp.ps1",
     "judge:check": "bun tools/native-judge-setup.cjs --check",
     "judge:apply": "bun tools/native-judge-setup.cjs --apply",
-    "judge:start": "bun tools/native-judge-launch.cjs"
+    "judge:start": "bun tools/native-judge-launch.cjs",
+    "ck:pm": "node tools/ck-project-manager.cjs"
   },
   "keywords": [
     "oh-my-pi",

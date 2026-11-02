@@ -36,13 +36,13 @@ Use current modules and existing native stage/result flow. Contract metadata mus
 6. Inspect every matching caller/duplicate; run complete affected modules and changed-path smoke, then full `bun test` once integration is ready. Document intentional externally visible policy decisions.
 
 ## Success Criteria
-- [ ] Same-file pre-task hunk excluded; both task commits included; deleted/reverted/untracked files correctly attributed.
-- [ ] Continue/Proceed cannot replace original contract; native research packet retains relevant artifacts and genuine test applicability.
-- [ ] HTTP503 never becomes semantic reject, implementation-edit directives or fabricated JEV approval.
-- [ ] Advisor conflict cannot be discarded by native done; matching native result remains necessary.
-- [ ] Ordinary native todo history restores unfinished work; marker-only EGC does not disable enforcement.
-- [ ] Negated drop request does not become permission; existing verified obsolete-task removal and trusted rejected-block UI paths retain intended semantics.
-- [ ] Full relevant test files and actual callback smoke pass; `bun test` passes without verification-asset weakening.
+- [x] Same-file pre-task hunk excluded; both task commits included; deleted/reverted/untracked files correctly attributed.
+- [x] Continue/Proceed cannot replace original contract; native research packet retains relevant artifacts and genuine test applicability.
+- [x] HTTP503 never becomes semantic reject, implementation-edit directives or fabricated JEV approval.
+- [x] Advisor conflict cannot be discarded by native done; matching native result remains necessary.
+- [x] Ordinary native todo history restores unfinished work; marker-only EGC does not disable enforcement.
+- [x] Negated drop request does not become permission; existing verified obsolete-task removal and trusted rejected-block UI paths retain intended semantics.
+- [x] Full relevant test files and actual callback smoke pass; `bun test` passes without verification-asset weakening.
 
 ## Risk Assessment
 Baseline contents can contain secrets; retain minimally and redact before egress. New identities can break duplicate-name callers; migrate every caller without aliases. Workspace/test changes after evaluation require validity checks; do not promise atomic filesystem/todo transactions unless host capability is proven. Existing older plans overlap; this phase does not reset their statuses or authorize deployment.

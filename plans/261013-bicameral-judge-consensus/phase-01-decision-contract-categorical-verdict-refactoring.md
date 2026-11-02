@@ -62,9 +62,9 @@ Refactor the TypeSafe JEV System One judgment contracts in `src/cook-expert-judg
    - Run `bun test tests/cook-verification-adversarial.test.ts`.
 
 ## Success Criteria
-- [ ] No occurrences of `0.80`, `0.70`, or `0.30` numerical gates controlling gate decisions in `cook-expert-judge.ts` or `verification-gate.ts`.
-- [ ] JEV questions use typed `choice` primitives returning definitive categorical verdicts.
-- [ ] 100% tests in `cook-expert-judge.test.ts`, `verification-gate.test.ts`, and `cook-verification-adversarial.test.ts` pass cleanly.
+- [x] No occurrences of `0.80`, `0.70`, or `0.30` numerical gates controlling gate decisions in `cook-expert-judge.ts` or `verification-gate.ts`.
+- [x] JEV questions use typed `choice` primitives returning definitive categorical verdicts.
+- [x] 100% tests in `cook-expert-judge.test.ts`, `verification-gate.test.ts`, and `cook-verification-adversarial.test.ts` pass cleanly.
 
 ## Risk Assessment
 - Risk: JEV returns unexpected string choice not in options array.

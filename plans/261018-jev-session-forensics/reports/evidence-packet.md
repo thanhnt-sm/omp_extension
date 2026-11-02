@@ -1,3 +1,7 @@
+---
+title: "Sanitized evidence packet — JEV session forensics"
+status: completed
+---
 # Sanitized evidence packet — JEV session forensics
 
 ## Handling contract

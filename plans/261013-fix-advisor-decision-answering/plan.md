@@ -7,6 +7,9 @@ effort: "2h"
 branch: master
 tags: [advisor, ck-advisor, bicameral-consensus, decision-gate, typesafe]
 created: 2026-10-13
+supersededBy: "261102-atomic-judge-proactive-advisor-healing"
+completedInCycle: "2026-11-02"
+verificationSuite: "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
 ---
 
 # Fix Advisor and ck:advisor Decision Answering & Context Extraction

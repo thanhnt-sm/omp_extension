@@ -1,3 +1,7 @@
+---
+title: "Nghiên cứu: todo bị block, không thể xóa"
+status: completed
+---
 # Nghiên cứu: todo bị block, không thể xóa
 
 ## Kết luận

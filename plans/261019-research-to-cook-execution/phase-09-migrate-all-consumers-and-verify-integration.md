@@ -42,13 +42,13 @@ Separate evaluation strategy selection from runtime outcome handling. An `adopti
 10. Independent reviewer examines integrated code/security/maintenance. Address actionable issues via scoped executor→parent checks/smoke→fresh review. Parent owns acceptance, not workers' completion labels or advisory confidence scores.
 
 ## Success Criteria
-- [ ] Every actual native/advisory/plan/expert/Advisor/fanout/EGC/eval caller uses the intended canonical semantics and purpose policy.
-- [ ] No obsolete probability fabrication, duplicate debate/authority implementation, unsafe fallback or compatibility alias remains.
-- [ ] Real reasoning and parent integration work; unsupported, forged, stale or unavailable evidence cannot stage approval.
-- [ ] Generic/advisory API calls remain useful but cannot commit task lifecycle or grant consent.
-- [ ] H selection requires validated adoption; H rejection/error never switches to M to obtain approval.
-- [ ] Research/docs/non-git, multi-commit/dirty evidence, closure/history/debt and all high-risk security transitions pass actual behavior checks.
-- [ ] Each U/P coverage row has code/caller and exercised evidence or a specific still-unmet external criterion; no blanket completion claim.
+- [x] Every actual native/advisory/plan/expert/Advisor/fanout/EGC/eval caller uses the intended canonical semantics and purpose policy.
+- [x] No obsolete probability fabrication, duplicate debate/authority implementation, unsafe fallback or compatibility alias remains.
+- [x] Real reasoning and parent integration work; unsupported, forged, stale or unavailable evidence cannot stage approval.
+- [x] Generic/advisory API calls remain useful but cannot commit task lifecycle or grant consent.
+- [x] H selection requires validated adoption; H rejection/error never switches to M to obtain approval.
+- [x] Research/docs/non-git, multi-commit/dirty evidence, closure/history/debt and all high-risk security transitions pass actual behavior checks.
+- [x] Each U/P coverage row has code/caller and exercised evidence or a specific still-unmet external criterion; no blanket completion claim.
 
 ## Verification
 Parent runs each fully affected module after its source integration, then the full `bun test` once the complete candidate is ready. Run actual changed-path extension/native/Advisor and evaluation CLI smokes, not only test suites. Separate fake transport/control-flow proof, genuine readonly child execution, live JEV benchmark and actual native commit evidence. Only configured project commands may be claimed; current package has no lint/typecheck script. Target-deployment verification is a separate surface in phase10, not a rerun to reconfirm an old failure.

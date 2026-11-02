@@ -33,10 +33,10 @@ Implement a zero-dependency, lightweight AST traversal utility or enhanced diff 
 4. **Run Tests**: Execute `bun test tests/ast-analyzer.test.ts` and ensure all evasion vectors are caught.
 
 ## Success Criteria
-- [ ] Deletion of `it(...)` blocks containing assertions triggers a failure.
-- [ ] Commenting out `expect(...)` inside a diff triggers a failure.
-- [ ] Execution latency remains under $150\text{ms}$.
-- [ ] `bun test` passes.
+- [x] Deletion of `it(...)` blocks containing assertions triggers a failure.
+- [x] Commenting out `expect(...)` inside a diff triggers a failure.
+- [x] Execution latency remains under $150\text{ms}$.
+- [x] `bun test` passes.
 
 ## Risk Assessment
 - Risk: Memory/CPU overhead of parsing large test files.

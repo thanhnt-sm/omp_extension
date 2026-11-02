@@ -1,3 +1,12 @@
+---
+title: "Kế hoạch Rà soát, Sửa lỗi Cú pháp và Chuẩn hóa Trực quan Toàn bộ Sơ đồ Mermaid v11 theo Chuẩn UI/UX Pro Max"
+status: completed
+priority: P1
+effort: "completed"
+supersededBy: "261102-atomic-judge-proactive-advisor-healing"
+completedInCycle: "2026-11-02"
+verificationSuite: "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+---
 # Kế hoạch Rà soát, Sửa lỗi Cú pháp và Chuẩn hóa Trực quan Toàn bộ Sơ đồ Mermaid v11 theo Chuẩn UI/UX Pro Max
 
 ## Context

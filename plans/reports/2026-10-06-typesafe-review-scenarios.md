@@ -1,3 +1,7 @@
+---
+title: "Adversarial Test Scenarios: omp_extension Hardening"
+status: completed
+---
 # Adversarial Test Scenarios: omp_extension Hardening
 
 Generated from the Multi-Persona Pre-Analysis (`ck:predict`) in `2026-10-06-codebase-architecture-predict.md`.

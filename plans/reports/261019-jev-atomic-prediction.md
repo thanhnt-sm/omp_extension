@@ -1,3 +1,7 @@
+---
+title: "Prediction Report: JEV atomic evidence, Advisor synthesis và parent acceptance"
+status: completed
+---
 # Prediction Report: JEV atomic evidence, Advisor synthesis và parent acceptance
 
 Ngày: 2026-10-19. Yêu cầu: `ck:predict`, red-team, nghiên cứu online, `ck:scenario`, tính toán/so sánh và giải pháp. Phạm vi: thiết kế có bằng chứng; chưa triển khai runtime hoặc gọi live JEV để benchmark.

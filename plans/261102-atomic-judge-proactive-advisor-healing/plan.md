@@ -9,6 +9,9 @@ tags: [typesafe-jev, atomic-judge, proactive-advisor, anti-blocking, middleware]
 blockedBy: []
 blocks: []
 created: 2026-11-02
+supersededBy: "261102-atomic-judge-proactive-advisor-healing"
+completedInCycle: "2026-11-02"
+verificationSuite: "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
 ---
 
 # Thẩm phán Nguyên tử Jev, Cố vấn Chữa lành Tự động & Chốt chặn Middleware Chống Treo Todo

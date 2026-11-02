@@ -49,14 +49,14 @@ Planner remains the native authorizer; remove marker/env-only delegation rather 
 9. Implement the existing real recovery workflow: Advisor diagnoses exact rejection → scoped source/test executors → parent full affected checks/changed path → fresh review → same-target evaluation. Only genuine external prerequisites may wait; require owner/action/release condition and durable handoff. Do not add a polling daemon.
 
 ## Success Criteria
-- [ ] Advisor/JEV disagreement or unavailable verification cannot authorize native completion or simulate consensus.
-- [ ] Every requested primitive is validated; missing/invalid Noul cannot be manufactured from confidence or categorical defaults.
-- [ ] Native history restores unfinished work and debt; branch/reappend/restart cannot replay approval or silently forgive rejection.
-- [ ] Empty marker, absent/disappearing/throwing/noncovering EGC and agent-declared blocker cannot bypass planner enforcement; favorable preflight plus failed/missing native result leaves obligations/debt unchanged.
-- [ ] Trusted human accept/deny/stale/headless paths retain exact-target policy; unblocking reactivates but never completes or clears debt.
-- [ ] Negated drop is not permission; genuinely obsolete work can still receive verified automatic cancellation.
-- [ ] Outage/evidence/semantic/human outcomes generate different actionable next steps, with bounded retry/progress ownership.
-- [ ] No scope is discarded, no gate lowered, no source mock supplies production approval.
+- [x] Advisor/JEV disagreement or unavailable verification cannot authorize native completion or simulate consensus.
+- [x] Every requested primitive is validated; missing/invalid Noul cannot be manufactured from confidence or categorical defaults.
+- [x] Native history restores unfinished work and debt; branch/reappend/restart cannot replay approval or silently forgive rejection.
+- [x] Empty marker, absent/disappearing/throwing/noncovering EGC and agent-declared blocker cannot bypass planner enforcement; favorable preflight plus failed/missing native result leaves obligations/debt unchanged.
+- [x] Trusted human accept/deny/stale/headless paths retain exact-target policy; unblocking reactivates but never completes or clears debt.
+- [x] Negated drop is not permission; genuinely obsolete work can still receive verified automatic cancellation.
+- [x] Outage/evidence/semantic/human outcomes generate different actionable next steps, with bounded retry/progress ownership.
+- [x] No scope is discarded, no gate lowered, no source mock supplies production approval.
 
 ## Verification
 Parent runs full affected consensus/native/drop/block/lifecycle/EGC/verifier modules, then actual registered-callback scenarios for conflict, outage, forged flags, stale input, duplicate target, history transition, marker-only bypass, EGC capability loss, early-verified then native failure and blocked-to-done denial. Preserve passing legitimate cancellation and matching native commit cases. Run full `bun test` once integrated. Real trusted-UI acceptance is phase10 host evidence; fake callbacks alone cannot claim it.

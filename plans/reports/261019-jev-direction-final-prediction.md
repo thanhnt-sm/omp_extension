@@ -1,3 +1,7 @@
+---
+title: "Prediction Report: JEV Atomic Evidence Review and Advisor Synthesis"
+status: completed
+---
 Task: Synthesize independent five-persona ck:predict verdict and an evidence-backed implementation-ready solution in Vietnamese.
 
 # Prediction Report: JEV Atomic Evidence Review and Advisor Synthesis

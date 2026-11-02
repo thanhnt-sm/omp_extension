@@ -1,3 +1,12 @@
+---
+title: "Judge Baseline Audit & Implementation Plan"
+status: completed
+priority: P1
+effort: "completed"
+supersededBy: "261102-atomic-judge-proactive-advisor-healing"
+completedInCycle: "2026-11-02"
+verificationSuite: "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+---
 # Judge Baseline Audit & Implementation Plan
 
 > Revised: 2026-10-15 · Status: proposed, chưa triển khai · Scope: workspace → deployment target → runtime smoke sau restart.

@@ -71,9 +71,9 @@ Implement the Sovereign Human Invariant in `typesafe-planner.ts` ensuring that h
    - Run `bun test tests/todo-drop-gate.test.ts`.
 
 ## Success Criteria
-- [ ] Human approval (via UI confirm or chat) unconditionally executes the operation with zero secondary blocking.
-- [ ] No unhandled terminal exceptions when a task requires next actions; structured plan adaptation allows smooth continuation.
-- [ ] 100% tests in `plan-reconciliation.test.ts` and `todo-drop-gate.test.ts` pass cleanly.
+- [x] Human approval (via UI confirm or chat) unconditionally executes the operation with zero secondary blocking.
+- [x] No unhandled terminal exceptions when a task requires next actions; structured plan adaptation allows smooth continuation.
+- [x] 100% tests in `plan-reconciliation.test.ts` and `todo-drop-gate.test.ts` pass cleanly.
 
 ## Risk Assessment
 - Risk: Agent enters an infinite loop repeatedly attempting reconciliation without addressing root issues.

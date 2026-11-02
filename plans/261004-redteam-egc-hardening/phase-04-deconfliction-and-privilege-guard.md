@@ -46,11 +46,11 @@ Deconflict `typesafe-planner.ts` with `src/egc.ts` to prevent overlapping interc
 5. Run full test suite across both `typesafe-planner` and `egc`.
 
 ## Success Criteria
-- [ ] No hook collision when both extensions are enabled.
-- [ ] Self-granted `allowJudgeModification` is strictly rejected.
-- [ ] Unhandled exceptions in policy loading are eliminated.
-- [ ] All red-team regression tests pass.
-- [ ] Full project suite (`bun test`) passes completely.
+- [x] No hook collision when both extensions are enabled.
+- [x] Self-granted `allowJudgeModification` is strictly rejected.
+- [x] Unhandled exceptions in policy loading are eliminated.
+- [x] All red-team regression tests pass.
+- [x] Full project suite (`bun test`) passes completely.
 
 ## Risk Assessment
 - *Risk*: Disabling `todo` in `typesafe-planner` when EGC is present might leave tasks ungated if EGC is not properly locked.

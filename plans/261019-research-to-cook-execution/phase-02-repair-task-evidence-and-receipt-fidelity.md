@@ -51,13 +51,13 @@ Follow-up source evidence: deployed `collectConversationContext` includes assist
 9. Populate per-target result/report evidence through the actual native consumer rather than only adding formatter fields. Phase3 supplies final outcome taxonomy and phase9 migrates every remaining caller.
 
 ## Success Criteria
-- [ ] Same-file pre-task WIP is excluded while both task commits and genuine dirty endpoint changes remain visible.
-- [ ] New/deleted/reverted/untracked files and valid-empty baselines retain correct scope without fabricated history.
-- [ ] A test modifying a second tracked file cannot hide it from deterministic safety or semantic evidence.
-- [ ] Failed/foreign/stale receipts and modifications during the request cannot authorize completion; real current receipts do apply.
-- [ ] Research/docs/non-git tasks receive relevant criteria/evidence without invented code/test obligations.
-- [ ] Native/advisory consumers agree on the same bound packet; relevant tail proof and omission/error distinctions survive actual final preparation.
-- [ ] Full F16 regressions remain meaningful; no report deletion, cap increase, weaker test or confidence fallback obtains a pass.
+- [x] Same-file pre-task WIP is excluded while both task commits and genuine dirty endpoint changes remain visible.
+- [x] New/deleted/reverted/untracked files and valid-empty baselines retain correct scope without fabricated history.
+- [x] A test modifying a second tracked file cannot hide it from deterministic safety or semantic evidence.
+- [x] Failed/foreign/stale receipts and modifications during the request cannot authorize completion; real current receipts do apply.
+- [x] Research/docs/non-git tasks receive relevant criteria/evidence without invented code/test obligations.
+- [x] Native/advisory consumers agree on the same bound packet; relevant tail proof and omission/error distinctions survive actual final preparation.
+- [x] Full F16 regressions remain meaningful; no report deletion, cap increase, weaker test or confidence fallback obtains a pass.
 
 ## Verification
 Use actual temporary Git projects for dirty-preimage, two-commit, delete/revert, test-created-file and concurrent-change transitions; use a genuine non-git directory for that lane. Exercise the registered evidence tool and native callback, not just a mock that echoes fields. Parent runs complete affected evidence/input/payload/native modules, separate changed-path smoke, then full `bun test` at integrated readiness. Never re-pin wording or duplicate same-path test rows.

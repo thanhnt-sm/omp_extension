@@ -1,7 +1,7 @@
 ---
 title: "TypeSafe todo drop gate and judge input fidelity"
 description: "Unblock todo drop, correct judge input fidelity, capture task baselines and scoped evidence, and format task reports."
-status: in-progress
+status: completed
 priority: P1
 effort: "4h"
 branch: master
@@ -9,6 +9,9 @@ tags: [typesafe, todo-drop, judge-fidelity, egc, ratchet]
 blockedBy: []
 blocks: []
 created: 2026-10-12
+supersededBy: "261102-atomic-judge-proactive-advisor-healing"
+completedInCycle: "2026-11-02"
+verificationSuite: "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
 ---
 
 # TypeSafe: unblock todo drop + accurate judge input

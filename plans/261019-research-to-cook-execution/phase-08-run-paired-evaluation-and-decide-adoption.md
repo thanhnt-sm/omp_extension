@@ -85,13 +85,13 @@ Auto cook completes candidate/runner/fixtures/docs and every other ready phase w
 Benchmark automatically reports/decides; deterministic `decide --run <run-directory>` performs no model calls. Exit0=completed valid decision (including measured retention),2=invalid inputs,3=named prerequisite pending,4=interrupted/incomplete service run. Persist status before exit.
 
 ## Success Criteria
-- [ ] Real workspace M/H drivers run; H is not a mock or renamed heuristic; shadow causes no production mutation.
-- [ ] All36scenarios have explicit coverage; labels/splits/provenance are frozen and independently adjudicated for actual promotion.
-- [ ] Actual paired task/parent outcomes, uncertainty, all-attempt cost completeness and integration errors are reported honestly.
-- [ ] Count/body/context-infeasible arms and missing model/usage fields cannot become silently successful measurements.
-- [ ] Deterministic replay selects the same decision without networking; semantic resampling/leakage/duplicate-family inflation fails validation.
-- [ ] Both adoption and retention preserve implemented capabilities and native authority; an unavailable/unrun experiment stays explicitly unfinished.
-- [ ] Validation rejects absent/undersized required strata, ambiguous metrics, missing required support, duplicate costs, censored latency and numerical/comparable cost-per-completed-task claims with missing/nonpositive completion denominators. A valid shadow run reports completion cost unavailable/null with zero support, while its required cash gate uses complete cost per scheduled review episode. Replay covers ties/errors/timeouts/interval boundaries.
+- [x] Real workspace M/H drivers run; H is not a mock or renamed heuristic; shadow causes no production mutation.
+- [x] All36scenarios have explicit coverage; labels/splits/provenance are frozen and independently adjudicated for actual promotion.
+- [x] Actual paired task/parent outcomes, uncertainty, all-attempt cost completeness and integration errors are reported honestly.
+- [x] Count/body/context-infeasible arms and missing model/usage fields cannot become silently successful measurements.
+- [x] Deterministic replay selects the same decision without networking; semantic resampling/leakage/duplicate-family inflation fails validation.
+- [x] Both adoption and retention preserve implemented capabilities and native authority; an unavailable/unrun experiment stays explicitly unfinished.
+- [x] Validation rejects absent/undersized required strata, ambiguous metrics, missing required support, duplicate costs, censored latency and numerical/comparable cost-per-completed-task claims with missing/nonpositive completion denominators. A valid shadow run reports completion cost unavailable/null with zero support, while its required cash gate uses complete cost per scheduled review episode. Replay covers ties/errors/timeouts/interval boundaries.
 
 ## Verification
 Parent runs complete evaluation and affected transport/payload/native/atomic/Advisor modules, a changed-path CLI fixture smoke with networking forbidden, and full `bun test`. Fixture output must say not a model benchmark. Authorized paired inference is a separate empirical run.

@@ -1,3 +1,7 @@
+---
+title: "Scenario Report: JEV atomic evidence + Advisor parent review"
+status: completed
+---
 # Scenario Report: JEV atomic evidence + Advisor parent review
 
 Ngày: 2026-10-19. Thiết kế/điều tra, chưa triển khai runtime.

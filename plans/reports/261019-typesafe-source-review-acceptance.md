@@ -1,3 +1,7 @@
+---
+title: "Source-review acceptance evidence"
+status: completed
+---
 Task: Review every discovered source subsystem and substantiate defects with executable or trace evidence.
 Operation: done
 # Source-review acceptance evidence

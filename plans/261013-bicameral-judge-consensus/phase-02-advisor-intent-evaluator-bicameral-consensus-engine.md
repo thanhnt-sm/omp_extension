@@ -73,9 +73,9 @@ Consensus      Conflict      Next Actions
    - Run `bun test tests/bicameral-consensus.test.ts`.
 
 ## Success Criteria
-- [ ] Consensus matrix correctly arbitrates all 9 permutation combinations of Advisor (ALLOW/DISALLOW/UNCERTAIN) and JEV (APPROVE/REJECT/NEXT_ACTION).
-- [ ] Conflicting viewpoints trigger clear human escalation detailing both perspectives.
-- [ ] Unanimous approval executes without prompt.
+- [x] Consensus matrix correctly arbitrates all 9 permutation combinations of Advisor (ALLOW/DISALLOW/UNCERTAIN) and JEV (APPROVE/REJECT/NEXT_ACTION).
+- [x] Conflicting viewpoints trigger clear human escalation detailing both perspectives.
+- [x] Unanimous approval executes without prompt.
 
 ## Risk Assessment
 - Risk: Advisor falsely assumes user intent from ambiguous conversational phrasing.

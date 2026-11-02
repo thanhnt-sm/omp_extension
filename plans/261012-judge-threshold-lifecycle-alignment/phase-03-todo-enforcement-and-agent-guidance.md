@@ -82,9 +82,9 @@ Close the lifecycle completion gap where plans can be marked complete while acti
 3. Ensure the agent cannot bypass this check by re-initializing the todo list with `op: "init"` omitting active tasks unless human-authorized.
 
 ## Success Criteria
-- [ ] Attempting `plan-cli check` with active contracted tasks throws an invariant violation and blocks.
-- [ ] Direct file write of `status: complete` to `plan.md` is rejected while tasks remain active.
-- [ ] Rejection messages contain deterministic, actionable step-by-step instructions.
+- [x] Attempting `plan-cli check` with active contracted tasks throws an invariant violation and blocks.
+- [x] Direct file write of `status: complete` to `plan.md` is rejected while tasks remain active.
+- [x] Rejection messages contain deterministic, actionable step-by-step instructions.
 
 ## Risk Assessment
 - Risk: Rejection loop if agent fails to parse or follow instructions.

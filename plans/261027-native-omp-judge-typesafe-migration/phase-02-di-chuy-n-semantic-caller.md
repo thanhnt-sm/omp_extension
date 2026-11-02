@@ -32,9 +32,9 @@ Dùng trực tiếp `eval` và `judge()`/`judge_batch()` của OMP cho các câu
 5. Viết mẫu sử dụng cho `ck:cook` dưới dạng hướng dẫn, không tạo tool TypeSafe; yêu cầu judge output chỉ hỗ trợ quyết định nhỏ và không được sử dụng như receipt có thẩm quyền của lifecycle.
 
 ## Tiêu chí thành công
-- [ ] Có kết quả quan sát được từ một state nhiều câu hỏi và hai state dùng batch trên native judge Jev đã xác minh ở Phase 1.
-- [ ] Kết quả `bool` được đọc đúng dạng xác suất, câu hỏi `choice`/`score` đúng schema và lỗi từng batch item được phân biệt với lỗi toàn batch.
-- [ ] Không có custom TypeSafe tool, không semantic approval thay evidence/Advisor/human, không thay native todo argument.
+- [x] Có kết quả quan sát được từ một state nhiều câu hỏi và hai state dùng batch trên native judge Jev đã xác minh ở Phase 1.
+- [x] Kết quả `bool` được đọc đúng dạng xác suất, câu hỏi `choice`/`score` đúng schema và lỗi từng batch item được phân biệt với lỗi toàn batch.
+- [x] Không có custom TypeSafe tool, không semantic approval thay evidence/Advisor/human, không thay native todo argument.
 
 ## Đánh giá rủi ro
 Tài liệu TypeSafe nhận `noul`, nhưng prelude OMP nhận `bool`; ánh xạ phải dựa trên output thực. Nhiều state khác rubric không được gộp sai; khi backend không chứng minh native Jev thì chỉ ghi kết quả host, không tuyên bố hiệu chuẩn Jev.

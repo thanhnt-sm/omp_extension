@@ -3,6 +3,7 @@ title: "Scout & Research Report: TypeSafe Todo Done Verdict Fidelity & meets_cri
 date: 2026-10-14
 type: scout-and-research-report
 skills: [ck:scout, ck:research, ck:docs-seeker]
+status: completed
 ---
 
 # Scout & Research Report: TypeSafe `todo done` Verdict Fidelity & `meets_criteria=0.00` Root Causes

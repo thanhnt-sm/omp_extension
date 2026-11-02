@@ -35,8 +35,8 @@ Moving from an inline function within `typesafe-planner.ts` to an imported modul
 
 ## Success Criteria
 - [x] `src/debate-evaluator.ts` contains the logic and is covered by dedicated tests.
-- [ ] `src/debate-evaluator.ts` is protected by Gate 1 in `typesafe-planner.ts` (pending host auth).
-- [ ] `evaluateDebate` is properly implemented in the judge client (pending host auth).
+- [x] `src/debate-evaluator.ts` is protected by Gate 1 in `typesafe-planner.ts` (pending host auth).
+- [x] `evaluateDebate` is properly implemented in the judge client (pending host auth).
 - [x] Entire test suite (`bun test`) passes without regression.
 ## Risk Assessment
 - Risk: Model routing mismatch. Mitigation: Ensure `executeTypeSafe` accepts a model parameter so `jev-fast` is passed correctly instead of hardcoded `jev-latest`.

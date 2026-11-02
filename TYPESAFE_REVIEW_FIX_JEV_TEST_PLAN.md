@@ -1,3 +1,12 @@
+---
+title: "TypeSafe Extension: Fix Red-Team Residuals, Upgrade Evidence Performance, Verify Judge/JEV, Close Every Todo"
+status: completed
+priority: P1
+effort: "completed"
+supersededBy: "261102-atomic-judge-proactive-advisor-healing"
+completedInCycle: "2026-11-02"
+verificationSuite: "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+---
 # TypeSafe Extension: Fix Red-Team Residuals, Upgrade Evidence Performance, Verify Judge/JEV, Close Every Todo
 
 > **Executor:** Gemini, fresh OMP session, workspace `D:/100.Software/Github/omp_extension`.
@@ -165,9 +174,9 @@ todo init list=[{"phase":"Execution","items":[
 - Re-measure `tests/evidence-collector.test.ts` wall time. Acceptance: strictly faster than the logged baseline; log both numbers. If not faster, profile (`bun --cpu-prof`) and log the hotspot before continuing. Never raise timeouts.
 
 ### Success Criteria
-- [ ] Junction root, junction parent and case-variant root tests pass before and after the change.
-- [ ] Each snapshot spawns one fewer git process, and reads skip the redundant root-chain walks when the root is canonical.
-- [ ] The evidence suites pass with 0 failures and the measured evidence-collector time is below the baseline.
+- [x] Junction root, junction parent and case-variant root tests pass before and after the change.
+- [x] Each snapshot spawns one fewer git process, and reads skip the redundant root-chain walks when the root is canonical.
+- [x] The evidence suites pass with 0 failures and the measured evidence-collector time is below the baseline.
 
 ## Phase 2: Sync lock identity and Windows termination
 
@@ -184,8 +193,8 @@ todo init list=[{"phase":"Execution","items":[
 **V:** `bun test tests/sync-baseline.test.ts tests/evidence-collector.test.ts` → 0 fail. `node tools/sync-baseline.cjs --dry-run` → "Preflight succeeded".
 
 ### Success Criteria
-- [ ] A target identity change between lock and transaction aborts with no target mutation.
-- [ ] A Windows timeout kills the process tree, settles within 10 s, and never blocks the event loop with spawnSync.
+- [x] A target identity change between lock and transaction aborts with no target mutation.
+- [x] A Windows timeout kills the process tree, settles within 10 s, and never blocks the event loop with spawnSync.
 
 ## Phase 3: EGC screening, allow mode, refusals, target ambiguity
 
@@ -207,9 +216,9 @@ todo init list=[{"phase":"Execution","items":[
 **V:** `bun test tests/egc.test.ts` → 0 fail. Smoke: run a throwaway script that loads the EGC harness once per case (delete it afterwards).
 
 ### Success Criteria
-- [ ] Enforce-mode todo inputs carrying an unsandboxed flag are blocked, while task text that mentions egc files still passes.
-- [ ] Allow mode refuses unverified completion unless enforce-mode JEV with requirements provides falsification.
-- [ ] Oversized or missing required files yield EGC REFUSED with a rejected assessment, and an ambiguous done target stages nothing.
+- [x] Enforce-mode todo inputs carrying an unsandboxed flag are blocked, while task text that mentions egc files still passes.
+- [x] Allow mode refuses unverified completion unless enforce-mode JEV with requirements provides falsification.
+- [x] Oversized or missing required files yield EGC REFUSED with a rejected assessment, and an ambiguous done target stages nothing.
 
 ## Phase 4: Advisor drain, applicability invariant, child-env secrets
 
@@ -239,9 +248,9 @@ todo init list=[{"phase":"Execution","items":[
 **V:** `bun test tests/advisor-protocol.test.ts tests/advisor-runtime.test.ts tests/typesafe-child-env.test.ts` plus the budget test → 0 fail.
 
 ### Success Criteria
-- [ ] An abort-ignoring native operation can no longer hang run; it resolves within the bounded drain window.
-- [ ] The applicability digest is stable across dispatch IDs and changes with contract revision or tree digest.
-- [ ] Credential values from named or long suffix-matched variables are rejected in allowlisted values, while short flags are not.
+- [x] An abort-ignoring native operation can no longer hang run; it resolves within the bounded drain window.
+- [x] The applicability digest is stable across dispatch IDs and changes with contract revision or tree digest.
+- [x] Credential values from named or long suffix-matched variables are rejected in allowlisted values, while short flags are not.
 
 ## Phase 5: Telemetry count redaction
 
@@ -260,7 +269,7 @@ todo init list=[{"phase":"Execution","items":[
 **V:** `bun test tests/public-evidence-egress.test.ts tests/payload-safety.test.ts tests/trusted-tool-policy.test.ts tests/typesafe-transport-retry.test.ts` → 0 fail.
 
 ### Success Criteria
-- [ ] Non-negative integer token counts on exact telemetry keys survive public projection, while string, negative, fractional and other sensitive keys stay redacted.
+- [x] Non-negative integer token counts on exact telemetry keys survive public projection, while string, negative, fractional and other sensitive keys stay redacted.
 
 ## Phase 6: Full verification, live JEV, deploy and reconciliation
 
@@ -281,9 +290,9 @@ Preconditions: Phase 1–5 todos are `completed` in `todo view`. Do **not** rest
 7. Hand off to §9 (user restart).
 
 ### Success Criteria
-- [ ] The full workspace suite passes with 0 failures, and live judge, rerank, multi-label and paired-eval validate checks succeed against the loaded runtime.
-- [ ] The sync deploy reports DEPLOYED_VERIFIED for the workspace baseline.
-- [ ] The Phase 1 through Phase 5 native todos are completed with no retained rejection debt.
+- [x] The full workspace suite passes with 0 failures, and live judge, rerank, multi-label and paired-eval validate checks succeed against the loaded runtime.
+- [x] The sync deploy reports DEPLOYED_VERIFIED for the workspace baseline.
+- [x] The Phase 1 through Phase 5 native todos are completed with no retained rejection debt.
 
 ## 5. Validation Log (auto mode, recommended options applied)
 

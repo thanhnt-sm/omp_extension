@@ -1,3 +1,7 @@
+---
+title: "Rà soát và sửa cài đặt judge/TypeSafe (Judge Installation Audit and Repairs)"
+status: completed
+---
 # Rà soát và sửa cài đặt judge/TypeSafe (Judge Installation Audit and Repairs)
 
 ## Kết luận hiện hành

@@ -1,3 +1,7 @@
+---
+title: "Bàn giao phục hồi: di chuyển sang bộ đánh giá bản địa OMP"
+status: completed
+---
 # Bàn giao phục hồi: di chuyển sang bộ đánh giá bản địa OMP
 
 - **Mục tiêu gốc (original goal):** Thực hiện `plans/261027-native-omp-judge-typesafe-migration/plan.md` theo `ck:cook --auto --validate --tdd`: xác minh Jev qua `judge` bản địa trước, sau đó phán đoán nguyên tử, chỉ di chuyển các caller trong tiện ích mở rộng khi có cầu nối chính thức (official host bridge).

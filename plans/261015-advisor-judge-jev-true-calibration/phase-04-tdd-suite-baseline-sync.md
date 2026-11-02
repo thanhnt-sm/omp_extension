@@ -30,9 +30,9 @@ Update and expand unit, integration, and adversarial test suites in `tests/*.tes
 5. Mark all phases checked via `plan-cli.cjs check` and write `docs/journals/2026-10-15-advisor-judge-jev-true-calibration.md`.
 
 ## Success Criteria
-- [ ] `bun test` passes 100% of test suites with 0 failures.
-- [ ] `node tools/sync-baseline.cjs` succeeds and verifies `C:/Users/thant/Projects/omp_extension`.
-- [ ] Live TypeSafe tools return calibrated verdicts without hardcoded `0.90` or `0.80` walls.
+- [x] `bun test` passes 100% of test suites with 0 failures.
+- [x] `node tools/sync-baseline.cjs` succeeds and verifies `C:/Users/thant/Projects/omp_extension`.
+- [x] Live TypeSafe tools return calibrated verdicts without hardcoded `0.90` or `0.80` walls.
 
 ## Related Files
 - Modify: `tests/bicameral-consensus.test.ts`

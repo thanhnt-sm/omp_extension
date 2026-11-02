@@ -8,6 +8,9 @@ tags: []
 blockedBy: []
 blocks: []
 created: 2026-10-01
+supersededBy: "261102-atomic-judge-proactive-advisor-healing"
+completedInCycle: "2026-11-02"
+verificationSuite: "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
 ---
 
 # Auth Error Visibility Enhancement

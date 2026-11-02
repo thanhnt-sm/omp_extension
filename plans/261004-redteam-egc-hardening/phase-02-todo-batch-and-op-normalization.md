@@ -42,9 +42,9 @@ In `typesafe-planner.ts`:
 4. Add state-tracking / invariant checks on `drop` and `init` to prevent dropping contracted tasks without human approval.
 
 ## Success Criteria
-- [ ] Batch `{ ops: [{ op: "done", ... }] }` correctly intercepted and evaluated.
-- [ ] Dropping contracted tasks via `init` or `drop` is gated or logged.
-- [ ] Phase 1 tests for batch/op bypass transition from RED to GREEN.
+- [x] Batch `{ ops: [{ op: "done", ... }] }` correctly intercepted and evaluated.
+- [x] Dropping contracted tasks via `init` or `drop` is gated or logged.
+- [x] Phase 1 tests for batch/op bypass transition from RED to GREEN.
 
 ## Risk Assessment
 - *Risk*: Legitimate batch updates might be delayed if each item triggers an independent heavy check.

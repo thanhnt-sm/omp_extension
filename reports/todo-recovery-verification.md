@@ -1,3 +1,7 @@
+---
+title: "TODO Recovery Verification"
+status: completed
+---
 # TODO Recovery Verification
 
 ## Phase 4 — Todo rejection recovery and deletion

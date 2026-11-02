@@ -6,6 +6,9 @@ priority: P2
 effort: "45m"
 tags: [typesafe, health-probe, transport-scoping, session_start, diagnostics]
 created: 2026-10-09
+supersededBy: "261102-atomic-judge-proactive-advisor-healing"
+completedInCycle: "2026-11-02"
+verificationSuite: "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
 ---
 
 # Session Pre-Flight Health Probe Transport Scoping & Dual-Notification Fix

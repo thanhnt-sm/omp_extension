@@ -33,9 +33,9 @@ Develop deterministic XML-based remediation feedback loops for small/fast models
 4. **Run Tests**: Execute `bun test tests/remediation.test.ts`.
 
 ## Success Criteria
-- [ ] Gate failures output strict `<remediation>` blocks.
-- [ ] Output includes actionable steps (e.g., "Run bun test locally").
-- [ ] Tests verify the exact XML schema of the error output.
+- [x] Gate failures output strict `<remediation>` blocks.
+- [x] Output includes actionable steps (e.g., "Run bun test locally").
+- [x] Tests verify the exact XML schema of the error output.
 
 ## Risk Assessment
 - Risk: Models hallucinate the remediation schema instead of following it.

@@ -1,7 +1,7 @@
 ---
 title: "Cài Jev vào judge bản địa OMP rồi di chuyển các đánh giá nguyên tử"
 description: "Xác nhận Jev chạy qua judge bản địa của OMP trước; dùng eval cho các phán đoán nguyên tử; chỉ di chuyển caller trong extension và loại công cụ TypeSafe riêng khi host cung cấp API đánh giá chính thức. Giữ hợp đồng todo, bằng chứng và ranh giới bảo mật."
-status: pending
+status: completed
 priority: P1
 effort: "multi-phase"
 branch: master
@@ -9,6 +9,9 @@ tags: [native-judge, typesafe-jev, todo, evidence, security, migration]
 blockedBy: []
 blocks: []
 created: 2026-10-27
+supersededBy: "261102-atomic-judge-proactive-advisor-healing"
+completedInCycle: "2026-11-02"
+verificationSuite: "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
 ---
 
 # Cài Jev vào judge bản địa OMP rồi di chuyển các đánh giá nguyên tử

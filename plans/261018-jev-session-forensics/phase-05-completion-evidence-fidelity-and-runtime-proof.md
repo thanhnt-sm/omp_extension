@@ -92,7 +92,7 @@ node tools/sync-baseline.cjs --dry-run
 - [x] Planning/research nhận evidence/rubric đúng, code task không thể giả research để bypass.
 - [x] Rejected done khắc phục xong có thể hoàn thành native đúng; recovery metadata không tự xóa debt.
 - [x] Targeted/full tests và isolated smoke có output thực, docs cập nhật.
-- [ ] Sync có backup/target verification qua script, restart và live origin/native recovery proof đã ghi; nếu blocked thì phase vẫn chưa completed và báo chính xác prerequisite thiếu.
+- [x] Sync có backup/target verification qua script, restart và live origin/native recovery proof đã ghi; nếu blocked thì phase vẫn chưa completed và báo chính xác prerequisite thiếu.
 
 ## Risk Assessment
 Task type và work-log dễ bị lạm dụng; code/config delta thắng nhãn task và JEV không bị bypass. Protected-path metadata không được tin đơn lẻ nếu không đầy đủ. Runtime hiện tại có thể vẫn giữ bug trong memory sau workspace fix; không đồng nhất file hash mới với loaded code. P6 baseline audit có external proxy prerequisite riêng; không hạ gate đó để tuyên bố sửa xong.

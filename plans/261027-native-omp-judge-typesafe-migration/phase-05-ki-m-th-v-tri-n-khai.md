@@ -38,10 +38,10 @@ Giai đoạn này chỉ bắt đầu nhánh extension khi bridge đạt, giai đ
 8. Nếu mọi điều kiện đạt, đồng bộ qua công cụ giao dịch; giữ backup/journal, kiểm tra SHA và hành vi host sau restart. Nếu verification fail, rollback bằng transaction tool; không chỉnh global proxy.
 
 ## Tiêu chí thành công
-- [ ] Toàn bộ tệp kiểm thử liên quan và bộ `bun test` đạt, không nới assertion hay bỏ qua test.
-- [ ] Native Jev có bằng chứng backend cùng output hợp lệ; extension bridge/todo smoke chỉ được xác nhận khi code mới thực sự nạp.
-- [ ] Dry-run và triển khai không ghi trái phép vào `.claude`; có backup, verification và rollback path quan sát được.
-- [ ] Nếu host thiếu bridge, báo riêng giai đoạn 1–2 và giữ giai đoạn 3–5 chưa hoàn tất; không chạy todo smoke/deploy extension.
+- [x] Toàn bộ tệp kiểm thử liên quan và bộ `bun test` đạt, không nới assertion hay bỏ qua test.
+- [x] Native Jev có bằng chứng backend cùng output hợp lệ; extension bridge/todo smoke chỉ được xác nhận khi code mới thực sự nạp.
+- [x] Dry-run và triển khai không ghi trái phép vào `.claude`; có backup, verification và rollback path quan sát được.
+- [x] Nếu host thiếu bridge, báo riêng giai đoạn 1–2 và giữ giai đoạn 3–5 chưa hoàn tất; không chạy todo smoke/deploy extension.
 
 ## Đánh giá rủi ro
 Sync manifest hiện hành có thể vẫn ghi lên gốc `.claude`. Không chạy deployment chỉ vì test xanh: kiểm tra diff/manifest/ownership và quyền trước. Bằng chứng digest là quan sát trên đĩa, không chứng minh mã đã nạp; smoke runtime phải theo sau restart.

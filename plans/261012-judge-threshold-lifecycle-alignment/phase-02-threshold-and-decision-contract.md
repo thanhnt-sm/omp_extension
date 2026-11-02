@@ -54,9 +54,9 @@ Standardize TypeSafe System One judgment threshold definitions, unify gray-zone 
 4. Ensure non-interactive execution (`hasUI === false` or `ui.confirm` missing) triggers deterministic fail-closed rejection with clear explanatory text, rather than silent hanging.
 
 ## Success Criteria
-- [ ] Threshold boundaries verified at critical points: 0.29 (reject), 0.30 (undecided), 0.79 (undecided), 0.80 (approve).
-- [ ] Error and network failures produce `unavailable` with distinct diagnostics, avoiding false gray-zone classification.
-- [ ] UI confirmation message contains complete structured context (task, reason, score, threshold, user request).
+- [x] Threshold boundaries verified at critical points: 0.29 (reject), 0.30 (undecided), 0.79 (undecided), 0.80 (approve).
+- [x] Error and network failures produce `unavailable` with distinct diagnostics, avoiding false gray-zone classification.
+- [x] UI confirmation message contains complete structured context (task, reason, score, threshold, user request).
 
 ## Risk Assessment
 - Risk: Non-interactive environments (CI or headless agent runs) hanging on interactive confirmation.

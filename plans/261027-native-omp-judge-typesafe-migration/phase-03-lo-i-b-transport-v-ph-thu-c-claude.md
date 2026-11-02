@@ -48,11 +48,11 @@ Bridge upstream cần có quyền gọi (authorization), hủy (`AbortSignal`), 
 7. Sau khi không còn caller transport, tách redaction/policy tất định khỏi `src/typesafe-api-client.cjs` và `src/typesafe-policy-client.cjs`, rồi xóa HTTP client/credential/retry/resolver đọc `~/.claude/.ck.json`; giữ guard đường dẫn `.claude` độc lập.
 
 ## Tiêu chí thành công
-- [ ] Bridge extension được chứng minh bằng mã nguồn và smoke trên bản host đang chạy, hoặc giai đoạn ghi `HOST_BRIDGE_REQUIRED` và không sửa caller.
-- [ ] Khi bridge tồn tại, mọi semantic caller dùng callback host thật, giữ xác suất/ngưỡng M và không gửi `noul` qua prelude OMP.
-- [ ] Toàn bộ test file bị ảnh hưởng đạt, gồm sibling tests cho evidence, outage, rejection và parent integration.
-- [ ] Semantic registrations có đường native thay thế đã được cắt; lifecycle/Advisor registrations chưa bị xóa khi đường evidence/review thay thế chưa chứng minh được.
-- [ ] Không còn HTTP/khóa API/`.claude/.ck.json` trong đường đánh giá production; redaction và policy tất định còn được kiểm thử độc lập.
+- [x] Bridge extension được chứng minh bằng mã nguồn và smoke trên bản host đang chạy, hoặc giai đoạn ghi `HOST_BRIDGE_REQUIRED` và không sửa caller.
+- [x] Khi bridge tồn tại, mọi semantic caller dùng callback host thật, giữ xác suất/ngưỡng M và không gửi `noul` qua prelude OMP.
+- [x] Toàn bộ test file bị ảnh hưởng đạt, gồm sibling tests cho evidence, outage, rejection và parent integration.
+- [x] Semantic registrations có đường native thay thế đã được cắt; lifecycle/Advisor registrations chưa bị xóa khi đường evidence/review thay thế chưa chứng minh được.
+- [x] Không còn HTTP/khóa API/`.claude/.ck.json` trong đường đánh giá production; redaction và policy tất định còn được kiểm thử độc lập.
 
 ## Đánh giá rủi ro
 API host upstream không tồn tại tại thời điểm lập kế hoạch; không đánh dấu phase hoàn tất chỉ từ native `eval` smoke. Không tạo tool/layer giả làm bridge và không tự sửa repo OMP trong phạm vi plan extension này.

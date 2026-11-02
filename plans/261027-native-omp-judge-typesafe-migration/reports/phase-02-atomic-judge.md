@@ -1,3 +1,7 @@
+---
+title: "Báo cáo Giai đoạn 2: Đánh giá Phán đoán Nguyên tử qua Native Eval (Phase 2 Report: Atomic Judgments via Native Eval)"
+status: completed
+---
 # Báo cáo Giai đoạn 2: Đánh giá Phán đoán Nguyên tử qua Native Eval (Phase 2 Report: Atomic Judgments via Native Eval)
 
 ## 1. Mục tiêu Giai đoạn (Phase Goal)

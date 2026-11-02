@@ -36,11 +36,11 @@ Core `todo` là nguồn sự thật; extension chỉ kiểm tra hợp đồng (c
 8. Sau khi native evidence/review, Advisor receipt và recovery report có đường thay thế thật, xóa các registration `typesafe_bind_task`, `typesafe_collect_evidence`, `typesafe_retrieve_evidence`, `typesafe_review_task`, `typesafe_prepare_todo_mutation`, `typesafe_resolve_historical_debt`, `typesafe_recovery_report`, `typesafe_prepare_advisor`, `typesafe_advisor` và stub tương ứng trong cùng đợt cắt chuyển có kiểm thử. Nếu bất kỳ chức năng nào chưa có đường thay thế an toàn, **không** xóa riêng registration đó rồi tuyên bố migration đã xong; ghi rõ tiền đề host còn thiếu.
 
 ## Tiêu chí thành công
-- [ ] `todo` chỉ nhận trường native và hoàn tất đòi hỏi kết quả Core đã ổn định, trùng nhiệm vụ và lần hiện thân.
-- [ ] Preflight không gọi mạng, chạy test, gọi child hoặc đánh giá ngữ nghĩa; thiếu receipt không thể biến thành thành công.
-- [ ] Từ chối không đổi, lỗi dịch vụ, thiếu bằng chứng, receipt Advisor và tích hợp nhiệm vụ cha được phân loại và đối soát chính xác.
-- [ ] Chờ bên ngoài có đủ năm trường phục hồi; không block/drop/rm để giả hoàn tất.
-- [ ] Toàn bộ lifecycle/Advisor registrations `typesafe_*` đã cắt sau khi các đường thay thế thật được kiểm chứng; không còn alias hoặc stub giả `UNAVAILABLE`.
+- [x] `todo` chỉ nhận trường native và hoàn tất đòi hỏi kết quả Core đã ổn định, trùng nhiệm vụ và lần hiện thân.
+- [x] Preflight không gọi mạng, chạy test, gọi child hoặc đánh giá ngữ nghĩa; thiếu receipt không thể biến thành thành công.
+- [x] Từ chối không đổi, lỗi dịch vụ, thiếu bằng chứng, receipt Advisor và tích hợp nhiệm vụ cha được phân loại và đối soát chính xác.
+- [x] Chờ bên ngoài có đủ năm trường phục hồi; không block/drop/rm để giả hoàn tất.
+- [x] Toàn bộ lifecycle/Advisor registrations `typesafe_*` đã cắt sau khi các đường thay thế thật được kiểm chứng; không còn alias hoặc stub giả `UNAVAILABLE`.
 
 ## Đánh giá rủi ro
 Xóa công cụ vòng đời trước khi có đường evidence/review chính thức sẽ mở đường hoàn tất sai. Cắt theo từng caller và giữ fail-closed; nếu host chưa cung cấp cơ chế tương ứng, dừng giai đoạn này, không làm suy yếu gate hoặc tạo tool giả.

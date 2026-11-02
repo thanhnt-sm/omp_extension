@@ -1,3 +1,7 @@
+---
+title: "Red Team Review — 261019-research-to-cook-execution"
+status: completed
+---
 # Red Team Review — 261019-research-to-cook-execution
 
 Date: 2026-10-22 · Tier: Full (10 phases, 4 lenses) · Reviewers: 4 independent Opus code-reviewers (security / failure-mode / assumptions / contract-scope), evidence-filtered by lead.

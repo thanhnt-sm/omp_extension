@@ -1,3 +1,7 @@
+---
+title: "Existing plan implementation inventory"
+status: completed
+---
 # Existing plan implementation inventory
 
 Read-only audit checkpoint:33 existing plan indexes and83phasefiles before the new execution master. Declared status is not implementation proof. No source edits/tests/commands were performed by the scout.

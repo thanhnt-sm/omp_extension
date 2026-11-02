@@ -1,3 +1,7 @@
+---
+title: "Brainstorm & Multi-Persona Prediction Report (`ck:brainstorm` + `ck:predict`): Advisor (`0.90`), Threshold (`0.80`), and TypeSafe JEV Overhaul"
+status: completed
+---
 # Brainstorm & Multi-Persona Prediction Report (`ck:brainstorm` + `ck:predict`): Advisor (`0.90`), Threshold (`0.80`), and TypeSafe JEV Overhaul
 
 - **Date**: 2026-10-15

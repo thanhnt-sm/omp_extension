@@ -45,13 +45,13 @@ Plan isolation reads explicit action/target records and normalized mutation path
 8. Replace stale docs asserting resetFailures, permanent authorization, absolute XML isolation or fabricated default approvals. Retain historical provenance with a current replacement note rather than erase inconvenient evidence.
 
 ## Success Criteria
-- [ ] Real production and extracted consumers use one debate policy; known low architect/security/devil cases cannot disagree between callers.
-- [ ] Missing/invalid role output or transport failure never becomes passing scores, model claims or approval.
-- [ ] Empty/no-step/dependency-invalid plans fail structural triage while genuine research plans remain applicable.
-- [ ] Safe negative boundary references pass isolation; encoded/renamed actual forbidden mutation is rejected.
-- [ ] Dynamic source cannot break retained structural wrappers or become trusted policy; semantic injection remains an explicit separate risk.
-- [ ] Existing accepted anti-evasion boundaries remain; no new false-negative lexical masking or package/framework creep.
-- [ ] All importers/docs are migrated cleanly, without compatibility re-exports or wording-only tests.
+- [x] Real production and extracted consumers use one debate policy; known low architect/security/devil cases cannot disagree between callers.
+- [x] Missing/invalid role output or transport failure never becomes passing scores, model claims or approval.
+- [x] Empty/no-step/dependency-invalid plans fail structural triage while genuine research plans remain applicable.
+- [x] Safe negative boundary references pass isolation; encoded/renamed actual forbidden mutation is rejected.
+- [x] Dynamic source cannot break retained structural wrappers or become trusted policy; semantic injection remains an explicit separate risk.
+- [x] Existing accepted anti-evasion boundaries remain; no new false-negative lexical masking or package/framework creep.
+- [x] All importers/docs are migrated cleanly, without compatibility re-exports or wording-only tests.
 
 ## Verification
 Run complete actual debate/client/plan/XML/AST modules after integration; resolve current filenames first. Exercise production entrypoint debate through actual injected transport and validate discriminating verdict/error cases—not score forwarding. Smoke structured plan/source inputs through the real tool path; then parent runs full `bun test` at the integrated gate. Delete incidental wording tests instead of re-pinning them.

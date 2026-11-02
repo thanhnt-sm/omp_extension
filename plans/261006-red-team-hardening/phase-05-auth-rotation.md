@@ -33,9 +33,9 @@ Implement resilient HTTP client logic to handle 401/403 responses by dynamically
 4. **Run Tests**: Execute `bun test tests/auth-manager.test.ts`.
 
 ## Success Criteria
-- [ ] 401 responses trigger exactly one retry with a new token (if available).
-- [ ] Raw keys are never logged in stack traces or error messages.
-- [ ] Test suite successfully mocks and recovers from a 401 error.
+- [x] 401 responses trigger exactly one retry with a new token (if available).
+- [x] Raw keys are never logged in stack traces or error messages.
+- [x] Test suite successfully mocks and recovers from a 401 error.
 
 ## Risk Assessment
 - Risk: Infinite retry loops on permanently revoked keys.

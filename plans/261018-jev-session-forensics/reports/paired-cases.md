@@ -1,3 +1,7 @@
+---
+title: "Phase 2 paired-case ledger"
+status: completed
+---
 # Phase 2 paired-case ledger
 
 ## Classification contract

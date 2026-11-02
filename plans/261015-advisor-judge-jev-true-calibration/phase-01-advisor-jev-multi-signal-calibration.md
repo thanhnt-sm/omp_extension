@@ -32,9 +32,9 @@ Replace hardcoded `0.90` / `0.85` / `0.95` confidence literals and rubber-stamp 
    - In `runBicameralMacroCheck` and `evaluateBicameralDoneConsensus`, route drift/scope violations (`!jevMacro.approved && jevMacro.verdict === "APPROVE"`) to `NEXT_ACTION_REQUIRED` (`RECONCILE_PLAN`) when `!jevMacro.escalateToUser`, so Attempt 1 does not trigger a false `ESCALATE` popup.
 
 ## Success Criteria
-- [ ] `evaluateAdvisorIntent` no longer returns a flat `0.90` on every `done` call and returns `DISALLOW` when tests fail.
-- [ ] `runBicameralDecisionCheck` reflects JEV's `decision_clarity` and `recommended_option.confidence` in `advisor.confidence` and `report`.
-- [ ] `bun test tests/bicameral-consensus.test.ts` passes with exit code 0.
+- [x] `evaluateAdvisorIntent` no longer returns a flat `0.90` on every `done` call and returns `DISALLOW` when tests fail.
+- [x] `runBicameralDecisionCheck` reflects JEV's `decision_clarity` and `recommended_option.confidence` in `advisor.confidence` and `report`.
+- [x] `bun test tests/bicameral-consensus.test.ts` passes with exit code 0.
 
 ## Related Files
 - Modify: `src/bicameral-consensus.ts`

@@ -6,6 +6,9 @@ priority: P2
 effort: "1h"
 tags: [typesafe, health-probe, ck-predict, diagnostics, exception-scoping]
 created: 2026-10-07
+supersededBy: "261102-atomic-judge-proactive-advisor-healing"
+completedInCycle: "2026-11-02"
+verificationSuite: "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
 ---
 
 # Session Start Health Probe Dual-Notification Analysis & ck:predict Review

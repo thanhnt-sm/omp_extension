@@ -1,3 +1,7 @@
+---
+title: "Plan review verification"
+status: completed
+---
 # Plan review verification
 
 ## Completed planning work

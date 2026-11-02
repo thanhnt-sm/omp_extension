@@ -1,3 +1,7 @@
+---
+title: "Brainstorm Summary: TypeSafe Wildcard Extension for All Directories"
+status: completed
+---
 # Brainstorm Summary: TypeSafe Wildcard Extension for All Directories
 
 ## Problem Statement & Requirements

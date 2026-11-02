@@ -36,9 +36,9 @@ Fix all payload corruption, schema mismatches, and scope/criteria mismatches in 
    - Strip `"true: "` / `"false: "` prefixes in `normalizeQuestionForTypeSafe`.
 
 ## Success Criteria
-- [ ] Sub-tasks in multi-phase plans are evaluated against their own task requirements rather than failing because later phases are unstarted.
-- [ ] `sanitizeStateForTypeSafe` never double-clamps 3000-char fields from `runPhaseMacroCheck` or crushes them to 950 chars.
-- [ ] `constructGateQuestions` produces valid `Record<string, string>` criteria accepted by `typesafe-api-client.cjs:validateInput`.
+- [x] Sub-tasks in multi-phase plans are evaluated against their own task requirements rather than failing because later phases are unstarted.
+- [x] `sanitizeStateForTypeSafe` never double-clamps 3000-char fields from `runPhaseMacroCheck` or crushes them to 950 chars.
+- [x] `constructGateQuestions` produces valid `Record<string, string>` criteria accepted by `typesafe-api-client.cjs:validateInput`.
 
 ## Related Files
 - Modify: `src/evidence-collector.ts`

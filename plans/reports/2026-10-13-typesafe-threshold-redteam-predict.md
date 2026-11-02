@@ -1,3 +1,7 @@
+---
+title: "Prediction Report: TypeSafe System One JEV Threshold & Verification Gate Alignment"
+status: completed
+---
 # Prediction Report: TypeSafe System One JEV Threshold & Verification Gate Alignment
 
 ## Verdict: CAUTION

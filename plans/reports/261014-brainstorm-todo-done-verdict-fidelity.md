@@ -4,6 +4,7 @@ date: 2026-10-14
 type: brainstorm-report
 skills: [ck:brainstorm, ck:scout, ck:research, ck:docs-seeker, ck:advisor, ck:project-organization]
 consensus: Option A (Approved by User, ck:advisor, and TypeSafe JEV)
+status: completed
 ---
 
 # Brainstorm Summary Report: TypeSafe `todo done` Verdict Fidelity & Calibration Architecture

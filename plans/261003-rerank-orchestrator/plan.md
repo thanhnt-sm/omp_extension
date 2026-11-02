@@ -1,3 +1,12 @@
+---
+title: "261003-rerank-orchestrator"
+status: completed
+priority: P1
+effort: "completed"
+supersededBy: "261102-atomic-judge-proactive-advisor-healing"
+completedInCycle: "2026-11-02"
+verificationSuite: "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+---
 ## Context
 The user verified that the `typesafe` allowlist update in `.ck.json` was safe, but observed that `oh-my-pi`'s TypeSafe integration is currently limited to basic single-turn judgments. To fully utilize TypeSafe System One capabilities (Speculative Fan-out, Multi-label scoring, and Reranking), we need to expand the system. Following TypeSafe's "code owns the workflow" best practice, we will introduce targeted orchestrator tools rather than complicating the existing `typesafe_judge` primitive.
 

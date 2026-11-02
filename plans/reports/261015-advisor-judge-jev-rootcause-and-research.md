@@ -1,3 +1,7 @@
+---
+title: "Forensic Root-Cause & Best-Practice Research Report: Advisor (`0.90`), Threshold (`0.80`), and TypeSafe JEV (`jev-latest`) Low-Score Rejections"
+status: completed
+---
 # Forensic Root-Cause & Best-Practice Research Report: Advisor (`0.90`), Threshold (`0.80`), and TypeSafe JEV (`jev-latest`) Low-Score Rejections
 
 - **Date**: 2026-10-15

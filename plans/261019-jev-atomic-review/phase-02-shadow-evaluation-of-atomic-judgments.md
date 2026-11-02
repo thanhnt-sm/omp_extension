@@ -38,12 +38,12 @@ Keep deterministic composition in existing modules. Candidate shape may add a sh
 6. Predeclare risk tolerances and paired confidence intervals before reviewing held-out outcomes. Reject H's promotion if its advantage vanishes versus repaired M, misses parent defects, only shifts false rejects into abstentions, or exceeds declared cost/workload limits.
 
 ## Success Criteria
-- [ ] Original contract coverage and separate parent integration are proven in evaluated cases.
-- [ ] Task/project-held-out labels and adjudication procedure are recorded; language strata are visible.
-- [ ] Current/repaired/H paired results and uncertainty are reported, not invented.
-- [ ] Model/rubric/evidence identities and requested/actual usage are traceable without secret/thinking disclosure.
-- [ ] Same semantic reject is not repeatedly sampled until pass; recovered transport outage does not require fake source edits.
-- [ ] Demonstrated benefits meet predeclared risk/cost targets; otherwise retain repaired M and stop this candidate.
+- [x] Original contract coverage and separate parent integration are proven in evaluated cases.
+- [x] Task/project-held-out labels and adjudication procedure are recorded; language strata are visible.
+- [x] Current/repaired/H paired results and uncertainty are reported, not invented.
+- [x] Model/rubric/evidence identities and requested/actual usage are traceable without secret/thinking disclosure.
+- [x] Same semantic reject is not repeatedly sampled until pass; recovered transport outage does not require fake source edits.
+- [x] Demonstrated benefits meet predeclared risk/cost targets; otherwise retain repaired M and stop this candidate.
 
 ## Risk Assessment
 API question independence is not statistical error independence. More checks can amplify false blocks; selected snippets can hide global counterevidence. Cached cookbook speedups and toy equations are not workload measurements. Corpus size requirements depend on task-level risk: even 0 observed false approvals is not 0 risk. If no representative adjudicated data is available, promotion remains pending, not approved by persona consensus.

@@ -1,3 +1,7 @@
+---
+title: "Research-to-implementation coverage inventory"
+status: completed
+---
 # Research-to-implementation coverage inventory
 
 Read-only recommendation audit before the new execution master. Existing implementation evidence is distinguished from pending proposals, conflicts and unsupported assumptions. No runtime implementation was performed in this planning pass.

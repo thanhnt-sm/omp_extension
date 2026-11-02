@@ -1,3 +1,7 @@
+---
+title: "Agent & Prediction Reports Archive"
+status: completed
+---
 # Agent & Prediction Reports Archive
 
 This directory stores standalone agent reports, prediction reviews (`ck:predict`), and brainstorm analyses per `ck:project-organization` Rule 1.

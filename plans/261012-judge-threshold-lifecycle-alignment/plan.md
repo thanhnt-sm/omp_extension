@@ -1,7 +1,7 @@
 ---
 title: "TypeSafe judge threshold and todo lifecycle alignment"
 description: "Follow-on plan for the existing todo-drop/judge-fidelity work: determine whether threshold normalization is valid for JEV noul scores, prevent plan completion while contracted work remains, and make judge decisions actionable and visible. This plan does not supersede plans/261012-todo-drop-judge-fidelity."
-status: pending
+status: completed
 priority: P1
 effort: "1-2d"
 branch: master
@@ -9,6 +9,9 @@ tags: [typesafe, jev, threshold, todo-lifecycle, fail-closed]
 blockedBy: []
 blocks: []
 created: 2026-10-12
+supersededBy: "261102-atomic-judge-proactive-advisor-healing"
+completedInCycle: "2026-11-02"
+verificationSuite: "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
 ---
 
 # TypeSafe judge threshold and todo lifecycle alignment

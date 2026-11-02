@@ -1,3 +1,7 @@
+---
+title: "Chẩn đoán định danh điều phối Cố vấn (Advisor Dispatch Identity Diagnosis)"
+status: completed
+---
 # Chẩn đoán định danh điều phối Cố vấn (Advisor Dispatch Identity Diagnosis)
 
 ## Kết quả quan sát

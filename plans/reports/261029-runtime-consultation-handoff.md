@@ -1,3 +1,7 @@
+---
+title: "Bàn giao tham vấn runtime (Runtime Consultation Handoff)"
+status: completed
+---
 # Bàn giao tham vấn runtime (Runtime Consultation Handoff)
 
 ## Mục tiêu được giữ nguyên

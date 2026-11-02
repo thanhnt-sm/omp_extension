@@ -66,11 +66,11 @@ Perform final configuration audits (provider base URLs, opt-in resolvers, enviro
    - Simulate a real session invocation of `typesafe_judge`, `typesafe_rerank`, and intercepted `todo` completions, verifying that all outbound requests conform to TypeSafe System One specifications.
 
 ## Success Criteria
-- [ ] All tests pass under `bun test` with 0 failures and 0 regressions.
-- [ ] `src/` directory has 0 modified files.
-- [ ] No `/v1/judge` endpoint calls exist anywhere in the active execution path.
-- [ ] Every request to TypeSafe API passes `validateInput()` and `sanitizeAnswers()`.
-- [ ] Verification command: `bun test` passes completely.
+- [x] All tests pass under `bun test` with 0 failures and 0 regressions.
+- [x] `src/` directory has 0 modified files.
+- [x] No `/v1/judge` endpoint calls exist anywhere in the active execution path.
+- [x] Every request to TypeSafe API passes `validateInput()` and `sanitizeAnswers()`.
+- [x] Verification command: `bun test` passes completely.
 
 ## Risk Assessment
 - **Risk:** Stale CJS module caching in a long-running daemon could mask changes to external `.cjs` files.

@@ -34,9 +34,9 @@ Implement strict XML enclosure boundaries for untrusted input (plans and diffs) 
 4. **Run Tests**: Execute `bun test tests/xml-enclosure.test.ts`.
 
 ## Success Criteria
-- [ ] Malicious overrides injected into `planContent` are neutralized.
-- [ ] The judge evaluates the payload without delimiter confusion.
-- [ ] Test suite covers multiple injection vectors.
+- [x] Malicious overrides injected into `planContent` are neutralized.
+- [x] The judge evaluates the payload without delimiter confusion.
+- [x] Test suite covers multiple injection vectors.
 
 ## Risk Assessment
 - Risk: Over-sanitization breaking valid code diffs in the payload.

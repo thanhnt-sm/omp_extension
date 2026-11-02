@@ -4,6 +4,7 @@ date: 2026-10-14
 type: advisor-and-typesafe-evaluation
 skills: [ck:advisor, typesafe-ai]
 devices: [xd://typesafe_advisor, xd://typesafe_judge, xd://typesafe_expert_review, xd://typesafe_rerank, xd://typesafe_evaluate_multi]
+status: completed
 ---
 
 # Advisor & TypeSafe System One Evaluation Report

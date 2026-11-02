@@ -1,3 +1,7 @@
+---
+title: "Architecture and Provenance Assessment — JEV Session Forensics"
+status: completed
+---
 # Architecture and Provenance Assessment — JEV Session Forensics
 
 ## Scope and evidence boundary

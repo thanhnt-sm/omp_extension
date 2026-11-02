@@ -58,9 +58,9 @@ Investigate TypeSafe System One JEV `noul` score semantics, evaluate the user hy
 4. Draft prompt-injection-safe guidance schemas for agent rejection notices: include task ID, failing criteria, JEV score, and exact remediations.
 
 ## Success Criteria
-- [ ] Mathematical evaluation of `noul` and threshold scaling documented and reviewed.
-- [ ] Root cause of plan-vs-todo completion contradiction isolated with reproduction scenarios.
-- [ ] Anti-spoofing and prompt injection mitigation boundaries specified for agent error messages.
+- [x] Mathematical evaluation of `noul` and threshold scaling documented and reviewed.
+- [x] Root cause of plan-vs-todo completion contradiction isolated with reproduction scenarios.
+- [x] Anti-spoofing and prompt injection mitigation boundaries specified for agent error messages.
 
 ## Risk Assessment
 - Risk: Confusing raw probability output with arbitrary rating scales leading to accidental threshold lowering.

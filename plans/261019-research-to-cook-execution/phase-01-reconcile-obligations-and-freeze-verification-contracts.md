@@ -52,12 +52,12 @@ Paths below are absolute and actions apply only in this workspace.
 7. Update caller contracts/docs and the coverage ledger with code references. One integration owner edits the entrypoint; other executors own disjoint modules/tests. New modules target roughly200lines; extract cohesive functions, not wrapper services.
 
 ## Success Criteria
-- [ ] Original contract and criterion IDs survive Continue/Proceed, rolling context and unrelated newer reports.
-- [ ] Duplicate names/reappend/branch/restart cannot inherit another incarnation's authority or transient approvals.
-- [ ] Explicit phase references select only their real criteria; no latest-plan guessing or placeholder acceptance.
-- [ ] User amendments retain prior unmet obligations unless genuine authority changes them; payload flags cannot amend scope.
-- [ ] Existing F16 behavior and three native completions remain preserved; every U/P research/security row has a concrete execution owner.
-- [ ] Native/advisory consumers use the same typed identity while advisory results remain unable to commit native tasks.
+- [x] Original contract and criterion IDs survive Continue/Proceed, rolling context and unrelated newer reports.
+- [x] Duplicate names/reappend/branch/restart cannot inherit another incarnation's authority or transient approvals.
+- [x] Explicit phase references select only their real criteria; no latest-plan guessing or placeholder acceptance.
+- [x] User amendments retain prior unmet obligations unless genuine authority changes them; payload flags cannot amend scope.
+- [x] Existing F16 behavior and three native completions remain preserved; every U/P research/security row has a concrete execution owner.
+- [x] Native/advisory consumers use the same typed identity while advisory results remain unable to commit native tasks.
 
 ## Verification
 Parent runs full affected contract, evidence, lifecycle and input modules after integration, then a real registered callback smoke for original/changed/forged/stale binding. Run `bun test` at the integrated gate. The package currently defines only the test script: do not claim a nonexistent lint/tsc/build command ran. If new tooling becomes necessary, implement and document it explicitly.

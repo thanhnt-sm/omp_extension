@@ -1,3 +1,7 @@
+---
+title: "Source review: TypeSafe JEV, todo và Advisor"
+status: completed
+---
 # Source review: TypeSafe JEV, todo và Advisor
 
 Ngày: 2026-10-19. Phạm vi ban đầu: review/điều tra, không sửa runtime/test/threshold/loader hoặc deploy. Sau bàn giao, user đã cho phép sửa riêng evidence plumbing; kết quả implementation/kiểm chứng bổ sung ở cuối báo cáo. Không triển khai toàn bộ roadmap hoặc gọi live JEV để benchmark.

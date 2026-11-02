@@ -35,12 +35,12 @@ Existing planner preflight consumes a bound deterministic disposition and rechec
 6. Capture fresh runtime-origin and changed-path native evidence after restart. Distinguish disk equality, load-time proof, semantic evaluation and actual native commit. Hold completion when a required prerequisite/authority remains unavailable.
 
 ## Success Criteria
-- [ ] No remaining caller uses old evidence semantics or bypasses the composed authority disposition.
-- [ ] All affected full modules and full suite pass without test weakening; actual native scenarios are observed.
-- [ ] Child support cannot close a parent with failed integration or unfulfilled original obligations.
-- [ ] Unavailable JEV cannot create approval; trusted-human policy and exact-target replay defenses hold.
-- [ ] Matching native result, not staging/Advisor output, commits success.
-- [ ] Deployment and host restart occur only with required authorization; post-restart proof is recorded before deployment completion is claimed.
+- [x] No remaining caller uses old evidence semantics or bypasses the composed authority disposition.
+- [x] All affected full modules and full suite pass without test weakening; actual native scenarios are observed.
+- [x] Child support cannot close a parent with failed integration or unfulfilled original obligations.
+- [x] Unavailable JEV cannot create approval; trusted-human policy and exact-target replay defenses hold.
+- [x] Matching native result, not staging/Advisor output, commits success.
+- [x] Deployment and host restart occur only with required authorization; post-restart proof is recorded before deployment completion is claimed.
 
 ## Risk Assessment
 Host API may not provide atomic workspace/contract preconditions at mutation; document revision-scoped guarantees instead of inventing ACID semantics. A model alias can move; record actual response model. Imported TypeScript memory is not fully proven by the current five-file runtime-origin record. If the candidate fails evaluation or live proof, retain the unfinished contract and use managed deployment recovery, not score manipulation or task deletion.

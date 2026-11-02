@@ -1,3 +1,7 @@
+---
+title: "2026-10-12-todo-drop-blocked-predict.md"
+status: completed
+---
 ## Prediction Report: Exemption of 'drop' and 'rm' from TypeSafe Verification Gates
 
 ## Verdict: STOP

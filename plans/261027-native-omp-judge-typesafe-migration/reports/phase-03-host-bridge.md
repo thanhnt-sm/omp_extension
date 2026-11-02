@@ -1,3 +1,7 @@
+---
+title: "Báo cáo Giai đoạn 3: Ranh giới Cầu nối Host OMP & Bàn giao ADR-20261102 (Phase 3 Report: OMP Host Bridge Boundary & Handover to ADR-20261102)"
+status: completed
+---
 # Báo cáo Giai đoạn 3: Ranh giới Cầu nối Host OMP & Bàn giao ADR-20261102 (Phase 3 Report: OMP Host Bridge Boundary & Handover to ADR-20261102)
 
 ## 1. Mục tiêu Giai đoạn & Tiền đề Bắt buộc (Phase Goal & Mandatory Prerequisite)

@@ -40,8 +40,8 @@ Create `tests/redteam-vulnerabilities.test.ts` using Bun's test runner, exercisi
 6. Write test asserting `typesafe-planner` yields completion interception when EGC extension is present.
 
 ## Success Criteria
-- [ ] `bun test tests/redteam-vulnerabilities.test.ts` executed.
-- [ ] Tests cleanly identify current vulnerabilities (failing red-phase tests ready for implementation).
+- [x] `bun test tests/redteam-vulnerabilities.test.ts` executed.
+- [x] Tests cleanly identify current vulnerabilities (failing red-phase tests ready for implementation).
 
 ## Risk Assessment
 - *Risk*: Tests might falsely pass if current code has partial guards.

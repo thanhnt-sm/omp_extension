@@ -1,3 +1,7 @@
+---
+title: "Phase 2 source provenance"
+status: completed
+---
 # Phase 2 source provenance
 
 ## Scope and identity boundary

@@ -1,3 +1,7 @@
+---
+title: "Audit: TypeSafe, Judge, JEV & Advisor Source Code and Payload Construction"
+status: completed
+---
 # Audit: TypeSafe, Judge, JEV & Advisor Source Code and Payload Construction
 
 Complete audit of `omp_extension` (`typesafe-planner.ts`, `src/*.ts`) and global OMP hooks/skills (`~/.claude/hooks/lib/typesafe-*.cjs`, `~/.omp/agent/extensions/typesafe-planner.ts`):

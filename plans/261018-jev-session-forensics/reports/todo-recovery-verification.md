@@ -1,3 +1,7 @@
+---
+title: "TODO Recovery Verification"
+status: completed
+---
 # TODO Recovery Verification
 
 ## Current runtime observations — fresh disposable sessions
