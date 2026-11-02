@@ -1,3 +1,4 @@
+import { parseAdvisorStructuredResponse } from "./proactive-advisor";
 import { randomUUID } from "node:crypto";
 import { advisorOutputSchema, record, validateAdvisorRequestIdentity, type AdvisorRequest } from "./advisor-protocol";
 import { canonicalDigest, freezeContractValue } from "./task-contract-source";
@@ -147,8 +148,29 @@ export async function executeHostTask(api: AdvisorHostAPI, services: AdvisorHost
     await services.onReceipt(receipt, scope.context);
     api.appendEntry(ADVISOR_HOST_ENTRY, { kind: "provisional", sessionId: scope.sessionId, agentId: scope.context.agent.id, epoch: scope.epoch, review: provisional });
     if (!record(native) || !Array.isArray(native.content)) { scope.runtime.invalidateRequest(final.requestId, "advisor_native_envelope_missing_content"); return hostUnavailable("advisor_native_envelope_missing_content"); }
-    return { ...native, content: [...native.content, { type: "text", text: `Host-owned Advisor receipt: ${receipt.receiptId} (request ${final.requestId}; ${receipt.authority}; not native commit or human permission).` }],
-      details: { ...(record(native.details) ? native.details : {}), advisorReceipt: { receiptId: receipt.receiptId, requestId: final.requestId, authority: receipt.authority } } };
+    const textContent = native.content
+      .filter((c: unknown) => c && typeof c === "object" && (c as Record<string, unknown>).type === "text" && typeof (c as Record<string, unknown>).text === "string")
+      .map((c: unknown) => (c as Record<string, unknown>).text as string)
+      .join("\n\n");
+    const parsedAdvisor = parseAdvisorStructuredResponse(textContent);
+    const extraContent: Array<{ type: "text"; text: string }> = [
+      { type: "text", text: `Host-owned Advisor receipt: ${receipt.receiptId} (request ${final.requestId}; ${receipt.authority}; not native commit or human permission).` },
+    ];
+    if (parsedAdvisor.valid && parsedAdvisor.actionItems.length > 0) {
+      extraContent.push({
+        type: "text",
+        text: `[ADVISOR RE-PLAN ACTION ITEMS]:\n${parsedAdvisor.actionItems.map((item, idx) => `${idx + 1}. ${item}`).join("\n")}`,
+      });
+    }
+    return {
+      ...native,
+      content: [...native.content, ...extraContent],
+      details: {
+        ...(record(native.details) ? native.details : {}),
+        advisorReceipt: { receiptId: receipt.receiptId, requestId: final.requestId, authority: receipt.authority },
+        ...(parsedAdvisor.valid ? { parsedAdvisor } : {}),
+      },
+    };
   } catch (error) { scope.runtime.invalidateRequest(final.requestId, "advisor_host_dispatch_or_publication_failed"); throw error; }
   finally { scope.inflight.delete(toolCallId); }
 }

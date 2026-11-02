@@ -1,3 +1,4 @@
+import { evaluateAtomicJevStep, type AtomicEvaluationResult } from "./atomic-jev-evaluator";
 import {
   createSemanticJudgeClient, choiceValue, choiceConfidence, noulValue, scoreValue,
   type SemanticResponse, type SemanticTransportMetadata,
@@ -121,6 +122,17 @@ export async function runTaskMicroCheck(evidence: MicroCheckEvidence): Promise<M
   const testPassed = evidence.testExitCode === null || evidence.testExitCode === 0;
   if (!testPassed) {
     reasons.push(`Test suite failed with exit code ${evidence.testExitCode}. Test failure must be resolved before completing task.`);
+  }
+
+  const atomicEval = await evaluateAtomicJevStep({
+    taskGoal: evidence.agentWorkLog || "MicroCheck execution",
+    gitDiff: evidence.gitDiff || "",
+    testExitCode: evidence.testExitCode,
+    testOutput: evidence.testOutput,
+    changedFiles: evidence.changedFiles,
+  });
+  for (const reason of atomicEval.reasons) {
+    if (!reasons.includes(reason)) reasons.push(reason);
   }
 
   const testEvasion = analyzeDiffForTestEvasion(evidence.gitDiff);
