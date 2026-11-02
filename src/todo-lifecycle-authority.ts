@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import { canonicalDigest, nativeTodoInputDigest, normalizeNativeTodoInput, readNativeTodoOperation, type ContractHistoryProjection, type NativeIncarnationReference, type NormalizedNativeTodoInput } from "./task-contract";
 import { writeRecoveryReport } from "./typesafe-evidence-file.cjs";
 import { readHostBranch } from "./host-history";
+import { isSolvableTechnicalFailure } from "./anti-blocking-guards";
 
 interface LifecycleContext { hasUI?: boolean; ui?: { confirm?(title: string, message: string): Promise<boolean> } }
 export interface RecoveryHandoff {
@@ -67,6 +68,14 @@ export function createTodoLifecycleAuthority(options: LifecycleAuthorityOptions)
       const selected = selectTargets(context, input, options);
       if (!selected) return { status: "EVIDENCE_REQUIRED", reasons: ["Current exact native lifecycle history and a supported lifecycle mutation are required."] };
       const { operation, targets } = selected;
+      if (operation === "block" && isSolvableTechnicalFailure(input.reason)) {
+        return {
+          status: "EVIDENCE_REQUIRED",
+          reasons: [
+            "CẤM đóng băng todo vì lỗi kiểm thử hoặc thiếu cài đặt kỹ thuật. Tác tử BẮT BUỘC phải thực hiện quy trình tự chữa lành: triệu hồi Advisor (typesafe_prepare_advisor) để lập kế hoạch giải quyết, sau đó sửa mã nguồn và chạy lại kiểm thử đến khi đạt."
+          ]
+        };
+      }
       if ((operation === "block" || operation === "drop") && !input.reason?.trim()) {
         return { status: "EVIDENCE_REQUIRED", reasons: ["A concrete public reason is required; a lifecycle label is not a repair."] };
       }

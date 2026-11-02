@@ -45,6 +45,7 @@ import {
   type WorkspaceSnapshot,
 } from "./src/evidence-collector";
 import { clampText } from "./src/payload-safety";
+import { isTechnicalImplementationQuestion, formatAdvisorAutoRemediation } from "./src/anti-blocking-guards";
 import { sanitizeXmlText } from "./src/xml-enclosure";
 import {
   evaluateScopeArbiter,
@@ -1643,7 +1644,10 @@ export default function registerExtension(
         if (!verificationRuntime) throw new NativeTodoGuardError("UNAVAILABLE: supported host contract, evidence, and real Advisor registration are required.");
         for (const target of targetBindings) {
           const result = await verificationRuntime.preflight(ctx, { task: target.content, phase: target.phase }, "done", currentSignal);
-          if (result.status !== "APPROVED_PENDING_COMMIT") throw new NativeTodoGuardError(JSON.stringify(result), result);
+          if (result.status !== "APPROVED_PENDING_COMMIT") {
+          const remediation = formatAdvisorAutoRemediation(target.content, target.phase, result.reasons);
+          throw new NativeTodoGuardError(`${JSON.stringify(result)}\n${remediation}`, result);
+        }
           if (result.stage.target.phase !== target.phase || result.stage.target.phaseOrdinal !== target.phaseOrdinal
             || result.stage.target.ordinal !== target.index || result.stage.target.content !== target.content) {
             throw new NativeTodoGuardError("todo_review_target_mismatch");
@@ -1762,6 +1766,16 @@ export default function registerExtension(
     // Human Decision Interception: Automatically evaluate any decision/question before it reaches the human
     if (toolName === "ask") {
       const params = (evt.params || evt.args || evt.input || {}) as Record<string, unknown>;
+      const firstQ = Array.isArray(params.questions) && params.questions[0] && typeof params.questions[0] === "object"
+        ? (params.questions[0] as Record<string, unknown>) : undefined;
+      const qText = (typeof firstQ?.question === "string" ? firstQ.question : undefined) ||
+        (typeof params.question === "string" ? params.question : undefined) ||
+        (typeof params.i === "string" ? params.i : "");
+      if (isTechnicalImplementationQuestion(qText)) {
+        throw new NativeTodoGuardError(
+          "BLOCKED: Câu hỏi liên quan đến lỗi kỹ thuật, gỡ lỗi hoặc chi tiết triển khai mã nguồn. Tác tử BẮT BUỘC phải tự động triệu hồi Advisor (typesafe_prepare_advisor) và Thẩm phán TypeSafe Jev Judge để tự phân tích và lập giải pháp, KHÔNG ĐƯỢC tra khảo người dùng."
+        );
+      }
       const apiKey = resolverOptions.env.TYPESAFE_API_KEY?.trim() || "";
       const resolverModule = loadResolverModule();
       const projectDir = getProjectDir(ctx);
