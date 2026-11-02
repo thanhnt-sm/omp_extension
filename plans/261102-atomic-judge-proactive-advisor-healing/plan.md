@@ -28,4 +28,4 @@ Triển khai kiến trúc Tam giác Tự trị (Autonomous Triad) kết hợp gi
 | 1 | [Chốt chặn Middleware Chống Tra khảo & Chống Treo Todo](./phase-01-middleware-guards.md) | Completed |
 | 2 | [Thẩm phán Jev Nguyên tử Từng bước](./phase-02-atomic-jev-judge.md) | Completed |
 | 3 | [Cố vấn Chữa lành Chủ động & Tái lập Kế hoạch](./phase-03-proactive-advisor-dispatch.md) | Completed |
-| 4 | [Kiểm thử Đơn vị, Đồng bộ Giao dịch & Xác minh Toàn cầu](./phase-04-verification-and-deployment.md) | Pending |
+| 4 | [Kiểm thử Đơn vị, Đồng bộ Giao dịch & Xác minh Toàn cầu](./phase-04-verification-and-deployment.md) | Completed |

@@ -38,6 +38,6 @@ Hiện thực hóa các chốt chặn middleware trong `typesafe-planner.ts` và
 4. Chạy kiểm thử đơn vị `bun test tests/anti-blocking-middleware.test.ts` để chứng minh vượt qua 100%.
 
 ## Tiêu chí chấp thuận (Success Criteria)
-- [ ] Mọi cuộc gọi `ask` liên quan đến lỗi kỹ thuật/code đều bị chặn và hướng dẫn tác tử gọi Advisor
-- [ ] Mọi thao tác `todo block` xuất phát từ lỗi kiểm thử hoặc thiếu bằng chứng đều bị từ chối
-- [ ] Toàn bộ bài kiểm thử trong `tests/anti-blocking-middleware.test.ts` vượt qua với exit code 0
+- [x] Mọi cuộc gọi `ask` liên quan đến lỗi kỹ thuật/code đều bị chặn và hướng dẫn tác tử gọi Advisor
+- [x] Mọi thao tác `todo block` xuất phát từ lỗi kiểm thử hoặc thiếu bằng chứng đều bị từ chối
+- [x] Toàn bộ bài kiểm thử trong `tests/anti-blocking-middleware.test.ts` vượt qua với exit code 0

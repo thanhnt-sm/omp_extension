@@ -38,6 +38,6 @@ Thực thi kiểm thử toàn diện toàn bộ kho mã nguồn (`bun test`), b�
 4. Ghi nhận nhật ký kỹ thuật qua `ck:journal`.
 
 ## Tiêu chí chấp thuận (Success Criteria)
-- [ ] 100% bài kiểm thử trong kho mã nguồn vượt qua (`bun test` exit code 0)
-- [ ] Kịch bản đồng bộ hoàn tất thành công với trạng thái `DEPLOYED_VERIFIED`
-- [ ] Kịch bản xác minh toàn cầu `verify-omp-global.cjs` đạt 100% khớp nối
+- [x] 100% bài kiểm thử trong kho mã nguồn vượt qua (`bun test` exit code 0)
+- [x] Kịch bản đồng bộ hoàn tất thành công với trạng thái `DEPLOYED_VERIFIED`
+- [x] Kịch bản xác minh toàn cầu `verify-omp-global.cjs` đạt 100% khớp nối

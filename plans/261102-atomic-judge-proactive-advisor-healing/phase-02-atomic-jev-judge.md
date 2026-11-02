@@ -38,6 +38,6 @@ Kích hoạt cơ chế Thẩm phán Nguyên tử (Atomic Judge) sử dụng mô 
 3. Kiểm thử tích hợp chạy qua `bun test tests/atomic-jev-judge.test.ts`.
 
 ## Tiêu chí chấp thuận (Success Criteria)
-- [ ] Mọi phán đoán vi mô trả về đúng định dạng có kiểu (`bool`, `choice`, `score`)
-- [ ] Phát hiện ngay lập tức các vi phạm kiến trúc hoặc sửa test tiêu cực
-- [ ] Toàn bộ bài kiểm thử trong `tests/atomic-jev-judge.test.ts` vượt qua với exit code 0
+- [x] Mọi phán đoán vi mô trả về đúng định dạng có kiểu (`bool`, `choice`, `score`)
+- [x] Phát hiện ngay lập tức các vi phạm kiến trúc hoặc sửa test tiêu cực
+- [x] Toàn bộ bài kiểm thử trong `tests/atomic-jev-judge.test.ts` vượt qua với exit code 0

@@ -43,6 +43,6 @@ Hoàn thiện vòng lặp tự động triệu hồi Cố vấn Độc lập (`a
 4. Chạy kiểm thử đơn vị `bun test tests/proactive-advisor-dispatch.test.ts`.
 
 ## Tiêu chí chấp thuận (Success Criteria)
-- [ ] Advisor tự động được chuẩn bị khi có sự cố kỹ thuật hoặc Judge từ chối
-- [ ] Đầu ra của Advisor luôn chứa kế hoạch hành động chi tiết có thứ tự phụ thuộc
-- [ ] Toàn bộ bài kiểm thử trong `tests/proactive-advisor-dispatch.test.ts` vượt qua với exit code 0
+- [x] Advisor tự động được chuẩn bị khi có sự cố kỹ thuật hoặc Judge từ chối
+- [x] Đầu ra của Advisor luôn chứa kế hoạch hành động chi tiết có thứ tự phụ thuộc
+- [x] Toàn bộ bài kiểm thử trong `tests/proactive-advisor-dispatch.test.ts` vượt qua với exit code 0
