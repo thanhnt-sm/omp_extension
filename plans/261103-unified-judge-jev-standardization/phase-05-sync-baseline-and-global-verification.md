@@ -28,18 +28,18 @@
 
 ## 2. Các Bước Thực thi Cụ thể (Implementation Steps)
 
-- [x] Chạy kiểm thử toàn bộ kho mã nguồn: `bun test` (1215 pass / 0 fail, 2026-11-11).
+- [x] Chạy kiểm thử toàn bộ kho mã nguồn: `bun test` (1215 pass / 0 fail ngày 2026-11-11; 1251 pass / 0 fail / 5 skip tại đích ngày 2026-11-12).
 - [x] Chạy `bun run verify:workspace` rồi đồng bộ giao dịch: `bun run sync:global` (cần người vận hành xác nhận; ghi ra `~/Projects/omp_extension`).
 - [x] Chạy kiểm chứng 6 tầng: `bun run verify:live` (gọi HTTP thật, có thể tính phí). `node` trên máy là v14, dùng `bun`.
-- [ ] Cập nhật tiến độ kế hoạch: `bun run ck:pm` (có ghi vào plan) hoặc `bun run ck:pm --ledger` (chỉ tạo lại ledger).
+- [x] Cập nhật tiến độ kế hoạch: `bun tools/ck-project-manager.cjs --ledger` (chỉ tạo lại ledger, chạy khi đóng kế hoạch 2026-11-12; không dùng `ck:pm` không tham số vì lệnh đó ghi đè lineage của cả 37 kế hoạch).
 
 ---
 
 ## 3. Tiêu chí Chấp thuận (Acceptance Criteria)
 
 - [x] Toàn bộ 6 tầng kiểm chứng đều đạt trạng thái `PASS` / `ONLINE`.
-- [ ] Sổ cái kế hoạch ghi nhận 100% hoàn thành đối soát cho toàn bộ các pha.
-- [ ] Không có tệp rác hoặc lock file tồn đọng trong môi trường làm việc.
+- [x] Sổ cái kế hoạch ghi nhận 100% hoàn thành đối soát cho toàn bộ các pha (`--audit`: 37/37 sau khi đóng kế hoạch này).
+- [x] Không có tệp rác hoặc lock file tồn đọng trong môi trường làm việc (kiểm tra 2026-11-12: không có `*.lock`/`*.tmp`/`*.orig`/`*.rej` ở workspace và `target`; `target/tmp/` rỗng, đã nằm trong `.gitignore`).
 
 ## 4. Kết quả thực hiện (2026-11-11)
 
@@ -47,3 +47,11 @@
 - `sync:global`: `DEPLOYED_VERIFIED` (1215 pass / 0 fail tại đích); backup `omp_extension_backup_2026-11-11T14-48-10-676Z`.
 - `verify:live`: [1] Loader PASS, [2] Manifest 611/611 PASS, [3] 0 pending, [4] PASS, [5] backup verified, [6] ONLINE `jev-1.14.0` HTTP 200.
 - Chưa làm: cập nhật ledger (tool `ck:pm` còn sinh mục rác `"omp_extension"`); kiểm chứng mã đã nạp (khởi động lại omp ở cwd khác hoặc dùng overlay).
+
+## 5. Kết quả thực hiện (2026-11-12)
+
+- Ledger: đã sửa `tools/ck-project-manager.cjs` (chỉ quét `plans/<dir>/plan.md`), tạo lại ledger 37 kế hoạch.
+- Lần sync đầu ngày thất bại và tự phục hồi (`RECOVERED`): fixture `tests/fixtures/jev-paired-evaluation` khóa SHA-256 của byte CRLF trong khi blob git là LF, chỉ qua được khi checkout với `core.autocrlf=true`. Sửa bằng cách lưu đúng byte CRLF và đánh dấu `-text` (commit `325fedd`); thêm `* text=auto eol=lf` để đổi nhánh không còn làm lệch manifest (commit `ab7b64a`).
+- `sync:global` tại `325fedd`: `DEPLOYED_VERIFIED` (1251 pass / 0 fail / 5 skip tại đích); `verify:live`: 6/6 PASS/ONLINE, 620/620 tệp, `jev-1.14.0` HTTP 200.
+- Các sửa tài liệu khi đóng kế hoạch được deploy bằng một lần sync cuối; kết quả ghi trong commit đóng kế hoạch, không ghi vào `docs/` hay `plans/` (tránh làm lệch cây lần nữa).
+- Còn lại (residual): kiểm chứng mã đã nạp cần người vận hành khởi động lại omp ở cwd khác hoặc dùng `omp --config tools/omp-target-gate-overlay.yml`.

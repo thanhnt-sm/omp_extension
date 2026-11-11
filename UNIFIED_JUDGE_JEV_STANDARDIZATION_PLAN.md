@@ -38,7 +38,7 @@ completedInCycle: "2026-11-02"
 |---|---|:---:|
 | `bun test tests/atomic-jev-judge.test.ts ...` | **21 pass, 0 fail (371ms)** | ✅ Đạt |
 | `tools/verify-omp-global.cjs --live` | **6/6 tầng PASS (553/553 files SHA-256 match, Jev HTTP 200)** | ✅ Đạt |
-| `tools/ck-project-manager.cjs --audit` | **41/41 plans 100% completed & reconciled** | ✅ Đạt |
+| `tools/ck-project-manager.cjs --audit` | **41/41 plans 100% completed & reconciled** (historical, 2026-11-03; ledger regenerated 2026-11-11 has 37 plans) | ✅ Đạt |
 | Upstream OMP Native Judge Types | Khớp `packages/ai/src/judgment/types.ts` & `systemone.ts` | ✅ Đạt |
 
 ---

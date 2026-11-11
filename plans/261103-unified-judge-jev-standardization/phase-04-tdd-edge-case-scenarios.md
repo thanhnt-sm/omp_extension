@@ -10,7 +10,7 @@
 
 | Mã Kịch bản (Scenario ID) | Tên Kịch bản & Điều kiện Biên (Edge Scenario) | Hành vi Dự kiến (Expected Invariant) |
 |---|---|---|
-| **SC-01** | **Rớt Mạng Ngoại tuyến (Network Drop / 503)** | Thử lại lũy thừa qua `RETRY_POLICY`; nếu kiệt sức, chuyển sang cơ chế fail-closed an toàn và kích hoạt Cố vấn Độc lập chẩn đoán, không crash tiến trình. |
+| **SC-01** | **Rớt Mạng Ngoại tuyến (Network Drop / 503)** | Thử lại lũy thừa qua `RETRY_POLICY`; nếu kiệt sức, chuyển sang cơ chế fail-closed an toàn và kích hoạt Cố vấn Độc lập chẩn đoán, không crash tiến trình. **Điều chỉnh**: hành vi thực (và là điều ADR-13 cam kết) là chỉ thử lại 429/529; 503 và rớt mạng fail-closed ngay, `UNAVAILABLE` không gắn gợi ý Advisor — xem ghi chú 1–2 mục 4. |
 | **SC-02** | **Quá tải API (429 Rate Limit + Retry-After)** | Giãn cách chính xác theo tiêu đề `Retry-After` và cooldown 45s; bảo toàn thế hệ khóa API trong bộ nhớ. |
 | **SC-03** | **Tấn công Gian lận Test AST (Test Evasion Attack)** | `ast-analyzer.ts` phát hiện hành vi xóa `expect`, sửa thành `expect(1).toBe(1)`, hoặc thêm `.skip` $\rightarrow$ chặn đứng ngay lập tức tại Cổng 1. |
 | **SC-04** | **Tấn công Đường dẫn TOCTOU & Symlink** | `typesafe-evidence-file.cjs` từ chối liên kết tượng trưng (symlink), Windows junction, và hardlink $\rightarrow$ ngăn chặn rò rỉ dữ liệu ngoài workspace. |
@@ -32,7 +32,7 @@
 ## 3. Tiêu chí Chấp thuận (Acceptance Criteria)
 
 - [x] 6/6 kịch bản SC-01..SC-06 có độ phủ PASS (21 ca trong `tests/unified-triad-architecture.test.ts`, cộng độ phủ sẵn có của SC-04); SC-07 thay bằng `tests/h-authority-boundary.test.ts`, không tính vào "7/7".
-- [x] Không có ca nào timeout (toàn tệp chạy dưới 0,2 giây, không sinh tiến trình `git`) và chạy chung với `typesafe-transport-retry`, `anti-blocking-middleware`, `ast-analyzer`, `payload-safety`, `multi-dialect-wire` vẫn 111 pass / 0 fail.
+- [x] Không có ca nào timeout (toàn tệp chạy dưới 0,2 giây, không sinh tiến trình `git`) và chạy chung với `typesafe-transport-retry`, `anti-blocking-middleware`, `ast-analyzer`, `payload-safety`, `multi-dialect-wire` vẫn 0 fail (111 pass lúc viết; 113 pass sau khi bổ sung test tautology, 2026-11-12).
 
 ---
 

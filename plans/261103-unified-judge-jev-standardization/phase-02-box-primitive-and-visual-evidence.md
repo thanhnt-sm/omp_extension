@@ -36,7 +36,7 @@
   - Bổ sung hàm nhận diện tệp giao diện frontend `isUIFrontendPath` (`.css`, `.tsx`, `.vue`, `.html`, `.svg`).
   - Hiện thực hóa hàm `detectUIVisualEvidence` trích xuất ảnh base64 đã qua kiểm chứng snapshot từ `evidence.sourceEvidence`, tránh hoàn toàn việc tạo dữ liệu giả mạo.
 - [x] `src/atomic-judge.ts`: giữ nguyên việc từ chối `box` (keep rejecting `box`); kiểm thử hồi quy pass (`tests/atomic-judge.test.ts`, `atomic_predicate_invalid`).
-- [ ] Hook tự động chụp ảnh trình duyệt (browser auto-capture): **hoãn (deferred)**, ngoài phạm vi giai đoạn này; ảnh hiện đến từ tệp `.png`/`.jpg` đã đổi trong cây git.
+- [hoãn — backlog, chưa có ADR hay người phụ trách; mở lại khi có yêu cầu bằng chứng giao diện tự động] Hook tự động chụp ảnh trình duyệt (browser auto-capture): **hoãn (deferred)**, ngoài phạm vi giai đoạn này; ảnh hiện đến từ tệp `.png`/`.jpg` đã đổi trong cây git.
 - [x] Chuyển bằng chứng thị giác tới M (`src/task-verification-macro.ts`, `src/cook-expert-judge.ts`, `src/visual-evidence-send-guard.ts`): `assets` + đúng một câu `noul` `visual_supports_ui_criteria` (chỉ khi có ảnh, chỉ siết chặt); chốt chặn sha256 trước khi gửi.
 - [x] Sửa đường truyền `src/typesafe-api-client.cjs`: header `TypeSafe-Danger-Zone-Images` thực sự được gửi qua `requestWithRetry` (trước đó chỉ có trong hàm dựng payload) và trần thân 32 KiB chỉ áp cho phần văn bản (ảnh đi kèm ngoài trần). Trước sửa, mọi ảnh > ~24 KB bị `payload too large` ở lớp truyền.
 - [x] `detectUIVisualEvidence` bỏ qua đường dẫn riêng tư và ngoài phạm vi đọc; `taskRecoveryProgress` gộp siêu dữ liệu `visualAssets` vào digest tiến trình.

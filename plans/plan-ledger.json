@@ -1,10 +1,10 @@
 {
   "schemaVersion": "2.0.0",
   "standard": "ck:project-management & ck:project-organization",
-  "generatedAt": "2026-11-11T15:03:56.183Z",
+  "generatedAt": "2026-11-11T22:45:00.569Z",
   "totalPlans": 37,
-  "completedCount": 36,
-  "inProgressCount": 1,
+  "completedCount": 37,
+  "inProgressCount": 0,
   "pendingCount": 0,
   "plans": [
     {
@@ -1452,13 +1452,13 @@
       "path": "plans/261103-unified-judge-jev-standardization/plan.md",
       "directory": "plans/261103-unified-judge-jev-standardization",
       "title": "Chuẩn hóa & Triển khai Kiến trúc Thống nhất Vòng lặp Tự trị Tam giác Đa tầng (Autonomous Triad Unified Architecture) theo ADR-13",
-      "status": "in-progress",
+      "status": "completed",
       "priority": "P1",
       "effort": "5 phases",
       "frontmatter": {
         "title": "Chuẩn hóa & Triển khai Kiến trúc Thống nhất Vòng lặp Tự trị Tam giác Đa tầng (Autonomous Triad Unified Architecture) theo ADR-13",
         "description": "Kế hoạch tổng lực triển khai và cutover toàn bộ các giải pháp nghiên cứu từ ADR-13: Hỗ trợ đa dialect System One (OpenRouter/Cloudflare), Box Question thị giác, Động cơ điều phối đa tầng (Preflight 0ms -> Macro M -> Atomic H -> Proactive Advisor), kiểm thử TDD toàn diện và xác minh 6 tầng toàn cầu.",
-        "status": "in-progress",
+        "status": "completed",
         "priority": "P1",
         "effort": "5 phases",
         "branch": "master",
@@ -1477,12 +1477,12 @@
         "verificationSuite": "tests/box-primitive.test.ts, tests/visual-evidence-*.test.ts, tests/task-verification-runtime.test.ts, tests/anti-blocking-middleware.test.ts, tests/h-authority-boundary.test.ts"
       },
       "planCheckboxes": {
-        "checked": 2,
-        "unchecked": 4
+        "checked": 5,
+        "unchecked": 0
       },
       "phaseCheckboxes": {
-        "checked": 31,
-        "unchecked": 10
+        "checked": 40,
+        "unchecked": 0
       },
       "phaseFiles": [
         "phase-01-multi-provider-wire-support.md",
@@ -1491,7 +1491,7 @@
         "phase-04-tdd-edge-case-scenarios.md",
         "phase-05-sync-baseline-and-global-verification.md"
       ],
-      "isCompleted": false
+      "isCompleted": true
     }
   ]
 }

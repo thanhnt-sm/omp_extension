@@ -35,23 +35,23 @@ flowchart TD
 
 ## 2. Các Bước Thực thi Cụ thể (Implementation Steps)
 
-- [bỏ — thay thế bởi quyết định 2026-11-11, cần ADR] Cập nhật `src/task-verification-runtime.ts`:
+- [bỏ — thay thế bởi quyết định 2026-11-11, xem ADR-20261111-defer-macro-to-atomic-escalation] Cập nhật `src/task-verification-runtime.ts`:
   - Hiện thực hóa hàm `evaluateUnifiedTriadVerification(taskContext)` thực thi tuần tự các tầng.
   - Tầng 1: Kiểm tra cache và token vé cam kết `APPROVED_PENDING_COMMIT`.
   - Tầng 2: Chạy Thẩm phán Vĩ mô `M` (`runPhaseMacroCheck`). Nếu đạt $\rightarrow$ trả về kết quả ngay.
   - Tầng 3: Nếu `M` trả về `CONCERNS` hoặc phát hiện mâu thuẫn giữa các tiêu chí con $\rightarrow$ tự động khởi tạo `AtomicJudge` phân tách tiêu chí thành DAG vị từ (`PredicateSpec`).
   - Tầng 4: Nếu cả `M` và `H` đều không đạt do lỗi kiểm thử hoặc cú pháp $\rightarrow$ kích hoạt `proactiveAdvisorDispatch` tự động phân tích lỗi và tạo kế hoạch khắc phục mà không làm phiền người dùng.
-- [bỏ — thay thế bởi quyết định 2026-11-11, cần ADR] Cập nhật `typesafe-planner.ts`:
+- [bỏ — thay thế bởi quyết định 2026-11-11, xem ADR-20261111-defer-macro-to-atomic-escalation] Cập nhật `typesafe-planner.ts`:
   - Tích hợp hàm điều phối hợp nhất này vào bộ chặn vòng đời `handleTodoInterception` khi xử lý lệnh `done`.
 
 ---
 
 ## 3. Tiêu chí Chấp thuận (Acceptance Criteria)
 
-- [bỏ — thay thế bởi quyết định 2026-11-11, cần ADR] Tác vụ không đổi đạt 100% tỷ lệ phản hồi 0ms tại Tầng 1.
-- [bỏ — thay thế bởi quyết định 2026-11-11, cần ADR] Tác vụ thông thường vượt qua ở Tầng 2 chỉ trong 1 request duy nhất (<400ms).
-- [bỏ — thay thế bởi quyết định 2026-11-11, cần ADR] Tác vụ phức tạp có tiêu chí con xung đột được Tầng 3 phân tách chính xác.
-- [bỏ — thay thế bởi quyết định 2026-11-11, cần ADR] Tác tử không bao giờ bị rơi vào trạng thái bế tắc hoặc spam hỏi người dùng.
+- [bỏ — thay thế bởi quyết định 2026-11-11, xem ADR-20261111-defer-macro-to-atomic-escalation] Tác vụ không đổi đạt 100% tỷ lệ phản hồi 0ms tại Tầng 1.
+- [bỏ — thay thế bởi quyết định 2026-11-11, xem ADR-20261111-defer-macro-to-atomic-escalation] Tác vụ thông thường vượt qua ở Tầng 2 chỉ trong 1 request duy nhất (<400ms).
+- [bỏ — thay thế bởi quyết định 2026-11-11, xem ADR-20261111-defer-macro-to-atomic-escalation] Tác vụ phức tạp có tiêu chí con xung đột được Tầng 3 phân tách chính xác.
+- [bỏ — thay thế bởi quyết định 2026-11-11, xem ADR-20261111-defer-macro-to-atomic-escalation] Tác tử không bao giờ bị rơi vào trạng thái bế tắc hoặc spam hỏi người dùng.
 
 ---
 

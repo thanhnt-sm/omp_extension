@@ -53,7 +53,7 @@ Qua quá trình nghiên cứu thực nghiệm trực tuyến đối với mã ng
 | Tác tử AI dễ bị bế tắc và spam hỏi người dùng khi gặp lỗi kỹ thuật nếu không có middleware đánh chặn | `docs/journals/2026-11-02-claudekit-project-management-and-plan-inheritance.md` | 2026-11-02 | measured | Phương án D |
 | 100% các thủ đoạn gian lận kiểm thử (xóa `expect`, sửa thành `expect(1).toBe(1)`, thêm `.skip`) bị chặn đứng | `src/ast-analyzer.ts:1-120` & `tests/ast-analyzer.test.ts` | 2026-10-26 | measured | Phương án D |
 | Bộ lọc khóa bí mật bảo toàn số nguyên đếm token giúp tránh lỗi parse telemetry thượng nguồn | `src/typesafe-redact.cjs:TELEMETRY_COUNT_KEYS` & `tests/typesafe-redact.test.ts` | 2026-11-02 | measured | Phương án D |
-| Toàn bộ 41/41 kế hoạch trong sổ cái trung tâm đã được đối soát 100% hoàn thành, không còn `[ ]` sót lại | `plans/plan-ledger.json` & `tools/ck-project-manager.cjs --audit` | 2026-11-03 | measured | Phương án D |
+| Toàn bộ 41/41 kế hoạch trong sổ cái trung tâm đã được đối soát 100% hoàn thành, không còn `[ ]` sót lại (số liệu lịch sử ngày 2026-11-03; ledger tái tạo ngày 2026-11-11 có 37 kế hoạch, xem `plans/plan-ledger.json`) | `plans/plan-ledger.json` & `tools/ck-project-manager.cjs --audit` | 2026-11-03 | measured | Phương án D |
 | Hệ thống kiểm chứng 6 tầng xác nhận toàn bộ 551 tệp khớp mã băm SHA-256 và Jev Probe LIVE HTTP 200 | `tools/verify-omp-global.cjs --live` | 2026-11-03 | measured | Phương án D |
 
 ---
@@ -98,7 +98,7 @@ Quyết định được đưa ra dựa trên sự đồng thuận tuyệt đố
 - [x] Cập nhật Bảng Chỉ mục Tổng thể và Đồ thị Phả hệ Kiến trúc tại `docs/decisions/README.md`.
 - [x] Kiểm tra bảo toàn 100% kiểm thử hồi quy: `bun test tests/atomic-jev-judge.test.ts`, `tests/proactive-advisor-dispatch.test.ts`, `tests/anti-blocking-middleware.test.ts`.
 - [x] Chạy kiểm chứng toàn diện 6 tầng cài đặt toàn cục OMP qua `node tools/verify-omp-global.cjs --live`.
-- [x] Đồng bộ hóa sổ cái kế hoạch qua `node tools/ck-project-manager.cjs --audit` bảo đảm 41/41 kế hoạch giữ vững trạng thái hoàn thành.
+- [x] Đồng bộ hóa sổ cái kế hoạch qua `node tools/ck-project-manager.cjs --audit` bảo đảm 41/41 kế hoạch giữ vững trạng thái hoàn thành (số liệu lịch sử ngày 2026-11-03; ledger tái tạo ngày 2026-11-11 có 37 kế hoạch, xem `plans/plan-ledger.json`).
 
 ---
 

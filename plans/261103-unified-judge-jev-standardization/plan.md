@@ -1,7 +1,7 @@
 ---
 title: "Chuẩn hóa & Triển khai Kiến trúc Thống nhất Vòng lặp Tự trị Tam giác Đa tầng (Autonomous Triad Unified Architecture) theo ADR-13"
 description: "Kế hoạch tổng lực triển khai và cutover toàn bộ các giải pháp nghiên cứu từ ADR-13: Hỗ trợ đa dialect System One (OpenRouter/Cloudflare), Box Question thị giác, Động cơ điều phối đa tầng (Preflight 0ms -> Macro M -> Atomic H -> Proactive Advisor), kiểm thử TDD toàn diện và xác minh 6 tầng toàn cầu."
-status: in-progress
+status: completed
 priority: P1
 effort: "5 phases"
 branch: master
@@ -13,6 +13,8 @@ verificationSuite: "tests/box-primitive.test.ts, tests/visual-evidence-*.test.ts
 ---
 
 # Chuẩn hóa & Triển khai Kiến trúc Thống nhất Vòng lặp Tự trị Tam giác Đa tầng theo ADR-13
+
+> **Phạm vi đã thu hẹp (2026-11-11)**: Tầng 3 (tự động leo thang `M` → `H`) bị loại theo [`ADR-20261111-defer-macro-to-atomic-escalation`](../../docs/decisions/ADR-20261111-defer-macro-to-atomic-escalation.md); `H` vẫn chỉ chạy bóng. Hook tự động chụp ảnh trình duyệt (giai đoạn 2) hoãn, đưa vào backlog. Phần mô tả bốn tầng bên dưới giữ nguyên để truy vết, không phải phạm vi đã giao.
 
 ## 1. Bối cảnh & Mục tiêu (Context & Objectives)
 
@@ -38,8 +40,8 @@ Theo kết luận của Hội đồng Thẩm định Kỹ thuật [`docs/decisio
 | **Giai đoạn 1** | [phase-01-multi-provider-wire-support.md](phase-01-multi-provider-wire-support.md) | Mở rộng Hỗ trợ Đa dialect Wire System One (OpenRouter / Cloudflare) trong trình khách API | Completed |
 | **Giai đoạn 2** | [phase-02-box-primitive-and-visual-evidence.md](phase-02-box-primitive-and-visual-evidence.md) | Hiện thực hóa Box Primitive (`BoxQuestion`) & Gói Bằng chứng Thị giác UI | Completed (hook chụp ảnh tự động: hoãn) |
 | **Giai đoạn 3** | [phase-03-unified-triad-runtime-escalation.md](phase-03-unified-triad-runtime-escalation.md) | Thu hẹp phạm vi (2026-11-11): gia cố T1/T4 tighten-only; T3 (leo thang M→H) hoãn, cần ADR riêng | Completed (phạm vi thu hẹp; advisor review, judge unavailable) |
-| **Giai đoạn 4** | [phase-04-tdd-edge-case-scenarios.md](phase-04-tdd-edge-case-scenarios.md) | Bộ Kiểm thử TDD Hồi quy Toàn diện & Xác thực Đa kịch bản Ma trận Biên (bỏ SC-07) | Pending |
-| **Giai đoạn 5** | [phase-05-sync-baseline-and-global-verification.md](phase-05-sync-baseline-and-global-verification.md) | Đồng bộ Giao dịch, Cập nhật Sổ cái Kế hoạch & Xác minh 6 Tầng Toàn cầu | Pending |
+| **Giai đoạn 4** | [phase-04-tdd-edge-case-scenarios.md](phase-04-tdd-edge-case-scenarios.md) | Bộ Kiểm thử TDD Hồi quy Toàn diện & Xác thực Đa kịch bản Ma trận Biên (bỏ SC-07) | Completed (advisor review, judge unavailable) |
+| **Giai đoạn 5** | [phase-05-sync-baseline-and-global-verification.md](phase-05-sync-baseline-and-global-verification.md) | Đồng bộ Giao dịch, Cập nhật Sổ cái Kế hoạch & Xác minh 6 Tầng Toàn cầu | Completed (advisor review, judge unavailable) |
 
 ---
 
@@ -47,7 +49,7 @@ Theo kết luận của Hội đồng Thẩm định Kỹ thuật [`docs/decisio
 
 - [x] Trình khách API hỗ trợ đầy đủ 3 dialect wire: `typesafe`, `openrouter-decisions`, `workers-ai-systemone`.
 - [x] Xử lý an toàn `BoxQuestion` với độ tự tin và tọa độ bounding box chuẩn hóa `[top, bottom, left, right]`.
-- [ ] Chuỗi điều phối phân tầng chuyển tiếp mượt mà, không tăng đột biến độ trễ đối với các tác vụ đơn giản.
-- [ ] Bộ kiểm thử đơn vị `tests/unified-triad-architecture.test.ts` đạt 100% PASS với 0 fail.
-- [ ] `node tools/verify-omp-global.cjs --live` đạt 6/6 tầng PASS.
-- [ ] `node tools/ck-project-manager.cjs --audit` đạt 100% hoàn thành đối soát.
+- [bỏ — Tầng 3 hoãn theo ADR-20261111-defer-macro-to-atomic-escalation; độ trễ không đo trong phạm vi này] Chuỗi điều phối phân tầng chuyển tiếp mượt mà, không tăng đột biến độ trễ đối với các tác vụ đơn giản.
+- [x] Bộ kiểm thử đơn vị `tests/unified-triad-architecture.test.ts` đạt 100% PASS với 0 fail (21/21; toàn bộ suite 1251 pass / 0 fail / 5 skip).
+- [x] `node tools/verify-omp-global.cjs --live` đạt 6/6 tầng PASS (`bun run verify:live`, 2026-11-12, đo tại commit `325fedd`, 620/620 tệp, `jev-1.14.0` HTTP 200).
+- [x] `node tools/ck-project-manager.cjs --audit` đạt 100% hoàn thành đối soát (37/37, 2026-11-12).
