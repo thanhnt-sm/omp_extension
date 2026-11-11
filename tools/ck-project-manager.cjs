@@ -21,6 +21,29 @@ function isQuotedCheckboxText(line) {
 }
 
 /**
+ * Classifies a line as a real checklist item. Only "- [ ]" (unchecked) and
+ * "- [x]" / "- [X]" (checked) count; anything else such as "- [bỏ — ...]"
+ * (superseded marker) or "- []" counts as neither. Quoted boilerplate is skipped.
+ * @returns {"checked"|"unchecked"|null}
+ */
+function classifyCheckboxLine(line) {
+  if (isQuotedCheckboxText(line)) return null;
+  if (/^\s*-\s+\[[xX]\](?:\s|$)/.test(line)) return "checked";
+  if (/^\s*-\s+\[ \](?:\s|$)/.test(line)) return "unchecked";
+  return null;
+}
+
+/** Counts checked/unchecked functional checkboxes in a block of markdown. */
+function countCheckboxes(text) {
+  const counts = { checked: 0, unchecked: 0 };
+  text.split(/\r?\n/).forEach((line) => {
+    const kind = classifyCheckboxLine(line);
+    if (kind) counts[kind]++;
+  });
+  return counts;
+}
+
+/**
  * Parses a single plan file, extracting YAML frontmatter, phase files,
  * and counting functional checkboxes.
  */
@@ -69,13 +92,7 @@ function parsePlan(planPath, workspaceDir = process.cwd()) {
   const effort = frontmatter.effort || "unspecified";
 
   // Count functional checkboxes in plan.md
-  let planChecked = 0;
-  let planUnchecked = 0;
-  body.split(/\r?\n/).forEach((line) => {
-    if (isQuotedCheckboxText(line)) return;
-    if (/^\s*-\s*\[[xX]\]/.test(line)) planChecked++;
-    else if (/^\s*-\s*\[\s*\]/.test(line)) planUnchecked++;
-  });
+  const { checked: planChecked, unchecked: planUnchecked } = countCheckboxes(body);
 
   // Find and count functional checkboxes in sibling phase files
   const phaseFiles = [];
@@ -89,12 +106,9 @@ function parsePlan(planPath, workspaceDir = process.cwd()) {
       if (/^phase-.*\.md$/i.test(entry)) {
         const phasePath = path.join(planDir, entry);
         phaseFiles.push(entry);
-        const phaseContent = fs.readFileSync(phasePath, "utf8");
-        phaseContent.split(/\r?\n/).forEach((line) => {
-          if (isQuotedCheckboxText(line)) return;
-          if (/^\s*-\s*\[[xX]\]/.test(line)) phaseChecked++;
-          else if (/^\s*-\s*\[\s*\]/.test(line)) phaseUnchecked++;
-        });
+        const counts = countCheckboxes(fs.readFileSync(phasePath, "utf8"));
+        phaseChecked += counts.checked;
+        phaseUnchecked += counts.unchecked;
       }
     });
   }
@@ -120,44 +134,26 @@ function parsePlan(planPath, workspaceDir = process.cwd()) {
   };
 }
 
+/** Subdirectories of plans/ that are never plans themselves. */
+const NON_PLAN_DIRS = new Set(["reports", "visuals"]);
+
 /**
- * Scans all plan files in plans/ and any loose plan files in root.
+ * Scans `plans/<dir>/plan.md` of this workspace. The plan id is the directory
+ * name under plans/. Nothing outside plans/ is scanned (no root *_PLAN.md files,
+ * no nested dirs) and plans/reports is never treated as a plan.
  */
 function scanAllPlans(workspaceDir = process.cwd()) {
   const plansDir = path.join(workspaceDir, "plans");
   const plans = [];
+  if (!fs.existsSync(plansDir)) return plans;
 
-  if (fs.existsSync(plansDir)) {
-    const entries = fs.readdirSync(plansDir);
-    entries.sort();
-    entries.forEach((entry) => {
-      const fullPath = path.join(plansDir, entry);
-      if (fs.statSync(fullPath).isDirectory()) {
-        const planFile = path.join(fullPath, "plan.md");
-        if (fs.existsSync(planFile)) {
-          plans.push(parsePlan(planFile, workspaceDir));
-        }
-      }
-    });
-  }
-
-  // Also check loose plan files in root directory
-  const rootEntries = fs.readdirSync(workspaceDir);
-  rootEntries.forEach((entry) => {
-    if (
-      entry.endsWith("_PLAN.md") ||
-      entry.endsWith("-plan.md") ||
-      entry === "MERMAID_UI_UX_OVERHAUL_PLAN.md" ||
-      entry === "TYPESAFE_REVIEW_FIX_JEV_TEST_PLAN.md" ||
-      entry === "JEV_SESSION_FORENSICS_PLAN_JEV_PLAN.md" ||
-      entry === "JUDGE_BASELINE_COOK_PLAN.md" ||
-      entry === "JUDGE_BASELINE_AUDIT_PLAN.md"
-    ) {
-      const loosePath = path.join(workspaceDir, entry);
-      plans.push(parsePlan(loosePath, workspaceDir));
-    }
+  const entries = fs.readdirSync(plansDir, { withFileTypes: true });
+  entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  entries.forEach((entry) => {
+    if (!entry.isDirectory() || NON_PLAN_DIRS.has(entry.name)) return;
+    const planFile = path.join(plansDir, entry.name, "plan.md");
+    if (fs.existsSync(planFile)) plans.push(parsePlan(planFile, workspaceDir));
   });
-
   return plans;
 }
 
@@ -175,7 +171,7 @@ function reconcilePlan(planPath, options = {}) {
   const planLines = content.split(/\r?\n/);
   const updatedPlanLines = planLines.map((line) => {
     if (isQuotedCheckboxText(line)) return line;
-    return line.replace(/^(\s*-\s*)\[\s*\]/, "$1[x]");
+    return line.replace(/^(\s*-\s+)\[ \](?=\s|$)/, "$1[x]");
   });
   content = updatedPlanLines.join("\n");
 
@@ -233,7 +229,7 @@ function reconcilePlan(planPath, options = {}) {
         const phaseLines = phaseContent.split(/\r?\n/);
         const updatedPhaseLines = phaseLines.map((line) => {
           if (isQuotedCheckboxText(line)) return line;
-          return line.replace(/^(\s*-\s*)\[\s*\]/, "$1[x]");
+          return line.replace(/^(\s*-\s+)\[ \](?=\s|$)/, "$1[x]");
         });
         phaseContent = updatedPhaseLines.join("\n");
         // Also update any status table or status field inside phase file
@@ -336,7 +332,6 @@ function auditProjectState(workspaceDir = process.cwd()) {
  * - Sweeps all historical plans
  * - Backfills functional checkboxes
  * - Updates status to completed with inheritance metadata
- * - Regulates loose root plans
  */
 function reconcileAll(workspaceDir = process.cwd()) {
   const plans = scanAllPlans(workspaceDir);
@@ -405,6 +400,8 @@ if (require.main === module) {
 
 module.exports = {
   isQuotedCheckboxText,
+  classifyCheckboxLine,
+  countCheckboxes,
   parsePlan,
   scanAllPlans,
   reconcilePlan,
