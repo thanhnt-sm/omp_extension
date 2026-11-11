@@ -37,7 +37,7 @@ Theo kết luận của Hội đồng Thẩm định Kỹ thuật [`docs/decisio
 |---|---|---|:---:|
 | **Giai đoạn 1** | [phase-01-multi-provider-wire-support.md](phase-01-multi-provider-wire-support.md) | Mở rộng Hỗ trợ Đa dialect Wire System One (OpenRouter / Cloudflare) trong trình khách API | Completed |
 | **Giai đoạn 2** | [phase-02-box-primitive-and-visual-evidence.md](phase-02-box-primitive-and-visual-evidence.md) | Hiện thực hóa Box Primitive (`BoxQuestion`) & Gói Bằng chứng Thị giác UI | Completed (hook chụp ảnh tự động: hoãn) |
-| **Giai đoạn 3** | [phase-03-unified-triad-runtime-escalation.md](phase-03-unified-triad-runtime-escalation.md) | Thu hẹp phạm vi (2026-11-11): gia cố T1/T4 tighten-only; T3 (leo thang M→H) hoãn, cần ADR riêng | In-Progress |
+| **Giai đoạn 3** | [phase-03-unified-triad-runtime-escalation.md](phase-03-unified-triad-runtime-escalation.md) | Thu hẹp phạm vi (2026-11-11): gia cố T1/T4 tighten-only; T3 (leo thang M→H) hoãn, cần ADR riêng | Completed (phạm vi thu hẹp; advisor review, judge unavailable) |
 | **Giai đoạn 4** | [phase-04-tdd-edge-case-scenarios.md](phase-04-tdd-edge-case-scenarios.md) | Bộ Kiểm thử TDD Hồi quy Toàn diện & Xác thực Đa kịch bản Ma trận Biên (bỏ SC-07) | Pending |
 | **Giai đoạn 5** | [phase-05-sync-baseline-and-global-verification.md](phase-05-sync-baseline-and-global-verification.md) | Đồng bộ Giao dịch, Cập nhật Sổ cái Kế hoạch & Xác minh 6 Tầng Toàn cầu | Pending |
 
