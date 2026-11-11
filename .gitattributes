@@ -1,1 +1,4 @@
+# Working tree always uses LF so the bytes synced to target match the manifest after any checkout,
+# regardless of the machine-wide core.autocrlf setting.
+* text=auto eol=lf
 .omp/config.yml text eol=lf
