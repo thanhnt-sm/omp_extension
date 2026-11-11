@@ -149,7 +149,9 @@ export function createTaskVerificationRuntime(options: TaskVerificationRuntimeOp
     },
     async preflight(context, target, operation, signal) {
       const state = matchingReview(states, options, context, target);
-      if (operation !== "done" || signal?.aborted || !state) return { status: "EVIDENCE_REQUIRED", missingCriterionIds: [], reviewMissing: true, reasons: ["A current task-bound source review and real settled Advisor receipt must exist before native preflight. Run typesafe_review_task outside this short native callback."] };
+      if (operation !== "done" || !state) return { status: "EVIDENCE_REQUIRED", missingCriterionIds: [], reviewMissing: true, reasons: ["A current task-bound source review and real settled Advisor receipt must exist before native preflight. Run typesafe_review_task outside this short native callback."] };
+      // A cancelled callback says nothing about whether a review exists, so it must not claim `reviewMissing` (that flag gates Advisor remediation).
+      if (signal?.aborted) return { status: "UNAVAILABLE", component: "preflight", reasons: ["Native preflight was cancelled before staging."] };
       const check = currentSource(context, state); currentChecks.set(state, check);
       try {
         if (!await check || signal?.aborted) return { status: "EVIDENCE_REQUIRED", missingCriterionIds: state.contract.criteria.map(criterion => criterion.id), reasons: ["Current contract/incarnation/tree/test/policy/evidence differs from the actual reviewed snapshot; no native staging."] };

@@ -87,6 +87,8 @@ export const TSX_SOURCE = "export const Button = () => <button>Click</button>;";
 /** Real temp git repo: committed baseline, then a real .tsx change plus the given untracked binary files. */
 export async function createUiRepo(binaries: Record<string, Buffer>): Promise<UiRepo> {
   // Isolated like tests/task-artifact-routing.test.ts: no user/system gitconfig, hooks, gpg signing, or credential prompts can slow or break the fixture.
+  // `env` below covers only the fixture's own git calls; captureWorkspaceSnapshot/collectTaskEvidence are already isolated in production
+  // (src/evidence-workspace.ts -> execFileChildSync("evidence-git") -> buildChildEnvironment: GIT_CONFIG_NOSYSTEM, GIT_CONFIG_GLOBAL=NUL, no HOME, hooksPath/fsmonitor off).
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "typesafe-visual-evidence-"));
   const cwd = path.join(root, "project"); const homeDir = path.join(root, "home");
   await fs.mkdir(cwd, { recursive: true }); await fs.mkdir(path.join(homeDir, "empty-hooks"), { recursive: true });

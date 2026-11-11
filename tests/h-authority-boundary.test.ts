@@ -16,7 +16,12 @@ const doneEntryPoints = [
   path.join(srcDir, "cook-expert-judge.ts"),
 ];
 
-const SPECIFIER = /(?:\bfrom\s*|\bimport\s*\(\s*|\b(?:nodeRequire|require)\s*\(\s*|\bimport\s+)["'](\.{1,2}\/[^"']+)["']/g;
+// `\)\s*\(\s*` covers the immediately-invoked `createRequire(import.meta.url)("./x")` form used throughout src/.
+const SPECIFIER = /(?:\bfrom\s*|\bimport\s*\(\s*|\b(?:nodeRequire|require)\s*\(\s*|\)\s*\(\s*|\bimport\s+)["'](\.{1,2}\/[^"']+)["']/g;
+
+function relativeSpecifiers(text: string): string[] {
+  return [...text.matchAll(SPECIFIER)].map(match => match[1]);
+}
 
 function resolveModule(from: string, specifier: string): string | undefined {
   const base = path.resolve(path.dirname(from), specifier);
@@ -32,7 +37,7 @@ function importClosure(entries: readonly string[]): Map<string, string> {
     const file = queue.pop()!;
     if (seen.has(file)) continue;
     const text = readFileSync(file, "utf8"); seen.set(file, text);
-    for (const match of text.matchAll(SPECIFIER)) { const next = resolveModule(file, match[1]); if (next && !seen.has(next)) queue.push(next); }
+    for (const specifier of relativeSpecifiers(text)) { const next = resolveModule(file, specifier); if (next && !seen.has(next)) queue.push(next); }
   }
   return seen;
 }
@@ -69,5 +74,15 @@ describe("H (atomic judge) authority boundary", () => {
   test("positive control: the crawler does find atomic-judge from the shadow evaluation module", () => {
     const reached = [...importClosure([path.join(srcDir, "atomic-evaluation.ts")]).keys()].map(file => path.basename(file));
     expect(reached).toContain("atomic-judge.ts");
+  });
+
+  test("positive control: createRequire(import.meta.url)(\"./x\") and require(\"./x\") edges are followed", () => {
+    expect(relativeSpecifiers(`const c = createRequire(import.meta.url)("./atomic-judge.cjs");`)).toEqual(["./atomic-judge.cjs"]);
+    expect(relativeSpecifiers(`const c = createRequire(import.meta.url)(\n  '../src/atomic-judge' );`)).toEqual(["../src/atomic-judge"]);
+    expect(relativeSpecifiers(`const c = require("./atomic-judge"); const d = nodeRequire('./atomic-evaluation');`)).toEqual(["./atomic-judge", "./atomic-evaluation"]);
+    expect(relativeSpecifiers(`foo("not-relative"); bar()("node:fs");`)).toEqual([]);
+    // Real file whose only link to its core module is the createRequire form: the closure must reach it.
+    const reached = [...importClosure([path.join(srcDir, "advisor-native-budget.ts")]).keys()].map(file => path.basename(file));
+    expect(reached).toContain("typesafe-policy-client.cjs");
   });
 });

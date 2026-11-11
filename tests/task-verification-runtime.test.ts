@@ -9,6 +9,7 @@ import type { ContractHistoryProjection } from "../src/task-contract";
 import { TASK_VERIFICATION_FACTS } from "../src/task-verification-history";
 import { createHostToolInvocationRuntime } from "../src/host-tool-invocation";
 import { createSemanticApprovalPolicy } from "../src/semantic-approval-policy";
+import { shouldAppendAdvisorRemediation } from "../src/anti-blocking-guards";
 import { approvedPreflightHarness } from "./task-verification-approved-fixture";
 
 // Offline adversarial host-history fixture only. It supplies no live provider, native success,
@@ -146,6 +147,20 @@ describe("Task verification runtime source/authority boundaries", () => {
       // Restoring the genuine settled review re-approves: freshness is recomputed on every preflight, not cached.
       harness.setReviews([harness.review]);
       expect((await harness.runtime.preflight(harness.host.context, harness.target, "done")).status).toBe("APPROVED_PENDING_COMMIT");
+    } finally { await harness.host.dispose(); }
+  });
+  test("aborted preflight with an existing review is UNAVAILABLE, never reviewMissing (remediation gating stays correct)", async () => {
+    const harness = await approvedPreflightHarness();
+    try {
+      const controller = new AbortController(); controller.abort();
+      const outcome = await harness.runtime.preflight(harness.host.context, harness.target, "done", controller.signal);
+      expect(outcome.status).toBe("UNAVAILABLE");
+      expect("reviewMissing" in outcome).toBe(false);
+      expect(shouldAppendAdvisorRemediation(outcome)).toBe(false);
+      // No review at all stays the explicit "no review yet" answer even when aborted.
+      const host = fixture(); const runtime = createTaskVerificationRuntime(host.options);
+      const missing = await runtime.preflight(host.context, { task: "Unbound task" }, "done", controller.signal);
+      expect("reviewMissing" in missing && missing.reviewMissing).toBe(true);
     } finally { await harness.host.dispose(); }
   });
   test("plan phase identity includes the full approved phase criteria and master/source context", () => {

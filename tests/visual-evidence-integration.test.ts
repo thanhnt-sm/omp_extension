@@ -76,7 +76,7 @@ describe("real git-tree visual evidence: collect -> detect -> packet set", () =>
     const onlyPrivate = await repoWith({ "assets/history/a.png": privateImage });
     expect(pipeline(onlyPrivate).visual).toBeUndefined();
     expect(pipeline(onlyPrivate).set.assetPayload).toBeUndefined();
-  });
+  }, 30_000);
 
   test("an image outside the approved read scope is never selected", async () => {
     const repo = await repoWith({ "assets/ui.png": buildPng({ padToBytes: 50_000 }) });

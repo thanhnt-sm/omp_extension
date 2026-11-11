@@ -47,6 +47,7 @@ import {
 } from "./src/evidence-collector";
 import { clampText } from "./src/payload-safety";
 import { interceptAskCall, formatAdvisorAutoRemediation, shouldAppendAdvisorRemediation } from "./src/anti-blocking-guards";
+import { isSingleHumanOwnedRecovery } from "./src/human-owned-recovery";
 import { sanitizeXmlText } from "./src/xml-enclosure";
 import {
   evaluateScopeArbiter,
@@ -1604,13 +1605,12 @@ export default function registerExtension(
 
   /** True only when exactly one native task is in progress and its host-recorded recovery plan is owned by a human. Read-only; any doubt returns false (keeps the ask block). */
   function currentTaskRecoveryIsHumanOwned(ctx: unknown): boolean {
-    if (!verificationRuntime) return false;
+    const runtime = verificationRuntime;
+    if (!runtime) return false;
     try {
       const active = (phasesFromBranch(ctx) ?? state.phases).flatMap(phase =>
         phase.tasks.filter(task => task.status === "in_progress").map(task => ({ task: task.content, phase: phase.name })));
-      if (active.length !== 1) return false;
-      const recovery = verificationRuntime.getRecovery(ctx, active[0]);
-      return recovery?.kind === "human" && recovery.owner === "human";
+      return isSingleHumanOwnedRecovery(active, target => runtime.getRecovery(ctx, target));
     } catch {
       return false;
     }
