@@ -277,7 +277,7 @@ Công cụ `tools/sync-baseline.cjs` triển khai các thay đổi trên 2 gốc
 | 99 | `src/types/security.ts` | `SecurityPosture`, `RedactionOptions` | Các giao diện TypeScript dùng chung cho cấu hình bảo mật và biên tập che giấu bí mật. |
 | 100 | `src/errors/TypeSafeError.ts` | `TypeSafeError` | Phân cấp lớp lỗi có kiểu tĩnh cho các ngoại lệ của tiện ích mở rộng. |
 
-### 4.7 Các Công cụ Vận hành, Quảng bá & Đánh giá Ghép cặp (`tools/` — 26 tệp & `scripts/` — 6 tệp)
+### 4.7 Các Công cụ Vận hành, Quảng bá & Đánh giá Ghép cặp (`tools/` — 26 tệp & `scripts/` — 5 tệp)
 
 | Danh mục (Category) | Các Tệp (Files) | Mục đích (Purpose) |
 |---|---|---|
@@ -285,7 +285,7 @@ Công cụ `tools/sync-baseline.cjs` triển khai các thay đổi trên 2 gốc
 | **Đồng bộ Đường cơ sở Giao dịch (Transactional Baseline Sync — 4)** | `tools/sync-baseline.cjs`, `tools/promote-omp-global.ps1`, `tools/sync-baseline.bat`, `tools/README.md` | Quảng bá có hướng dẫn và triển khai giao dịch trên `target` và `global_omp_agents` (Schema v2) kèm kiểm tra kế hoạch sau khi khóa và hoàn tác tự động. |
 | **Kiểm thử Khói Biên SDK (SDK Boundary Smoke Test — 1)** | `tools/todo-remediation-smoke.ts` | Khởi chạy CLI `omp` thực tế kết nối tới máy chủ OpenAI giả lập theo kịch bản nội bộ bên trong `createVerificationHome()` để xác minh `SDK_NATIVE_SMOKE_PROOF`. |
 | **Bộ Kiểm chuẩn Ghép cặp `M`/`H` (Paired `M`/`H` Benchmark Suite — 17)** | `tools/jev-paired-eval.ts`, `jev-paired-eval-lib.ts`, `jev-paired-types.ts`, `jev-paired-inputs.ts`, `jev-paired-files.ts`, `jev-paired-validation.ts`, `jev-paired-runner.ts`, `jev-paired-host-protocol.ts`, `jev-paired-host-client.ts`, `jev-paired-host-journal.ts`, `jev-paired-workspace.ts`, `jev-paired-accounting.ts`, `jev-paired-exposure.ts`, `jev-paired-statistics.ts`, `jev-paired-metrics.ts`, `jev-paired-metric-types.ts`, `jev-paired-ablations.ts` | Đánh giá ghép cặp đã đăng ký trước và đóng băng bằng mật mã giữa nhánh Vĩ mô (`M` — Macro) và nhánh Nguyên tử (`H` — Atomic) (`validate`, `freeze`, `benchmark`, `report`, `decide`) theo quy chuẩn `strict-corpus-dominance-v1`. |
-| **Các Kịch bản Tiện ích / Di sản (Legacy / Utility Scripts — 6)** | `scripts/deploy-baseline-to-target.cjs`, `scripts/patch-workspace-planner.cjs`, `scripts/remove-gate3.cjs`, `scripts/safe-update-planner-model.cjs`, `scripts/typesafe-planner-drop-tasks.cjs`, `scripts/update-planner-jev-latest.cjs` | Các tiện ích di trú lịch sử được giữ lại để đảm bảo tính liên tục của bản kê khai đường cơ sở (Baseline Manifest Continuity). |
+| **Các Kịch bản Tiện ích / Di sản (Legacy / Utility Scripts — 5)** | `scripts/patch-workspace-planner.cjs`, `scripts/remove-gate3.cjs`, `scripts/safe-update-planner-model.cjs`, `scripts/typesafe-planner-drop-tasks.cjs`, `scripts/update-planner-jev-latest.cjs` | Các tiện ích di trú lịch sử được giữ lại để đảm bảo tính liên tục của bản kê khai đường cơ sở (Baseline Manifest Continuity). |
 
 ---
 

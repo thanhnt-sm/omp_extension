@@ -188,3 +188,106 @@ Các chuỗi không tin cậy (trích đoạn diff, luồng lỗi kiểm thử s
    - Mã định danh chính xác của các tiêu chí bị lỗi hoặc chưa được xác thực theo thứ tự phụ thuộc (dependency order).
    - Nguyên nhân lỗi tất định cụ thể (mã thoát khác 0, các dòng vi phạm trốn tránh kiểm thử AST, đường dẫn tạo tác bị thiếu).
    - Chuỗi lời gọi công cụ tiếp theo chính xác cần thực hiện để phục hồi (`edit` $\rightarrow$ `typesafe_collect_evidence` $\rightarrow$ `typesafe_review_task`).
+
+---
+
+## 6. Quy chuẩn Thiết kế Thị giác Sơ đồ & Trực quan hóa Giao diện (UI/UX Pro Max & Mermaid v11 Visual Standards)
+
+Theo các nguyên tắc thiết kế từ `ck:ui-ux-pro-max`, `ck:ui-styling` và `ck:mermaidjs-v11`, toàn bộ sơ đồ đồ thị và giao diện phản hồi trong tài liệu và hệ thống phải tuân thủ nghiêm ngặt các quy chuẩn sau:
+
+### 6.1 Bảng màu Token Ngữ nghĩa Tương phản Cao (`classDef` WCAG AAA $\ge 7:1$)
+Mọi sơ đồ Mermaid v11 (`flowchart`, `sequenceDiagram`, `stateDiagram-v2`) bắt buộc sử dụng bảng token màu ngữ nghĩa với tỷ lệ tương phản đạt chuẩn WCAG AAA trên cả nền sáng và nền tối:
+
+```mermaid
+flowchart LR
+    classDef host fill:#0f172a,stroke:#38bdf8,color:#f8fafc,stroke-width:1.5px
+    classDef core fill:#1e3a8a,stroke:#60a5fa,color:#f8fafc,stroke-width:1.5px
+    classDef gate fill:#065f46,stroke:#34d399,color:#f8fafc,stroke-width:1.5px
+    classDef advisor fill:#581c87,stroke:#c084fc,color:#f8fafc,stroke-width:1.5px
+    classDef warn fill:#7c2d12,stroke:#fb923c,color:#f8fafc,stroke-width:1.5px
+    classDef danger fill:#7f1d1d,stroke:#f87171,color:#f8fafc,stroke-width:1.5px
+    classDef muted fill:#1e293b,stroke:#64748b,color:#f8fafc,stroke-width:1px
+
+    N1["Host Layer<br/>(Tiến trình Chủ)"]:::host
+    N2["Core Logic<br/>(Bộ điều phối Lõi)"]:::core
+    N3["Gate Shield<br/>(Cổng Kiểm định)"]:::gate
+    N4["Advisor<br/>(Cố vấn Độc lập)"]:::advisor
+    N5["Warning<br/>(Cảnh báo / Tái thẩm)"]:::warn
+    N6["Danger<br/>(Đóng băng / Từ chối)"]:::danger
+    N7["Muted<br/>(Bộ nhớ Đệm / Phụ)"]:::muted
+
+    N1 --> N2 --> N3 --> N4 --> N5 --> N6 --> N7
+```
+
+### 6.2 Bất biến Cú pháp Chống Lỗi Phân tích (Zero Parse-Error Invariants)
+1. **Bọc nhãn có ký tự đặc biệt**: Mọi nhãn nút hoặc nhãn cạnh chứa dấu ngoặc `()`, hai chấm `:`, chấm phẩy `;`, hoặc dấu so sánh `<`, `>`, `=` bắt buộc phải bọc trong cặp dấu ngoặc kép `""`.
+2. **Ngắt dòng chuẩn hóa**: Sử dụng thẻ `<br/>` để ngắt dòng với độ dài tối ưu `55–65` ký tự/dòng. Tuyệt đối không dùng ký tự `\n` trong nhãn và dùng dấu gạch chéo xuôi `/` trong đường dẫn thay vì `\\`.
+3. **Quy tắc `sequenceDiagram`**: Không dùng dấu chấm phẩy `;` bên trong thông điệp sau dấu `:` (thay bằng dấu gạch ngang dài `—` hoặc dấu phẩy `,`).
+4. **Quy tắc `timeline`**: Không dùng dấu hai chấm `:` bên trong dòng `title` hoặc dòng `section` (thay bằng `—`).
+
+### 6.3 Cấm Dùng Emoji làm Biểu tượng Cấu trúc (`no-emoji-icons`)
+Tuyệt đối không dùng emoji (chẳng hạn như `👤`, `🤖`, `🛡️`, `⚙️`) để đại diện cho các thành phần hệ thống. Thay vào đó, áp dụng hình học chuẩn hóa của Mermaid v11:
+- `([...])` cho Tác nhân / Người vận hành (`Actor / User`).
+- `[[...]]` cho Mô-đun Lõi / Hệ thống con (`Core Subsystem / Subroutine`).
+- `[(...)]` cho Cơ sở Dữ liệu / Sổ cái / Lịch sử (`Database / Central Ledger`).
+- `{{...}}` cho Cổng Kiểm định / Khiên Bảo vệ (`Verification Gate / Shield`).
+- `{...}` cho Quyết định Rẽ nhánh (`Decision / Choice`).
+
+### 6.4 Kiểm soát Tỷ lệ Khung hình (Aspect Ratio Control)
+Để tránh việc bộ giải thuật Dagre xếp chồng các nút thành các cột dọc cao bất thường (`> 3000px`, `AR < 0.35`) hoặc kéo dài thành hàng ngang vô tận (`> 4000px`, `AR > 10`):
+- Bên trong các `subgraph`, khai báo `direction LR` cho các nút ngang hàng.
+- Nối các nút con cùng giai đoạn bằng liên kết vô hình `N1 ~~~ N2 ~~~ N3` để Dagre tự động phân bố không gian hình chữ nhật cân đối (`AR ≈ 1.2 – 1.8`).
+
+---
+
+## 7. Vòng lặp Tự trị Tam giác & Chốt chặn Middleware Chống Treo Todo (Autonomous Triad Closed-Loop Engine & Anti-Blocking Middleware)
+
+Theo quyết định kiến trúc `ADR-20261102`, hệ thống triển khai ngăn xếp tự trị 3 trụ cột nhằm xóa bỏ hoàn toàn hiện tượng tác nhân spam hỏi người dùng (`ask` tool spam) và tự ý đóng băng nhiệm vụ (`todo block` deadlock):
+
+```mermaid
+flowchart TD
+    classDef host fill:#0f172a,stroke:#38bdf8,color:#f8fafc,stroke-width:1.5px
+    classDef core fill:#1e3a8a,stroke:#60a5fa,color:#f8fafc,stroke-width:1.5px
+    classDef gate fill:#065f46,stroke:#34d399,color:#f8fafc,stroke-width:1.5px
+    classDef advisor fill:#581c87,stroke:#c084fc,color:#f8fafc,stroke-width:1.5px
+    classDef warn fill:#7c2d12,stroke:#fb923c,color:#f8fafc,stroke-width:1.5px
+
+    Agent["([Tác tử Lập trình OMP<br/>OMP Coding Agent])"]:::host
+    MW{{"{{Chốt chặn Middleware Chống Spam & Bế tắc<br/>src/anti-blocking-middleware.ts}}"}}:::gate
+    Code[["Mã nguồn & Kiểm thử Đơn vị<br/>Code Edits & bun test"]]:::core
+    Judge{{"{{Thẩm phán Nguyên tử Jev<br/>src/atomic-judge.ts}}"}}:::gate
+    Adv[["[[Cố vấn Độc lập Chữa lành<br/>src/proactive-advisor-dispatch.ts]]"]]:::advisor
+    Done[("Chốt Hoàn tất Nhiệm vụ<br/>todo done & APPROVED_PENDING_COMMIT")]:::core
+
+    Agent -->|"1. Thực thi vi mã & chạy test"| Code
+    Code -->|"2. Kiểm tra AST & Vi sai vi hạt"| Judge
+    Judge -->|"3a. Đạt toàn bộ vi từ (Pass)"| Done
+    Judge -->|"3b. Thất bại vi từ (Failure)"| Adv
+    Adv -->|"4. Chẩn đoán gốc rễ & Tái lập kế hoạch"| Agent
+    Agent -.->|"Cố ý gọi ask về lỗi kỹ thuật"| MW
+    Agent -.->|"Cố ý gọi todo block do test fail"| MW
+    MW -->|"Chặn đứng & Cung cấp Bản mô tả Khắc phục"| Adv
+```
+
+### 7.1 Chốt chặn Chống Hỏi Bừa & Chống Đóng băng (`src/anti-blocking-guards.ts`)
+1. **Cổng `ask` duy nhất (`interceptAskCall`, được `typesafe-planner.ts` gọi)**:
+   - Khi tác nhân chuẩn bị gửi câu hỏi qua `ask`, cổng kiểm tra **mọi** câu hỏi trong `questions` (không chỉ câu đầu) bằng `isTechnicalImplementationQuestion`. Nếu bất kỳ câu nào chứa từ khóa về lỗi kiểm thử (`bun test`, `failed`, `syntax error`), mã lỗi, hoặc yêu cầu gỡ lỗi, lời gọi bị chặn đứng với mã cảnh báo:
+     `BLOCKED: Câu hỏi liên quan đến lỗi kỹ thuật, gỡ lỗi hoặc chi tiết triển khai mã nguồn. Tác tử BẮT BUỘC phải tự động triệu hồi Advisor và Thẩm phán TypeSafe Jev Judge để tự phân tích và lập giải pháp, KHÔNG ĐƯỢC tra khảo người dùng.`
+   - **Ngoại lệ do con người sở hữu (`humanOwned`)**: nếu nhiệm vụ đang thực hiện có kế hoạch phục hồi (recovery plan) mà chủ sở hữu là con người (`kind: "human"` và `owner: "human"`, ví dụ `HUMAN_REQUIRED` hoặc bị từ chối lặp lại khi không có tiến triển), việc hỏi con người là con đường hợp lệ duy nhất, nên cổng không chặn để tránh bế tắc (deadlock). Cờ `humanOwned` chỉ được tính từ trạng thái phục hồi do host xác thực (`currentTaskRecoveryIsHumanOwned` trong `typesafe-planner.ts`), không bao giờ từ tham số của lời gọi `ask`. Hàm này chỉ đọc và đóng-khi-nghi-ngờ (fail-closed): không có đúng một nhiệm vụ `in_progress`, thiếu runtime xác minh, kế hoạch không thuộc con người, hoặc `getRecovery` ném lỗi đều giữ nguyên việc chặn.
+   - **Giới hạn đã biết**: ngoại lệ không bị ràng buộc theo chủ đề câu hỏi và vẫn mở sau khi giải quyết cho đến khi commit (kế hoạch phục hồi được lưu bền vẫn là `human`). Hệ quả chỉ là người dùng có thể bị hỏi (mất tác dụng chống làm phiền), không thay đổi quyền phê duyệt nào.
+2. **Chặn thao tác `todo(op="block")` trên các lỗi có thể tự sửa (`isSolvableTechnicalFailure`)**:
+   - `interceptTodoCall` (mã chết, trùng lặp) đã bị gỡ bỏ; `todo-lifecycle-authority` (`src/todo-lifecycle-authority.ts`) là thẩm quyền chặn `todo` duy nhất. Khi lý do `block` là lỗi kiểm thử hoặc thiếu bằng chứng có thể tự sửa, thẩm quyền này từ chối và bắt buộc tác tử chuyển ngữ cảnh sang Cố vấn Độc lập, tiếp tục vòng lặp tự chữa lành 5 bước.
+3. **Gợi ý khắc phục tự động (`shouldAppendAdvisorRemediation`, `formatAdvisorAutoRemediation`)**:
+   - Khi tiền kiểm (preflight) của `todo done` thất bại, gợi ý gọi Cố vấn chỉ được đính kèm theo trạng thái: `REJECTED` và `EVIDENCE_REQUIRED` sau khi đã có đánh giá (kể cả danh sách thiếu rỗng, vì người chẩn đoán là Advisor theo `task-recovery`). Không đính kèm cho `UNAVAILABLE`, `HUMAN_REQUIRED`, hoặc trường hợp "chưa có đánh giá nào": runtime đánh dấu rõ ràng bằng cờ `reviewMissing: true` ở kết quả preflight (`src/task-verification-runtime.ts`), không suy diễn từ danh sách thiếu rỗng.
+   - Lệnh gợi ý dùng `purpose: "consultation"` để `typesafe_prepare_advisor` chọn chế độ tư vấn; nếu thiếu, công cụ sẽ rơi vào chế độ `task` và bị runtime từ chối khi chưa có đủ bằng chứng nhiệm vụ.
+
+### 7.2 Vòng lặp Điều phối Cố vấn Tự động Chữa lành (`src/proactive-advisor-dispatch.ts`)
+- Tự động định dạng và cấp phát tham số gọi công cụ `typesafe_prepare_advisor` với `decision="stuck"`, kèm theo nhật ký lỗi và báo cáo thất bại của Thẩm phán.
+- Trích xuất bản đánh giá 6 phần chuẩn mực của Advisor (`Root Cause Analysis`, `Design Trade-offs`, `Ranked Solutions`, `Concrete Re-plan Steps`, `Edge Cases`, `Risk Analysis`) để tác tử tiếp thu và tự động tái lập kế hoạch mà không cần sự can thiệp thủ công từ người dùng.
+
+### 7.3 Thẩm phán Nguyên tử Đánh giá Vi hạt (`src/atomic-judge.ts`, `src/atomic-decision-policy.ts`)
+- Chia nhỏ tiêu chí thẩm định thành các vị từ vi hạt độc lập (`atomic micro-predicates`), hỗ trợ các chính sách đánh giá phân lớp:
+  - `support_only`: Áp dụng cho các tiêu chí chứng minh sự hiện diện của tính năng (open-world).
+  - `closed_world_boolean`: Cưỡng chế vùng không chắc chắn nghiêm ngặt giữa `supportsAbove` và `contradictsBelow`.
+  - `counterevidence_only`: Yêu cầu các tham chiếu phản chứng cụ thể khi từ chối.
+- Đảm bảo các sai lệch nhỏ không bị cộng dồn thành lỗi nghiêm trọng và giữ độ trễ thẩm định ở mức cực thấp.

@@ -8,7 +8,9 @@
 | Kết nối HTTP của extension (Extension Transport) | `--live` hoặc `--require-live` tường minh | Kết quả request trực tiếp của extension và model được dịch vụ trả về | Native `judge()` của OMP hoặc phê duyệt ngữ nghĩa (Semantic Approval) |
 | Vai trò judge bản địa (Native Judge Role) | `bun tools/native-judge-setup.cjs --check --config <config.yml>` | Tệp được chọn chứa role `typesafe/jev-1.14.0` | Profile đang chạy thực sự dùng tệp đó, credential hợp lệ |
 | Định tuyến judge bản địa (Native Judge Routing) | `eval` gọi `judge()` và `judgeBatch()`, ghi metadata model | Backend thực sự phục vụ request cụ thể | Chất lượng trên dữ liệu thực, Advisor hoặc quyền hoàn tất todo |
+| Lớp chạy không gian làm việc (Workspace Runtime Layer) | `bun run verify:workspace` (ngoại tuyến) và `bun run verify:workspace --runtime` (khởi động `omp` RPC; có thể gọi HTTP kiểm tra sức khỏe một lần cho mỗi lần khởi động) | `.omp/config.yml` khớp byte; cấu hình toàn cục không che mảng của dự án; `omp` tại gốc kho chứng minh đúng một nguồn gốc là điểm vào không gian làm việc, không có `?mtime`; `omp` tại thư mục tạm chứng minh đúng nguồn gốc đích | Rằng mã không gian làm việc đã thăng cấp sang đích; phê duyệt ngữ nghĩa |
 | Mã được nạp (Loaded Code) | Khởi động lại và thực hiện đường hành vi cần kiểm tra | Hành vi quan sát trong phiên mới | Toàn bộ mã đã được kiểm định chỉ từ digest |
+| Mã được nạp sau thăng cấp (Post-Promotion Loaded Code) | Sau `sync`, khởi động `omp --config tools/omp-target-gate-overlay.yml` tại gốc kho, hoặc `omp` từ một thư mục tạm, rồi đọc `runtime-origin` | Nguồn gốc nạp là mã **đã triển khai** (đích), không phải mã không gian làm việc | Hành vi ngữ nghĩa của mã đó |
 | Hoàn tất nhiệm vụ (Native Finality) | Bằng chứng đầy đủ, M, Advisor thật và kết quả Core đã quyết toán khớp mục tiêu | Hoàn tất đúng hiện thân (Incarnation) | Nhiệm vụ hoặc hiện thân khác |
 
 Không có lệnh verifier đơn lẻ nào chứng minh toàn bộ các lớp trên. Không dùng số lượng tệp, thời gian chạy dự kiến hoặc dòng trạng thái xanh thay cho bằng chứng hành vi.
@@ -22,6 +24,17 @@ node tools/sync-baseline.cjs --dry-run
 Verifier mặc định ngoại tuyến (Offline by Default), kể cả khi có `TYPESAFE_API_KEY`. `--help` thoát trước kiểm tra cài đặt; tham số lạ bị từ chối. Chỉ `--live`/`--require-live` gọi HTTP. Kế hoạch đồng bộ có mã thoát `0` chỉ nghĩa tiền kiểm hợp lệ; verifier yêu cầu mọi hành động là `NOOP` để công nhận đồng bộ. JSON `verificationScope` phân biệt kiểm đĩa, HTTP, native judge, mã đã nạp và quyền ngữ nghĩa.
 
 `overallOk` chỉ tổng hợp các kiểm tra cài đặt và probe được yêu cầu; không phải phê duyệt ngữ nghĩa. Bản ghi sao lưu gần nhất là thông tin quan sát, không thay thế kiểm tra bảng kê hoặc chứng minh mã đang chạy.
+
+## Lớp Không gian làm việc (Workspace Layer)
+
+`omp` khởi động tại gốc kho chạy cấu hình toàn cục cộng với `typesafe-planner.ts` của không gian làm việc (xem [ADR-20261106](decisions/ADR-20261106-workspace-layer-fail-closed-loader.md)). Hệ quả cho việc kiểm chứng:
+
+- **Khởi động lại `omp` trong kho không còn chứng minh mã đã triển khai.** Bằng chứng nạp mã sau thăng cấp (Post-Promotion Loaded Code) phải dùng lớp phủ `omp --config tools/omp-target-gate-overlay.yml` hoặc một thư mục tạm không có `.omp/config.yml`, rồi đọc thông điệp `typesafe-health` (`kind: "runtime-origin"`, `entrypoint.origin`) và xác nhận nguồn gốc là `~/Projects/omp_extension/typesafe-planner.ts`.
+- `bun run verify:workspace` mặc định ngoại tuyến: kiểm byte `.omp/config.yml`; kiểm `tools/omp-workspace-loader.ts` tồn tại, là tệp thường và xuất mặc định là hàm (nhập mô-đun, không gọi hàm khởi tạo; hỏng thì thoát `1`); cảnh báo nếu `~/.omp/agent/config.yml` có `extensions` hoặc `disabledExtensions` khác rỗng ở cấp cao nhất (mảng dự án thay thế, không hợp nhất); liệt kê hành động không phải `NOOP` của `tools/sync-baseline.cjs --dry-run` (phân tích chặt: mỗi mục phải là hành động và gốc đã biết; mã thoát khác `0` hoặc đầu ra không hiểu hết báo `CONFLICT`, không bao giờ coi là "không khác biệt"); in số tệp bẩn (`sync` triển khai cây làm việc, không phải một commit). Từ chối chạy ở đích triển khai.
+- `--runtime` tách riêng vì có thể gọi HTTP kiểm tra sức khỏe: số nguồn gốc bằng `0` là `FAIL`; dự án bị loại trừ tường minh báo `EXCLUDED`, không phải `FAIL` (nhưng không che được lỗi tệp bộ nạp). Mã thoát: `0` đạt, `1` có kiểm tra hỏng, `2` sai cách dùng. Hỗ trợ `--json`.
+- Bộ nạp thất bại-đóng chặn công cụ ngoài danh sách chỉ-đọc cục bộ khi điểm vào không nạp được, ném lỗi, hoặc không đăng ký trình xử lý `tool_call` nào, và đưa thông điệp `typesafe-workspace-loader-error` vào phiên; `--runtime` báo `FAIL` nếu thấy thông điệp này.
+- Giới hạn: nếu tệp bộ nạp bị thiếu hoặc không nhập được thì phiên tại gốc kho không có cổng nào; kiểm tra `loader-file` phát hiện, không ngăn chặn. Bảo vệ ghi chỉ phủ `write`/`edit`/`ast_edit`; `bash`/`eval` không thể sàng lọc đầy đủ.
+- Bằng chứng này không thay cho `verify-omp-global.cjs`: lớp chạy không gian làm việc không chứng minh bản kê đích.
 
 ## Thăm dò HTTP tường minh (Explicit Live Probe)
 

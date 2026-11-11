@@ -63,7 +63,7 @@ Không đưa vào repo/bản sao chia sẻ: `.env`, auth store, config có khóa
 | Không có installer loader | Host/người vận hành chuẩn bị loader; giữ bất biến không ghi proxy toàn cục |
 | Không có manifest/version bootstrap skills | Các `ck:*` ngoài repo phải được cài riêng; launcher native không đòi chúng |
 | Không ghim binary OMP và dependency lock | Ghi phiên bản đã chạy, kiểm help/catalog/smoke trên máy đích; không tuyên bố reproducible binary build |
-| Legacy deploy/text-rewrite scripts | Không dùng `scripts/deploy-baseline-to-target.cjs` hoặc script vá planner như đường cài lại; chỉ dùng transaction `tools/sync-baseline.cjs` |
+| Legacy deploy/text-rewrite scripts | Script sao chép trực tiếp `deploy-baseline-to-target.cjs` đã bị xóa; không dùng script vá planner như đường cài lại; chỉ dùng transaction `tools/sync-baseline.cjs` |
 | Windows wrappers | `.bat`/PowerShell dành Windows; Node sync có overrides nhưng chưa kiểm chứng trên Linux/macOS trong phiên này |
 | Extension host bridge | Native eval không cấp callback extension hoặc Advisor authority tự động; migration vẫn cần hợp đồng host thật |
 

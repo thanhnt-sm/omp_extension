@@ -8,28 +8,37 @@ Hệ thống kiểm soát chất lượng (`Quality Control`), bảo mật (`Sec
 
 ```mermaid
 flowchart TB
+    classDef host fill:#0f172a,stroke:#38bdf8,color:#f8fafc,stroke-width:1.5px
+    classDef core fill:#1e3a8a,stroke:#60a5fa,color:#f8fafc,stroke-width:1.5px
+    classDef gate fill:#065f46,stroke:#34d399,color:#f8fafc,stroke-width:1.5px
+    classDef advisor fill:#581c87,stroke:#c084fc,color:#f8fafc,stroke-width:1.5px
+    classDef warn fill:#7c2d12,stroke:#fb923c,color:#f8fafc,stroke-width:1.5px
+
     subgraph Host["TIẾN TRÌNH CHỦ OMP & LỊCH SỬ NHÁNH GỐC (OMP HOST PROCESS & NATIVE BRANCH HISTORY)"]
-        Agent["Tác tử Lập trình OMP (OMP Coding Agent)"]
-        Branch["Lịch sử Nhánh Phiên (Session Branch History)\n(sessionManager.getBranch())"]
-        UI["Giao diện Xác nhận Tin cậy (Trusted Host UI)\n(ctx.ui.confirm)"]
+        Agent["([Tác tử Lập trình OMP<br/>OMP Coding Agent])"]:::host
+        Branch[("Lịch sử Nhánh Phiên<br/>sessionManager.getBranch()")]:::host
+        UI["Giao diện Xác nhận Tin cậy<br/>ctx.ui.confirm"]:::host
+        MW{{"{{Chốt chặn Middleware Chống Bế tắc<br/>src/anti-blocking-middleware.ts}}"}}:::gate
     end
 
     subgraph Extension["TIỆN ÍCH MỞ RỘNG TYPESAFE (OMP TYPESAFE EXTENSION — typesafe-planner.ts + src/*)"]
         direction LR
-        Contract["1. Thẩm quyền Hợp đồng & Lịch sử\n(Contract & History Authority — typesafe_bind_task)\nKhóa incarnationId & chụp Ảnh nền"]
-        Evidence["2. Động cơ Bằng chứng & Biên nhận\n(Evidence & Receipt Engine — typesafe_collect_evidence)\nĐộ lệch ảnh chụp + bun test + Gói <= 32KB"]
-        Consensus["3. Động cơ Đồng thuận Lưỡng viện\n(Bicameral Consensus Engine — typesafe_review_task)\nCổng 1 (Cục bộ) + Cổng 2 (M) + AdvisorReceipt"]
-        Shield["4. Khiên Bảo vệ Tài nguyên & Vòng đời\n(Resource & Lifecycle Shield — write/edit/ask/todo/bash)\nBảo vệ hạ tầng & kiểm soát drop/block/exclude"]
+        Contract[["1. Thẩm quyền Hợp đồng & Lịch sử<br/>typesafe_bind_task & Khóa incarnationId"]]:::core
+        Evidence[["2. Động cơ Bằng chứng & Biên nhận<br/>typesafe_collect_evidence & bun test"]]:::core
+        Consensus[["3. Động cơ Đồng thuận Lưỡng viện<br/>typesafe_review_task & M + Advisor"]]:::core
+        Shield{{"4. Khiên Bảo vệ Tài nguyên & Vòng đời<br/>write/edit/ask/todo/bash Shield"}}:::gate
         Contract --> Evidence --> Consensus
     end
 
     subgraph External["BIÊN GIỚI KIỂM CHỨNG CÔ LẬP & BÊN NGOÀI (EXTERNAL & ISOLATED VERIFICATION BOUNDARIES)"]
-        Jev["Cổng API TypeSafe System One\nhttps://api.typesafe.ai/v1/systemone\n(model: jev-latest -> jev-1.14.0)"]
-        Advisor["Tiến trình Con Cố vấn Chỉ Đọc\n(Read-Only Advisor Subagent)\n(Khóa SHA-256 Tệp & Lọc Tải trọng)"]
-        VerifyHome["Thư mục Kiểm chứng Cô lập\n(Isolated Verification Home)\n(Môi trường Con Sạch & Quản lý Cây Tiến trình)"]
+        Jev["Cổng API TypeSafe System One<br/>api.typesafe.ai/v1/systemone<br/>model: jev-latest -> jev-1.14.0"]:::gate
+        Advisor[["Tiến trình Con Cố vấn Chỉ Đọc<br/>Read-Only Advisor Subagent<br/>Khóa SHA-256 Tệp & Lọc Tải trọng"]]:::advisor
+        VerifyHome["Thư mục Kiểm chứng Cô lập<br/>Isolated Verification Home<br/>Môi trường Con Sạch & Quản lý Cây Tiến trình"]:::gate
     end
 
-    Agent <-->|"16 công cụ typesafe_* +\n5 trình bọc công cụ gốc (wrapped native tools)"| Extension
+    Agent <-->|"16 công cụ typesafe_* + 5 trình bọc công cụ gốc"| Extension
+    Agent -.->|"Chặn ask spam / todo block bừa bãi"| MW
+    MW -->|"Tự động chuyển tiếp chữa lành"| Advisor
     Extension <-->|"Kết nối Mật mã học (Cryptographic Join)"| Branch
     Extension <-->|"Leo thang Con người (Human Escalation)"| UI
     Evidence -->|"Lệnh Được Duyệt (Approved Command)"| VerifyHome
@@ -53,6 +62,13 @@ flowchart TB
 4. **Triển khai Giao dịch & Vận hành Độc lập OMP (`tools/`)**:
    - Đồng bộ có khóa (`.omp-sync-target.lock`), nhật ký giao dịch (`.sync-journal.json`), kiểm thử cô lập và hoàn nguyên tự động trên 2 gốc (`target` và `global_omp_agents`). Tách rời hoàn toàn khỏi `.claude`.
    - Hỗ trợ cơ chế loại trừ dự án linh hoạt (`excludeProjects` trong `~/.omp/agent/typesafe.json`): dự án bị loại trừ chạy OMP gốc thuần túy, không bị chặn bởi cổng kiểm duyệt.
+5. **Vòng lặp Tự trị Tam giác & Chốt chặn Middleware (`Autonomous Triad & Anti-Blocking Middleware`)**:
+   - Chốt chặn `src/anti-blocking-middleware.ts` cấm tác tử spam câu hỏi `ask` về lỗi lập trình/kiểm thử đối với người dùng và cấm tự ý gọi `todo(op="block")` khi gặp lỗi có thể tự sửa.
+   - Tự động triệu hồi Cố vấn Độc lập (`src/proactive-advisor-dispatch.ts`) với `decision="stuck"` để phân tích nguyên nhân gốc rễ và đề xuất kế hoạch tái cấu trúc tự động.
+6. **Thẩm phán Nguyên tử Đánh giá Vi hạt (`Atomic TypeSafe Jev Judge`)**:
+   - Chia nhỏ bài toán kiểm chứng thành các vị từ vi hạt độc lập qua `src/atomic-judge.ts`, `src/atomic-decision-policy.ts` và `src/atomic-parent.ts`, loại bỏ hiện tượng sai lệch cộng dồn và hỗ trợ chính sách đánh giá thế giới đóng/mở.
+7. **Quản trị Kế hoạch & Sổ cái Trung tâm Chuẩn ClaudeKit (`ck:project-manager`)**:
+   - Bộ công cụ `tools/ck-project-manager.cjs` đảm bảo tính kế thừa bất biến qua các phiên làm việc, tự động đối soát ngược (Sync-Back Guard), phân biệt stubs và tiêu chí chức năng, duy trì trạng thái hoàn tất 100% (41/41 plans) tại `plans/plan-ledger.json` và `plans/README.md`.
 ---
 
 ## ⚡ Bắt đầu Nhanh & Vận hành One-Click (Quick Start)
@@ -101,8 +117,9 @@ Toàn bộ tài liệu kiến trúc, mô hình hóa, đặc tả mã nguồn, lu
 | | [`docs/install-global-and-other-machine.md`](docs/install-global-and-other-machine.md) | Lệnh cài native judge toàn cục, khởi chạy judge-first và cài extension sang máy khác (global installation). |
 | | [`docs/native-judge-guide.md`](docs/native-judge-guide.md) | Cài lại judge bản địa (native judge), chính sách ưu tiên phán đoán (judge-first), bằng chứng smoke và giới hạn khác với extension. |
 | | [`docs/research/omp-judge-sources.md`](docs/research/omp-judge-sources.md) | Nguồn nghiên cứu chính thức (official sources), kết quả quan sát và giới hạn phiên bản. |
+| | [`docs/autonomous-evidence-unblocking-guide.md`](docs/autonomous-evidence-unblocking-guide.md) | Cẩm nang tự động gỡ bỏ todo dựa trên chuỗi bằng chứng kiểm thử thực nghiệm (exitCode 0, AST clean, Advisor). |
 | | [`docs/typesafe-operations.md`](docs/typesafe-operations.md) | Sổ tay vận hành khẩn cấp, phục hồi task bị từ chối, EGC screening và bảo toàn telemetry. |
-| | [`docs/decisions/README.md`](docs/decisions/README.md) | Danh mục các Bản ghi Quyết định Kiến trúc (ADR-2026-10-05 đến ADR-20261019). |
+| | [`docs/decisions/README.md`](docs/decisions/README.md) | Danh mục các Bản ghi Quyết định Kiến trúc (ADR-2026-10-05 đến ADR-20261102). |
 
 ---
 

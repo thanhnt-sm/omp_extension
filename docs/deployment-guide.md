@@ -63,6 +63,15 @@ flowchart TB
 > **Tại sao không sửa trực tiếp file trong `.omp/agent/extensions/`?**
 > `typesafe-planner.ts` nạp hàng chục module tương đối (`./src/*`). Nếu đặt toàn bộ mã nguồn vào `.omp/agent/extensions/` hoặc sửa trực tiếp tại đó, cấu trúc module resolution sẽ bị phá vỡ và mất khả năng kiểm soát giao dịch/rollback.
 
+### 2.1 Lớp Không gian làm việc (Workspace Layer) trước khi thăng cấp
+
+Trước bước `sync`, có thể kiểm thử mã đang phát triển trong `omp` thật: khởi động `omp` tại gốc kho. `.omp/config.yml` (chỉ có ở không gian làm việc) vô hiệu hóa bộ nạp môi trường của `typesafe-planner` và nạp `tools/omp-workspace-loader.ts`, nên `omp` chạy cấu hình toàn cục cộng với mã không gian làm việc. Lớp này **không thay đổi** Bất biến Vàng: không ghi vào `~/.omp`, và `.omp/config.yml` **không** nằm trong kiểm kê đồng bộ (chỉ `.omp/agents/**` được triển khai).
+
+- Trước khi đồng bộ: `bun run verify:workspace` (ngoại tuyến) cho biết không gian làm việc có gì mà toàn cục chưa có (hành động không phải `NOOP` của `sync:dry-run`; mã thoát khác `0` là `CONFLICT`) và số tệp bẩn. `sync` triển khai **cây làm việc**, không phải một commit.
+- Sau khi đồng bộ: khởi động lại `omp` trong kho **không** chứng minh mã đã triển khai. Dùng `omp --config tools/omp-target-gate-overlay.yml` (hoặc `omp` từ thư mục tạm) và xác nhận `runtime-origin` trỏ tới `~/Projects/omp_extension/typesafe-planner.ts`; có thể chạy `bun run verify:workspace --runtime` (có thể gọi HTTP kiểm tra sức khỏe một lần mỗi lần khởi động).
+- Đường sao chép trực tiếp `scripts/deploy-baseline-to-target.cjs` đã bị xóa; lần `sync` kế tiếp sẽ `PRUNE` bản sao của nó ở đích. Chỉ `tools/sync-baseline.cjs` được ghi vào đích.
+- Chi tiết quyết định: [ADR-20261106](decisions/ADR-20261106-workspace-layer-fail-closed-loader.md).
+
 ---
 
 ## 3. Vận hành Tự động Hóa Tối Đa (One-Click Operations)

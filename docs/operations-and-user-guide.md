@@ -107,7 +107,21 @@ bun run sync:global
 
 # Chạy quy trình thông minh One-Click (Auto Verify -> Sync if needed -> Verify)
 bun run oneclick
+
+# Kiểm tra Lớp Không gian làm việc (ngoại tuyến, chỉ đọc)
+bun run verify:workspace
+
+# Như trên, cộng khởi động omp RPC tại gốc kho và tại thư mục tạm (có thể gọi HTTP kiểm tra sức khỏe một lần mỗi lần khởi động)
+bun run verify:workspace --runtime
 ```
+
+### 3.3 Chạy `omp` tại gốc kho: Lớp Không gian làm việc (Workspace Layer)
+
+- Khởi động `omp` tại gốc kho chạy **cấu hình toàn cục** (`settings`, `plugins`, `skills`, `auth`) **cộng với** `typesafe-planner.ts` của không gian làm việc, qua `.omp/config.yml` và `tools/omp-workspace-loader.ts`. Dùng để thử mã mới trước khi `sync`.
+- Nếu điểm vào không gian làm việc hỏng, phiên vẫn chạy nhưng mọi công cụ ngoài `read`, `grep`, `glob`, `find`, `ast_grep` (cục bộ, không URL) bị chặn (thất bại-đóng; cũng áp dụng khi nạp xong mà không đăng ký trình xử lý `tool_call` nào) và có thông điệp `typesafe-workspace-loader-error`. Sửa tệp từ bên ngoài phiên, hoặc khởi động `omp --config tools/omp-target-gate-overlay.yml` để chạy cổng **đã triển khai** từ chính gốc kho.
+- Sau `sync`, muốn xác nhận mã đã triển khai đang chạy, KHÔNG khởi động lại trong kho thường: dùng lớp phủ nói trên hoặc `omp` từ một thư mục tạm.
+- `bun run judge:start` (`tools/native-judge-launch.cjs`) kế thừa thư mục hiện tại: chạy từ gốc kho sẽ dùng mã không gian làm việc; chạy từ nơi khác dùng mã đã triển khai.
+- `.omp/config.yml` của bất kỳ kho nào cũng có thể vô hiệu hóa một tiện ích môi trường; đây là tính chất của máy chủ `omp`. Vì vậy `~/.omp/agent/config.yml` không nên đặt `extensions`/`disabledExtensions` khác rỗng (mảng dự án sẽ thay thế chúng; `verify:workspace` cảnh báo).
 
 ---
 

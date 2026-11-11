@@ -13,7 +13,7 @@ Tài liệu này cung cấp danh mục chính thức và đầy đủ (Authorita
 | **Điểm nhập Gốc (Root Entrypoint — `typesafe-planner.ts`)** | 1 | 2,317 | TypeScript (Bun / Node >= 18) | Đăng ký 16 công cụ `typesafe_*`, 5 trình bọc công cụ gốc có bảo vệ (Guarded Native Wrappers), 12 điểm móc vòng đời (Lifecycle Hooks), dàn dựng/cam kết `todo` 2 pha (2-Phase Todo Staging/Commit), và các chốt chặn tệp/hỏi/lệnh vỏ (File/Ask/Bash Guards) |
 | **Mã nguồn Lõi (Core Source — `src/**`)** | 100 | 15,028 | 91 TS + 7 CJS + 2 `.d.cts` | Hợp đồng theo giai đoạn (Staged Contracts), ảnh chụp nhanh không gian làm việc (Workspace Snapshots), gói bằng chứng 32 KiB (Evidence Packets), Đồng thuận Lưỡng viện (Bicameral Consensus — `M` + Advisor), thẩm phán nguyên tử chạy ngầm `H` (Atomic Shadow Judge), EGC, và vận chuyển/che giấu CJS (CJS Transport/Redaction) |
 | **Công cụ Vận hành & Đánh giá (Operational & Eval Tools — `tools/**`)** | 26 | 2,718 | 17 TS + 4 CJS + 2 PS1 + 2 BAT + 1 MD | Xác minh/đồng bộ một chạm (One-Click Verification/Sync: `oneclick-omp`, `verify-omp-global`, `sync-baseline`, `promote-omp-global`), kiểm thử khói SDK (SDK Smoke Test), và bộ đo kiểm bắt cặp `M`/`H` (Paired `M`/`H` Benchmark Suite) |
-| **Kịch bản Bảo trì (Maintenance Scripts — `scripts/**`)** | 6 | 282 | CommonJS (`.cjs`) | Các kịch bản di trú không gian làm việc (Workspace Migration) và vá lỗi mô hình mặc định mang tính lịch sử |
+| **Kịch bản Bảo trì (Maintenance Scripts — `scripts/**`)** | 5 | 208 | CommonJS (`.cjs`) | Các kịch bản di trú không gian làm việc (Workspace Migration) và vá lỗi mô hình mặc định mang tính lịch sử |
 | **Bộ Kiểm thử Xác minh (Verification Suite — `tests/**`)** | 82 | 15,898 | 66 TS/Test + 16 JSON/JSONL/TXT | Hơn 918 bài kiểm thử đơn vị (Unit), tích hợp (Integration), đội đỏ đối kháng (Adversarial Red-Team), luồng công việc đầu-cuối (E2E Workflow), và đánh giá bắt cặp (Paired Evaluation) |
 | **Tài liệu Kỹ thuật (Technical Documentation — `docs/**`)** | 42 | ~14,500 | Markdown + Mermaid | Kiến trúc hệ thống (System Architecture), mô hình hóa C4 (C4 Modeling), đặc tả mô-đun (Module Specifications), luồng logic (Logic Flows), máy trạng thái hữu hạn (FSMs), ADR và nhật ký kỹ thuật (Engineering Journals) |
 
@@ -23,7 +23,7 @@ pie title Phân bổ Dòng mã Nguồn và Kiểm thử - Codebase LOC Distribut
     "src/** (100 tệp - 100 files)" : 15028
     "tools/** (26 tệp - 26 files)" : 2718
     "typesafe-planner.ts (1 tệp - 1 file)" : 2317
-    "scripts/** (6 tệp - 6 files)" : 282
+    "scripts/** (5 tệp - 5 files)" : 208
 ```
 
 ---
@@ -257,7 +257,7 @@ Các cầu nối bảo mật TypeScript, bộ phân tích khác biệt AST (AST 
 
 ---
 
-## 4. Công cụ Vận hành (`tools/**` — 26 Tệp), Kịch bản (`scripts/**` — 6 Tệp) & Kiểm thử (`tests/**` — 82 Tệp)
+## 4. Công cụ Vận hành (`tools/**` — 26 Tệp), Kịch bản (`scripts/**` — 5 Tệp) & Kiểm thử (`tests/**` — 82 Tệp)
 
 ### 4.1 `tools/**` (`26 tệp`, `2,718 LOC`)
 
@@ -265,17 +265,17 @@ Các cầu nối bảo mật TypeScript, bộ phân tích khác biệt AST (AST 
 | :--- | :--- | :--- |
 | **Xác minh Toàn cục & Một chạm (One-Click & Global Verifier — 5 tệp)** | `oneclick-omp.bat`, `oneclick-omp.ps1` (`57` LOC), `verify-omp-global.bat`, `verify-omp-global.cjs` (`367` LOC), `README.md` (`41` LOC) | `npm run verify:global` / `npm run verify:live` / `npm run oneclick`: Kiểm tra nhanh (`<3s`) qua 6 lớp (Trình trung chuyển Nạp — Loader Proxy, Đối xứng Bảng kê SHA-256 trên 2 Gốc — 2-Root Manifest SHA-256 Parity, Kiểm tra Tiền trạm `--dry-run`, Tự kiểm tra Bộ phân giải + Bộ che giấu `TELEMETRY_COUNT_KEYS`, Nhật ký Sao lưu Mới nhất, và Thăm dò Trực tiếp `jev-latest` tùy chọn). `oneclick-omp` chỉ tự động đồng bộ khi phát hiện độ lệch (Drift). |
 | **Đồng bộ Đường cơ sở Giao dịch (Transactional Baseline Sync — 3 tệp)** | `sync-baseline.cjs` (`533` LOC), `promote-omp-global.ps1` (`223` LOC), `sync-baseline.bat` (`6` LOC) | `npm run sync`: Chiếm khóa `.omp-sync-<hash>.lock`, xác minh lại định danh kế hoạch sau khi khóa (`deployment plan changed after lock`), sao lưu tiền ảnh vào `omp_extension_backup_<ISO>/.sync-journal.json`, ghi nguyên tử vào `target` và `global_omp_agents` (Schema v2), chạy `bun test` trong `createVerificationHome()`, và hoàn nguyên theo thứ tự ngược lại (Reverse-Order Rollback) nếu có bất kỳ lỗi nào. |
+| **Lớp Không gian làm việc (Workspace Layer — 5 tệp)** | `omp-workspace-loader.ts`, `omp-target-gate-overlay.yml`, `verify-omp-workspace.cjs`, `verify-omp-workspace-lib.cjs`, `verify-omp-workspace-runtime.cjs` | Bộ nạp thất bại-đóng (Fail-Closed Loader) cho `.omp/config.yml` của không gian làm việc, lớp phủ (overlay) chạy cổng đã triển khai từ gốc kho, và trình xác minh `bun run verify:workspace [--runtime]`. Xem `docs/decisions/ADR-20261106-workspace-layer-fail-closed-loader.md`. |
 | **Kiểm thử Khói SDK Gốc (Native SDK Smoke Test — 1 tệp)** | `todo-remediation-smoke.ts` (`79` LOC) | Khởi chạy CLI `omp` thực tế kết nối tới máy chủ OpenAI SSE kịch bản vòng lặp cục bộ (Loopback Scripted OpenAI SSE Server) trong `createVerificationHome()` để chứng minh lệnh `todo:done` chưa được phê duyệt bị chặn trước khi Core phát ra kết quả công cụ (`SDK_NATIVE_SMOKE_PROOF`). |
 | **Bộ Đánh giá Bắt cặp `M`/`H` (Paired `M`/`H` Evaluation Suite — 17 tệp)** | `jev-paired-eval.ts` (`88` LOC), `jev-paired-eval-lib.ts` (`15` LOC), `jev-paired-types.ts` (`102` LOC), `jev-paired-inputs.ts` (`101` LOC), `jev-paired-files.ts` (`113` LOC), `jev-paired-validation.ts` (`120` LOC), `jev-paired-runner.ts` (`219` LOC), `jev-paired-host-protocol.ts` (`72` LOC), `jev-paired-host-client.ts` (`70` LOC), `jev-paired-host-journal.ts` (`25` LOC), `jev-paired-workspace.ts` (`160` LOC), `jev-paired-metrics.ts` (`157` LOC), `jev-paired-metric-types.ts` (`26` LOC), `jev-paired-accounting.ts` (`72` LOC), `jev-paired-exposure.ts` (`33` LOC), `jev-paired-statistics.ts` (`70` LOC), `jev-paired-ablations.ts` (`25` LOC) | Giao diện CLI đánh giá bắt cặp đăng ký trước (Preregistered Paired Evaluation CLI: `validate`, `freeze`, `benchmark`, `report`, `decide`) so sánh mô hình Nguyên khối Đã sửa (`M` — Repaired Monolithic) với mô hình Nguyên tử (`H` — Atomic) theo tiêu chuẩn `strict-corpus-dominance-v1` với phân tách tập hợp hợp-tìm 60/20/20 (Union-Find Splits), khóa phơi nhiễm tập giữ lại (Holdout Exposure Locks), khoảng tin cậy Clopper-Pearson, và biên lai `typesafe_eval_host` ký số Ed25519. |
 
-### 4.2 `scripts/**` (`6 tệp`, `282 LOC`)
-Các tiện ích di trú CJS lịch sử được giữ lại trong bảng kê đường cơ sở (Baseline Manifest):
-1. `scripts/deploy-baseline-to-target.cjs` (`74` LOC) — Tiện ích sao chép cũ đã được thay thế bởi `tools/sync-baseline.cjs`.
-2. `scripts/patch-workspace-planner.cjs` (`92` LOC) — Kịch bản lịch sử kết nối bộ đánh giá tranh biện trong không gian làm việc.
-3. `scripts/update-planner-jev-latest.cjs` (`70` LOC) — Kịch bản cập nhật lịch sử đặt `jev-latest` làm mô hình mặc định.
-4. `scripts/remove-gate3.cjs` (`26` LOC) — Kịch bản vá lỗi lịch sử loại bỏ khối Cổng 3 (Gate 3) cũ.
-5. `scripts/safe-update-planner-model.cjs` (`19` LOC) — Kịch bản vá lỗi lịch sử cho biến `TYPESAFE_PREDICT_MODEL`.
-6. `scripts/typesafe-planner-drop-tasks.cjs` (`1` LOC) — Tệp giữ chỗ không thao tác (No-Op Stub) lịch sử cho việc hủy nhiệm vụ.
+### 4.2 `scripts/**` (`5 tệp`, `208 LOC`)
+Các tiện ích di trú CJS lịch sử được giữ lại trong bảng kê đường cơ sở (Baseline Manifest). Kịch bản sao chép trực tiếp `deploy-baseline-to-target.cjs` (đường vòng qua bản kê/nhật ký/hoàn tác) đã bị xóa; chỉ còn giao dịch `tools/sync-baseline.cjs`:
+1. `scripts/patch-workspace-planner.cjs` (`92` LOC) — Kịch bản lịch sử kết nối bộ đánh giá tranh biện trong không gian làm việc.
+2. `scripts/update-planner-jev-latest.cjs` (`70` LOC) — Kịch bản cập nhật lịch sử đặt `jev-latest` làm mô hình mặc định.
+3. `scripts/remove-gate3.cjs` (`26` LOC) — Kịch bản vá lỗi lịch sử loại bỏ khối Cổng 3 (Gate 3) cũ.
+4. `scripts/safe-update-planner-model.cjs` (`19` LOC) — Kịch bản vá lỗi lịch sử cho biến `TYPESAFE_PREDICT_MODEL`.
+5. `scripts/typesafe-planner-drop-tasks.cjs` (`1` LOC) — Tệp giữ chỗ không thao tác (No-Op Stub) lịch sử cho việc hủy nhiệm vụ.
 
 ### 4.3 `tests/**` (`82 tệp`, `15,898 LOC`)
 - **61 Bộ Kiểm thử `.test.ts` (61 Test Suites)**: Bao phủ mọi miền chức năng (`typesafe-planner.test.ts`, `typesafe-planner-integration.test.ts`, `e2e-workflow.test.ts`, `contract-runtime.test.ts`, `native-history-authority.test.ts`, `host-tool-invocation.test.ts`, `task-evidence-runtime.test.ts`, `judge-evidence-packet.test.ts`, `verification-receipt.test.ts`, `evidence-collector.test.ts`, `evidence-file-security.test.ts`, `task-artifact-routing.test.ts`, `task-verification-runtime.test.ts`, `task-verification-progress.test.ts`, `task-verification-source.test.ts`, `bicameral-consensus.test.ts`, `advisor-host.test.ts`, `advisor-runtime.test.ts`, `advisor-protocol.test.ts`, `advisor-native-budget.test.ts`, `atomic-judge.test.ts`, `jev-paired-evaluation.test.ts`, `evaluation-host.test.ts`, `egc.test.ts`, `sync-baseline.test.ts`, `typesafe-child-env.test.ts`, `public-evidence-egress.test.ts`, `egress-and-process-boundary.test.ts`, `trusted-tool-policy.test.ts`, `typesafe-transport-retry.test.ts`, `typesafe-resolver.test.ts`, `adversarial-compliance.test.ts`, `adversarial-edge-cases.test.ts`, `cook-verification-adversarial.test.ts`, v.v.).
