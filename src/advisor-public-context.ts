@@ -4,6 +4,7 @@ import type { JudgeEvidencePacket, EvidencePacketSetManifest } from "./judge-evi
 import type { TaskContract } from "./types/verification";
 import { advisorOutputSchema } from "./advisor-protocol";
 import { isPrivateEvidencePath } from "./evidence-privacy";
+import { digestBytes } from "./evidence-workspace";
 
 interface RedactionClient { redactEvidenceState(state: unknown, options: { apiKey?: string; homeDirs?: readonly string[] }): unknown }
 export interface PreparedAdvisorPublicContext { publicPrompt: string; publicContextDigest: string; packetDigest: string; criterionIds: readonly string[]; parentRequirementIds: readonly string[]; evidenceRefs: readonly string[]; integrationEvidenceRefs: readonly string[]; authorizedFiles: readonly { path: string; sha256: string }[] }
@@ -20,6 +21,21 @@ function validatePublicReferences(client: RedactionClient, references: { authori
   const masked = JSON.stringify(references).replace(/[a-f0-9]{64}/g, digest => digests.includes(digest) ? `host-hash-${digests.indexOf(digest)}` : digest);
   const publicReferences = client.redactEvidenceState(JSON.parse(masked), privacy);
   if (canonicalDigest(publicReferences) !== canonicalDigest(JSON.parse(masked))) throw new Error("advisor_public_reference_redaction_required");
+}
+/**
+ * Packet evidence ids embed sha256 values (`diff:<sha>`, `...:lines:a-b:<spanDigest>`). They are identities only when the host can
+ * recompute them from content the packet carries: the diff digest must also equal the host-built manifest, and a span digest must equal
+ * the hash of its own text AND be listed in the host-built manifest's packet source spans (self-consistency alone is not authorization).
+ * Caller-supplied hex that fails either check stays unmasked and is refused by the redactor (tighten-only). Module-private: it must only
+ * ever be fed a host-built packet and manifest.
+ */
+function hostRecomputedPacketDigests(packet: JudgeEvidencePacket, manifest?: EvidencePacketSetManifest): string[] {
+  const digests: string[] = [];
+  if (!manifest) return digests;
+  if (!packet.scope) { const diffDigest = digestBytes(packet.diff); if (diffDigest === manifest.diff.digest) digests.push(diffDigest); }
+  const manifestSpanDigests = new Set(manifest.packets.flatMap(entry => entry.source.flatMap(source => (source.spans ?? []).map(span => span.digest))));
+  for (const item of packet.source) for (const span of item.spans ?? []) if (digestBytes(span.text) === span.digest && manifestSpanDigests.has(span.digest)) digests.push(span.digest);
+  return digests;
 }
 /** Complete guarded packet, shared secret redaction, no ambient history or raw reasoning. */
 export function prepareAdvisorPublicContext(packet: JudgeEvidencePacket, options: AdvisorPublicContextOptions): PreparedAdvisorPublicContext {
@@ -41,7 +57,7 @@ export function prepareAdvisorPublicContext(packet: JudgeEvidencePacket, options
   const integrationEvidenceRefs = [...new Set((packet.integrationReceipts ?? []).map(receipt => receipt.receiptId))];
   const evidenceRefs = [...new Set([...packet.obligations.flatMap(obligation => obligation.evidenceIds), ...authorizedFiles.map(file => `source:${file.path}:${file.sha256}`), ...integrationEvidenceRefs])];
   if (!evidenceRefs.length) throw new Error("advisor_evidence_manifest_required");
-  validatePublicReferences(client, { authorizedFiles, evidenceRefs }, { apiKey: options.apiKey ?? process.env.TYPESAFE_API_KEY, homeDirs: options.homeDirs });
+  validatePublicReferences(client, { authorizedFiles, evidenceRefs }, { apiKey: options.apiKey ?? process.env.TYPESAFE_API_KEY, homeDirs: options.homeDirs }, hostRecomputedPacketDigests(packet, options.evidenceManifest));
   const publicReferences = { authorizedFiles, evidenceRefs };
   const publicPrompt = JSON.stringify({ instruction: "Independently assess EVERY original criterion, not just those selected in the initial bounded packet. Preserve contradictions, omissions and uncovered obligations. Retrieve necessary source using guarded read/grep/glob against the exact authorized file SHA manifest; prefer explicit line ranges. A span/search result never proves global absence or whole-file correctness. Assess parent integration separately; child passes do not establish compatibility. Do not infer human approval or native commit. Submit one terminal yield with data matching outputSchema. No ambient history, shell, writes, web search or private context is authorized.", state, authorizedFiles: publicReferences.authorizedFiles, outputSchema: advisorOutputSchema });
   if (Buffer.byteLength(publicPrompt, "utf8") > maxContextBytes) throw new Error("advisor_complete_public_context_exceeds_budget");

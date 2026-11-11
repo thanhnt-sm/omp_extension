@@ -7,11 +7,15 @@ import { contractReference, digestBytes, isHostSnapshot, sameContract, type Evid
 import { validateVerificationReceipt } from "./verification-receipt";
 import { selectCriterionEvidence, type CriterionPacketSelection, type CriterionEvidenceManifest, type PacketSourceEvidence } from "./evidence-selection";
 import { isPrivateEvidencePath } from "./evidence-privacy";
+import { imageDimensionReason } from "./visual-evidence-send-guard";
 export { retrieveEvidenceSource } from "./evidence-selection";
 export type { CriterionPacketSelection, EvidenceSourceSelection, EvidenceSourceRange, CriterionEvidenceManifest, PacketSourceEvidence, SourceRetrievalRequest, SourceRetrievalResult } from "./evidence-selection";
 export interface EvidenceArtifact { path: string; content: string; sha256: string; criterionIds: readonly string[]; required?: boolean }
 export interface IntegrationEvidenceReceipt { parentContractId: string; criterionId: string; receiptId: string; evidenceDigest: string }
 export interface ArtifactSelectionManifest { requiredPaths: readonly string[]; outOfPacketScope: readonly string[]; acceptedBytes: number; maxBytes: 4940 }
+export interface VisualAssetMetadata { key: string; format: "png" | "jpeg"; bytes: number; sha256: string }
+export interface SystemOneImageAsset { type: "image"; format: "png" | "jpeg"; data_base64: string }
+export interface VisualEvidence { imageBase64?: string; mimeType?: string }
 export interface JudgeEvidencePacket {
   schemaVersion: 1;
   binding: { contractId: string; revisionId: string; incarnationId: string; originalRequestDigest: string; policyDigest: string; target: TaskContract["target"] };
@@ -34,8 +38,9 @@ export interface JudgeEvidencePacket {
   artifactSelection?: ArtifactSelectionManifest;
   scope?: { kind: "criterion"; selectedCriterionIds: readonly string[]; globalCompletionEligible: false };
   manifest?: CriterionEvidenceManifest;
+  visualAssets?: readonly VisualAssetMetadata[];
 }
-export type JudgeEvidencePacketResult = { ok: true; packet: JudgeEvidencePacket; digest: string } | { ok: false; status: "EVIDENCE_REQUIRED"; reasons: string[]; omissions: EvidenceOmission[] };
+export type JudgeEvidencePacketResult = { ok: true; packet: JudgeEvidencePacket; digest: string; assetPayload?: Record<string, SystemOneImageAsset> } | { ok: false; status: "EVIDENCE_REQUIRED"; reasons: string[]; omissions: EvidenceOmission[] };
 export interface JudgeEvidencePacketOptions {
   contract: TaskContract; evidence: TaskEvidenceResult; artifacts?: readonly EvidenceArtifact[];
   requiredArtifactPaths?: readonly string[]; maxBytes?: number;
@@ -44,6 +49,8 @@ export interface JudgeEvidencePacketOptions {
   integrationReceipts?: readonly IntegrationEvidenceReceipt[];
   validateIntegrationReceipt?: (receipt: IntegrationEvidenceReceipt) => boolean;
   selection?: CriterionPacketSelection;
+  assets?: Record<string, SystemOneImageAsset>;
+  visualEvidence?: VisualEvidence;
 }
 /** One preparation path, no lexical task guessing and no silent clipping. */
 export function buildJudgeEvidencePacket(options: JudgeEvidencePacketOptions): JudgeEvidencePacketResult {
@@ -51,6 +58,28 @@ export function buildJudgeEvidencePacket(options: JudgeEvidencePacketOptions): J
   const allArtifacts = options.artifacts ?? [];
   const selected = options.selection ? selectCriterionEvidence(contract, evidence, allArtifacts, options.selection) : undefined;
   if (selected) reasons.push(...selected.reasons);
+  let assets: Record<string, SystemOneImageAsset> | undefined;
+  const visualAssets: VisualAssetMetadata[] = [];
+  if (options.assets || options.visualEvidence?.imageBase64) {
+    assets = { ...(options.assets ?? {}) };
+    if (options.visualEvidence?.imageBase64) {
+      const mime = (options.visualEvidence.mimeType ?? "").toLowerCase();
+      if (mime !== "image/png" && mime !== "image/jpeg" && mime !== "image/jpg") {
+        reasons.push("UNSUPPORTED_IMAGE_MIME_TYPE");
+        omissions.push({ reason: "UNSUPPORTED_IMAGE_MIME_TYPE", kind: "unavailable", required: true });
+      } else {
+        const format = mime === "image/jpeg" || mime === "image/jpg" ? "jpeg" : "png";
+        assets["ui_visual_evidence"] = { type: "image", format, data_base64: options.visualEvidence.imageBase64 };
+      }
+    }
+    for (const [key, asset] of Object.entries(assets)) {
+      const buf = Buffer.from(asset.data_base64, "base64");
+      // Fail closed before any request: the provider answers an out-of-range image with an opaque HTTP 400.
+      const dimension = imageDimensionReason(key, buf, asset.format);
+      if (dimension) { reasons.push(dimension); omissions.push({ reason: dimension, kind: "unavailable", required: true }); delete assets[key]; continue; }
+      visualAssets.push({ key, format: asset.format, bytes: buf.length, sha256: digestBytes(buf) });
+    }
+  }
   const artifacts = selected?.artifacts ?? allArtifacts; const snapshot = evidence.snapshot;
   const criteria = selected?.criteria ?? contract.criteria;
   const selectedIds = new Set(criteria.map((criterion) => criterion.id));
@@ -98,6 +127,7 @@ export function buildJudgeEvidencePacket(options: JudgeEvidencePacketOptions): J
   const counterevidence = evidence.counterevidence ?? [];
   // Unauthorized source mutation remains explicit evidence; it never changes review into implementation.
   if (counterevidence.some((item) => item.startsWith("UNATTRIBUTED_OR_UNAUTHORIZED_MUTATION:"))) reasons.push("AUTHORIZED_MUTATION_RECEIPT_REQUIRED");
+  // Any NEW digest-bearing evidence id (sha256 embedded in an id) must also be authorized in hostRecomputedPacketDigests (advisor-public-context.ts), or the Advisor public-reference redactor refuses it.
   const obligations: JudgeEvidencePacket["obligations"] = criteria.map((criterion) => ({
     id: `${criterion.id}:semantic`, criterionId: criterion.id, kind: criterion.kind === "parent_integration" ? "integration" : "semantic",
     evidenceIds: [...(!selected ? [`diff:${digestBytes(evidence.gitDiff)}`] : []), ...source.flatMap((item) => item.spans ? item.spans.map((span) => `source:${item.path}:${item.sha256}:lines:${span.startLine}-${span.endLine}:${span.digest}`) : [`source:${item.path}:${item.sha256}`]), ...artifacts.filter((artifact) => artifact.criterionIds.includes(criterion.id)).map((artifact) => `artifact:${artifact.path}:${artifact.sha256}`)], requirement: criterion.text,
@@ -122,15 +152,16 @@ export function buildJudgeEvidencePacket(options: JudgeEvidencePacketOptions): J
     source, diff: selected ? "" : evidence.gitDiff, commitInterval: selected ? undefined : evidence.commitInterval, artifacts, verification: evidence.verificationReceipt?.applicability === "diagnostic" ? undefined : evidence.verificationReceipt, diagnosticObservations: evidence.verificationReceipt?.applicability === "diagnostic" ? [evidence.verificationReceipt] : undefined, authorizedMutations: evidence.authorizedMutationReceipts, integrationReceipts, counterevidence, omissions,
     artifactSelection: options.artifactSelection,
     ...(selected ? { scope: { kind: "criterion" as const, selectedCriterionIds: [...selectedIds], globalCompletionEligible: false as const }, manifest: selected.manifest } : {}),
+    ...(visualAssets.length ? { visualAssets } : {}),
   };
   if (Buffer.byteLength(JSON.stringify(packet), "utf8") > maxBytes) { reasons.push("MANDATORY_PACKET_PROOF_EXCEEDS_BUDGET"); omissions.push({ reason: "MANDATORY_PACKET_PROOF_EXCEEDS_BUDGET", kind: "budget", required: true }); }
-  return reasons.length ? { ok: false, status: "EVIDENCE_REQUIRED", reasons: [...new Set(reasons)], omissions } : { ok: true, packet, digest: canonicalDigest(packet) };
+  return reasons.length ? { ok: false, status: "EVIDENCE_REQUIRED", reasons: [...new Set(reasons)], omissions } : { ok: true, packet, digest: canonicalDigest(packet), ...(assets && Object.keys(assets).length ? { assetPayload: assets } : {}) };
 }
 
 export type CriterionPacketSelector = (selection: CriterionPacketSelection) => JudgeEvidencePacketResult;
 /** The closure retains real host evidence; selectors are proposals, never portable approval. */
 export function createCriterionPacketSelector(options: Omit<JudgeEvidencePacketOptions, "selection">): CriterionPacketSelector {
-  const bound = { ...options, contract: structuredClone(options.contract), artifacts: options.artifacts?.map((artifact) => ({ ...artifact, criterionIds: [...artifact.criterionIds] })), requiredArtifactPaths: options.requiredArtifactPaths ? [...options.requiredArtifactPaths] : undefined };
+  const bound = { ...options, contract: structuredClone(options.contract), artifacts: options.artifacts?.map((artifact) => ({ ...artifact, criterionIds: [...artifact.criterionIds] })), requiredArtifactPaths: options.requiredArtifactPaths ? [...options.requiredArtifactPaths] : undefined, visualEvidence: options.visualEvidence, assets: options.assets };
   return (selection) => buildJudgeEvidencePacket({ ...bound, selection });
 }
 export interface EvidencePacketSetManifest {
@@ -149,17 +180,25 @@ export interface EvidencePacketSetManifest {
 export interface JudgeEvidencePacketSetResult {
   ok: boolean; status: "READY_FOR_PARENT_REVIEW" | "EVIDENCE_REQUIRED";
   packets: Array<{ packet: JudgeEvidencePacket; digest: string }>; manifest: EvidencePacketSetManifest; reasons: string[];
+  assetPayload?: Record<string, SystemOneImageAsset>;
 }
 export function buildJudgeEvidencePacketSet(options: Omit<JudgeEvidencePacketOptions, "selection"> & { selections?: readonly CriterionPacketSelection[] }): JudgeEvidencePacketSetResult {
   const packets: JudgeEvidencePacketSetResult["packets"] = []; const reasons: string[] = [];
   const selector = createCriterionPacketSelector(options);
+  let assetPayload: Record<string, SystemOneImageAsset> | undefined;
   if (options.selections === undefined) {
     const result = buildJudgeEvidencePacket(options);
-    if (result.ok) packets.push({ packet: result.packet, digest: result.digest }); else reasons.push(...result.reasons);
+    if (result.ok) {
+      packets.push({ packet: result.packet, digest: result.digest });
+      if (result.assetPayload) assetPayload = { ...result.assetPayload };
+    } else reasons.push(...result.reasons);
   } else if (!options.selections.length || options.selections.length > 128) reasons.push("PACKET_SET_POLICY_INVALID");
   else for (const selection of options.selections) {
     const result = selector(selection);
-    if (result.ok) packets.push({ packet: result.packet, digest: result.digest }); else reasons.push(...result.reasons);
+    if (result.ok) {
+      packets.push({ packet: result.packet, digest: result.digest });
+      if (result.assetPayload) assetPayload = { ...(assetPayload ?? {}), ...result.assetPayload };
+    } else reasons.push(...result.reasons);
   }
   const covered = new Set(packets.flatMap(({ packet }) => packet.criteria.map((criterion) => criterion.id)));
   const coveredArtifacts = new Set(packets.flatMap(({ packet }) => packet.artifacts.map((artifact) => artifact.path)));
@@ -185,7 +224,7 @@ export function buildJudgeEvidencePacketSet(options: Omit<JudgeEvidencePacketOpt
     counterevidence: options.evidence.counterevidence ?? [], omissions: [...(options.evidence.omissions ?? []), ...(options.artifactOmissions ?? [])],
     uncoveredCriterionIds, uncoveredParentRequirementIds, uncoveredArtifactPaths, coverageComplete: reasons.length === 0, requiresIndependentParentReview: true, globalCompletionEligible: false,
   };
-  return { ok: reasons.length === 0, status: reasons.length ? "EVIDENCE_REQUIRED" : "READY_FOR_PARENT_REVIEW", packets, manifest, reasons: [...new Set(reasons)] };
+  return { ok: reasons.length === 0, status: reasons.length ? "EVIDENCE_REQUIRED" : "READY_FOR_PARENT_REVIEW", packets, manifest, reasons: [...new Set(reasons)], ...(assetPayload ? { assetPayload } : {}) };
 }
 /** Called only with the transport's final redacted encoded body, not an earlier approximation. */
 export function finalizeEvidencePacket(packet: JudgeEvidencePacket, preparedBody: string): { packetDigest: string; bodyDigest: string; bodyBytes: number } {
