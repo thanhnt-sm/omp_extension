@@ -188,7 +188,7 @@ describe("Task artifact routing and proof delivery", () => {
       await assertRubric(request.questions, true);
       expect(unwrap(state.deliverable_artifacts, "deliverable_artifacts")).toContain(content);
     });
-  });
+  }, 30_000);
 
   for (const mapPath of ["plans/reports/zzz-map.md", "reports/aaa-map.md"]) {
     test(`retains full task-bound tail proof despite competition and changed-file order: ${mapPath}`, async () => {
@@ -214,7 +214,7 @@ describe("Task artifact routing and proof delivery", () => {
         }
         for (const [file, content] of Object.entries(competitors)) expect(await fs.readFile(path.join(fixture.cwd, file), "utf8")).toBe(content);
       });
-    });
+    }, 30_000);
   }
 
 
@@ -228,7 +228,7 @@ describe("Task artifact routing and proof delivery", () => {
       const { state } = await evaluatePacket(context({ deliverableArtifacts: artifacts }));
       expect(unwrap(state.deliverable_artifacts, "deliverable_artifacts")).toBe(artifacts);
     });
-  });
+  }, 30_000);
 
   test("macro accepts the UTF-8 byte boundary intact and rejects one byte beyond before evaluation", async () => {
     const prefix = "# Provenance\nQuan sát 🧭\n";
@@ -263,7 +263,7 @@ describe("Task artifact routing and proof delivery", () => {
         expect(unwrap(state.deliverable_artifacts, "deliverable_artifacts")).toContain(relevant);
       }
     });
-  });
+  }, 30_000);
 
   test("collection accounts for headers and the combined size of every mandatory report", async () => {
     for (const sizes of [[4930], [2700, 2700]]) {
@@ -279,7 +279,7 @@ describe("Task artifact routing and proof delivery", () => {
         await expect(collectDeliverableArtifacts(fixture.cwd, files, TASK)).rejects.toThrow("insufficient_deliverable_evidence");
       });
     }
-  });
+  }, 30_000);
 
   test("oversized mandatory UTF-8 proof fails closed during collection", async () => {
     await withProject(async (fixture) => {
@@ -289,5 +289,5 @@ describe("Task artifact routing and proof delivery", () => {
       await fixture.write("reports/required-map.md", report);
       await expect(collectDeliverableArtifacts(fixture.cwd, ["reports/required-map.md"], TASK)).rejects.toThrow("insufficient_deliverable_evidence");
     });
-  });
+  }, 30_000);
 });

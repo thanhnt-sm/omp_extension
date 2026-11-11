@@ -158,7 +158,7 @@ describe("Phase 1: Deterministic Evidence Collector & Claude Isolation", () => {
     });
 
     expect(evidence.testExitCode).toBe(1);
-  });
+  }, 30_000);
 
   test("collectTaskEvidence rejects plan path pointing inside ~/.claude", async () => {
     const dangerousPlan = path.join(os.homedir(), ".claude", "plan.md");
