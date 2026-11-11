@@ -53,7 +53,7 @@ function resolvePolicySnapshot(purpose, supplied, trustedDefaults) {
   if (!PURPOSES.includes(purpose) || (supplied !== undefined && !object(supplied))) return invalid(purpose);
   if (supplied?.ok === false) return invalid(purpose);
   const source = supplied ?? {
-    maxQuestionsPerRequest: 128, provider: { allowedModels: ['jev-latest', 'jev-1.14.0', 'typesafe/jev-latest', 'typesafe/jev-1.14.0'] },
+    maxQuestionsPerRequest: 128, provider: { allowedModels: ['jev-latest', 'jev-1.14.0', 'typesafe/jev-latest', 'typesafe/jev-1.14.0', '@cf/cloudflare/clef'] },
     ...(purpose === 'judge' ? { routing: {
       baseline: trustedDefaults.baseline === undefined ? 'review' : trustedDefaults.baseline,
       lattice: trustedDefaults.lattice === undefined ? ['auto', 'review', 'block'] : trustedDefaults.lattice,

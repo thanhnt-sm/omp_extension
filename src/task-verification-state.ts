@@ -42,7 +42,9 @@ export function taskRecoveryProgress(record: TaskEvidenceRecord): RecoveryProgre
       testAssetsBefore: verification.testAssetsBefore.map(asset => ({ path: asset.path, sha256: asset.sha256 })).sort((left, right) => left.path.localeCompare(right.path)),
       testAssetsAfter: verification.testAssetsAfter.map(asset => ({ path: asset.path, sha256: asset.sha256 })).sort((left, right) => left.path.localeCompare(right.path)),
       result: { exitCode: verification.result.exitCode, signal: verification.result.signal ?? null, timedOut: verification.result.timedOut === true, aborted: verification.result.aborted === true } } : null;
-    return [criterion.id, [canonicalDigest(criterion), canonicalDigest(sources), canonicalDigest(artifacts), canonicalDigest(integration), canonicalDigest(test)]];
+    // Image bytes ride as assets, not packet source: bind their metadata so a changed screenshot is progress.
+    const visual = selected.flatMap(({ packet }) => packet.visualAssets ?? []).map(asset => ({ key: asset.key, format: asset.format, bytes: asset.bytes, sha256: asset.sha256 }));
+    return [criterion.id, [canonicalDigest(criterion), canonicalDigest(sources), canonicalDigest(artifacts), canonicalDigest(integration), canonicalDigest(test), ...(visual.length ? [canonicalDigest(visual)] : [])]];
   }));
   // Operational reports and ambient tree changes remain visible counterevidence/freshness facts;
   // they are not permission to repeat unchanged rejected semantics.

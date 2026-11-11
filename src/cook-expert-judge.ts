@@ -8,6 +8,7 @@ import type { TaskContract, VerificationOutcome } from "./types/verification";
 import { freezeContractValue } from "./task-contract-source";
 import { encloseUntrusted } from "./xml-enclosure";
 import { analyzeDiffForTestEvasion } from "./ast-analyzer";
+import type { SystemOneImageAsset } from "./judge-evidence-packet";
 
 import { DEFAULT_SEMANTIC_APPROVAL_OPTIONS, passesSemanticApproval, type SemanticApprovalOptions } from "./semantic-approval-policy";
 import { semanticFailureDisposition } from "./semantic-failure";
@@ -58,7 +59,19 @@ export interface MacroCheckContext {
   /** Host-owned contract/evidence; never inferred from an agent's task label. */
   contract?: TaskContract;
   criterionEvidence?: Readonly<Record<string, readonly string[]>>;
+  /** Verified image assets (already integrity-checked by the host). Their presence adds exactly one tighten-only noul question. */
+  visualAssets?: Readonly<Record<string, SystemOneImageAsset>>;
 }
+
+/** Question key for the visual gate: a negative or malformed answer can only block approval. */
+export const VISUAL_EVIDENCE_QUESTION_KEY = "visual_supports_ui_criteria";
+/**
+ * Fixed wire key for the single visual asset, used in both the `assets` map and the visual question text.
+ * Deliberately short and low-entropy: a content-derived key (e.g. `visual-evidence-<hex>`) is a >=32-char run that
+ * the outbound redactor may replace with `[REDACTED:high-entropy]`, leaving the asset unreferenced (HTTP 400).
+ * Image identity is bound by the sha256 in packet `visualAssets` metadata and the send guard, not by this key.
+ */
+export const VISUAL_WIRE_ASSET_KEY = "ui_visual_evidence";
 
 export type JevVerdict = "APPROVE" | "REJECT" | "NEXT_ACTION_REQUIRED" | "ESCALATE";
 export type DropVerdict = "APPROVE" | "REJECT" | "ESCALATE";
@@ -72,6 +85,8 @@ export interface MacroCheckResult {
   verdict?: DeliverablesVerdict;
   deliverablesVerdict?: DeliverablesVerdict;
   meetsCriteriaNoul?: number;
+  /** Visual gate probability when an image was assessed; tighten-only, never used to approve. */
+  visualSupportNoul?: number;
   driftChoice?: DriftChoice;
   scopeChoice?: ScopeChoice;
   riskScore?: number;
@@ -95,6 +110,8 @@ export interface ExpertJudgeClient {
   evaluate: (params: {
     state: string | Record<string, unknown>;
     questions: Record<string, ExpertJudgeQuestion>;
+    /** Verified image assets only; the property is omitted entirely when there are none. */
+    assets?: Record<string, SystemOneImageAsset>;
   }) => Promise<ExpertJudgeResponse>;
 }
 
@@ -119,8 +136,12 @@ export async function runTaskMicroCheck(evidence: MicroCheckEvidence): Promise<M
     reasons.push("Claude boundary violation: task modified files under .claude or Claude configuration.");
   }
 
-  const testPassed = evidence.testExitCode === null || evidence.testExitCode === 0;
-  if (!testPassed) {
+  const codeChanges = hasProductCodeChanges(evidence.gitStatus, evidence.gitDiff, evidence.changedFiles);
+  const testRequired = codeChanges;
+  const testPassed = !testRequired ? (evidence.testExitCode === null || evidence.testExitCode === 0) : (evidence.testExitCode === 0);
+  if (testRequired && evidence.testExitCode === null) {
+    reasons.push("Product code changes detected but no test exit code was provided (testExitCode is null).");
+  } else if (!testPassed) {
     reasons.push(`Test suite failed with exit code ${evidence.testExitCode}. Test failure must be resolved before completing task.`);
   }
 
@@ -130,6 +151,7 @@ export async function runTaskMicroCheck(evidence: MicroCheckEvidence): Promise<M
     testExitCode: evidence.testExitCode,
     testOutput: evidence.testOutput,
     changedFiles: evidence.changedFiles,
+    testRequired,
   });
   for (const reason of atomicEval.reasons) {
     if (!reasons.includes(reason)) reasons.push(reason);
@@ -301,6 +323,27 @@ export async function runPhaseMacroCheck(
       criteria: { satisfied: "Task-bound evidence satisfies this criterion", violated: "Evidence contradicts this exact criterion", evidence_missing: "A required evidence prerequisite for this criterion is absent" },
     };
   }
+  // System One resolves an asset only where its key appears as text in state/instructions/criteria (an unreferenced
+  // asset is HTTP 400). One image per request under the fixed low-entropy key, referenced in exactly one place: the
+  // visual question below. Image identity is bound by the sha256 check in verifyVisualAssetsForSend, not by the key.
+  const wireAssets: Record<string, SystemOneImageAsset> = {};
+  const visualAssetList = Object.values(ctx.visualAssets ?? {});
+  if (visualAssetList.length > 1) {
+    throw new Error(`Visual evidence supports one image per request; received ${visualAssetList.length}`);
+  }
+  if (visualAssetList.length === 1) wireAssets[VISUAL_WIRE_ASSET_KEY] = visualAssetList[0];
+  const hasVisual = Object.keys(wireAssets).length > 0;
+  if (hasVisual) {
+    questions[VISUAL_EVIDENCE_QUESTION_KEY] = {
+      type: "noul",
+      instructions:
+        `The rendered UI of the completed work is shown here: ${VISUAL_WIRE_ASSET_KEY}. Does the visible image support the UI-related requirements in \`task_requirements\`? Judge only what the image actually shows; if it shows nothing relevant to those requirements, answer false.`,
+      criteria: {
+        true: "The image visibly shows the UI behavior or appearance the requirements call for",
+        false: "The image contradicts, omits, or is unrelated to the UI requirements",
+      },
+    };
+  }
   for (const key of Object.keys(questions)) {
     if (isSecretInKey(key)) {
       throw new Error(`Security violation: secret token detected in question key "${key}"`);
@@ -309,7 +352,7 @@ export async function runPhaseMacroCheck(
 
   let response: ExpertJudgeResponse;
   try {
-    response = await client.evaluate({ state: rawState, questions });
+    response = await client.evaluate({ state: rawState, questions, ...(hasVisual ? { assets: wireAssets } : {}) });
   } catch {
     response = { error: "transport_unavailable" };
   }
@@ -347,8 +390,20 @@ export async function runPhaseMacroCheck(
   if (scopeChoice === "REDUCTION") reasons.push("Violated scope criterion scope_mode: required task deliverables were omitted.");
   if (violated.length) reasons.push(`Violated criteria: ${violated.join(", ")}.`);
   if (missing.length) reasons.push(`Evidence prerequisites missing for criteria: ${missing.join(", ")}.`);
+  // Tighten-only: this block only ever adds a reason. It never removes one or substitutes for another answer.
+  let visualSupportNoul: number | undefined;
+  let visualMalformed = false;
+  if (hasVisual) {
+    visualSupportNoul = noulValue(answers[VISUAL_EVIDENCE_QUESTION_KEY]);
+    if (visualSupportNoul === undefined) {
+      visualMalformed = true;
+      reasons.push(`Visual evidence assessment ${VISUAL_EVIDENCE_QUESTION_KEY} is missing or malformed; the attached image cannot be treated as supporting the UI criteria.`);
+    } else if (!passesSemanticApproval(visualSupportNoul, options.approvalPolicy)) {
+      reasons.push(`Visual evidence does not support the UI criteria (${VISUAL_EVIDENCE_QUESTION_KEY} P=${visualSupportNoul.toFixed(2)}).`);
+    }
+  }
   const approved = reasons.length === 0;
-  const evidenceRequired = missing.length > 0 || deliverablesVerdict === "NEXT_ACTION_REQUIRED" || (deliverablesVerdict === "APPROVE" && !passesThreshold && meetsCriteriaNoul >= 0.25);
+  const evidenceRequired = missing.length > 0 || visualMalformed || deliverablesVerdict === "NEXT_ACTION_REQUIRED" || (deliverablesVerdict === "APPROVE" && !passesThreshold && meetsCriteriaNoul >= 0.25);
   const escalated = !approved && !evidenceRequired && (ctx.attemptCount ?? 0) >= 3;
   if (escalated) reasons.push("3 semantic revision failures reached; require fresh independent diagnosis or exact human resolution, not an unchanged retry.");
   const outcome: VerificationOutcome | undefined = approved ? undefined
@@ -358,7 +413,7 @@ export async function runPhaseMacroCheck(
       : { status: "REJECTED", criterionIds: violated, reasons };
   return {
     approved, reasons, verdict: deliverablesVerdict, deliverablesVerdict,
-    meetsCriteriaNoul, driftChoice, scopeChoice,
+    meetsCriteriaNoul, ...(visualSupportNoul !== undefined ? { visualSupportNoul } : {}), driftChoice, scopeChoice,
     expertConfidence: choiceConfidence(answers.deliverables_verdict),
     metadata: response.metadata, rawAnswers: freezeContractValue(structuredClone(answers)),
     outcome, escalateToUser: escalated,

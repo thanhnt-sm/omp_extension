@@ -111,11 +111,131 @@ function loadPreparePayload() {
   return preparePayload;
 }
 
-const VALID_TYPES = new Set(['noul', 'choice', 'score']);
+const VALID_TYPES = new Set(['noul', 'choice', 'score', 'box']);
 const API_URL = 'https://api.typesafe.ai/v1/systemone';
 const MODEL = 'jev-latest';
 const MAX_BODY_BYTES = 32768;
+// Images ride beside the 32 KiB text budget (state+questions), never inside it: 8 MiB binary cap -> base64 + JSON framing.
+const MAX_ASSET_BODY_BYTES = Math.ceil(8 * 1024 * 1024 * 4 / 3) + 4096;
 
+const SYSTEM_ONE_DIALECTS = Object.freeze({
+  TYPESAFE: 'typesafe',
+  OPENROUTER_DECISIONS: 'openrouter-decisions',
+  WORKERS_AI_SYSTEMONE: 'workers-ai-systemone',
+});
+const VALID_DIALECTS = new Set(Object.values(SYSTEM_ONE_DIALECTS));
+
+function buildSystemOneWirePayload(dialect = SYSTEM_ONE_DIALECTS.TYPESAFE, options = {}) {
+  const d = VALID_DIALECTS.has(dialect) ? dialect : SYSTEM_ONE_DIALECTS.TYPESAFE;
+  let effectiveModel = options.model || MODEL;
+  if (d === SYSTEM_ONE_DIALECTS.WORKERS_AI_SYSTEMONE && (!options.model || options.model === MODEL)) {
+    effectiveModel = '@cf/cloudflare/clef';
+  }
+  const { apiKey, state, questions, assets, endpoint, baseUrl, accountId, headers: extraHeaders } = options;
+  const assetsDeclared = options.hasAssets === true;
+  const model = effectiveModel;
+  let url;
+  if (isNonEmptyString(endpoint)) {
+    url = endpoint.trim();
+  } else if (d === SYSTEM_ONE_DIALECTS.OPENROUTER_DECISIONS) {
+    if (isNonEmptyString(baseUrl)) {
+      const cleanBase = baseUrl.trim().replace(/\/+$/, '');
+      url = cleanBase.endsWith('/decisions') ? cleanBase : `${cleanBase}/decisions`;
+    } else {
+      url = 'https://openrouter.ai/api/v1/decisions';
+    }
+  } else if (d === SYSTEM_ONE_DIALECTS.WORKERS_AI_SYSTEMONE) {
+    if (isNonEmptyString(baseUrl)) {
+      const cleanBase = baseUrl.trim().replace(/\/+$/, '');
+      url = cleanBase.endsWith(`/${model}`) ? cleanBase : `${cleanBase}/${model}`;
+    } else {
+      const acct = isNonEmptyString(accountId) ? accountId.trim() : ':accountId';
+      url = `https://api.cloudflare.com/client/v4/accounts/${acct}/ai/run/${model}`;
+    }
+  } else {
+    if (isNonEmptyString(baseUrl)) {
+      const cleanBase = baseUrl.trim().replace(/\/+$/, '');
+      url = cleanBase.endsWith('/v1/systemone') ? cleanBase : `${cleanBase}/v1/systemone`;
+    } else {
+      url = API_URL;
+    }
+  }
+
+  const hasAssets = assetsDeclared || assets && (
+    Array.isArray(assets) ? assets.length > 0 : (typeof assets === 'object' && Object.keys(assets).length > 0)
+  );
+
+  const headers = {
+    ...(isPlainObject(extraHeaders) ? extraHeaders : {}),
+    'Content-Type': 'application/json',
+    ...(isNonEmptyString(apiKey) ? { Authorization: `Bearer ${apiKey.trim()}` } : {}),
+    ...(hasAssets ? { 'TypeSafe-Danger-Zone-Images': 'true' } : {}),
+  };
+
+  let wireQuestions = questions;
+  if (isPlainObject(questions)) {
+    wireQuestions = {};
+    for (const [id, q] of Object.entries(questions)) {
+      if (isPlainObject(q) && q.type === 'box') {
+        const { image, ...rest } = q;
+        wireQuestions[id] = rest;
+      } else {
+        wireQuestions[id] = q;
+      }
+    }
+  }
+
+  const payloadObj = {
+    model,
+    state,
+    questions: wireQuestions,
+    ...(assets !== undefined ? { assets } : {}),
+  };
+  const body = typeof options.body === 'string' ? options.body : JSON.stringify(payloadObj);
+
+  return { url, headers, body };
+}
+
+function decodeSystemOneResponse(dialect, rawResponse) {
+  const d = VALID_DIALECTS.has(dialect) ? dialect : SYSTEM_ONE_DIALECTS.TYPESAFE;
+  if (!rawResponse || typeof rawResponse !== 'object') {
+    return { answers: null, model: null, usage: null, cost: null, billing: null };
+  }
+
+  let effective = rawResponse;
+  if (d === SYSTEM_ONE_DIALECTS.WORKERS_AI_SYSTEMONE) {
+    if (rawResponse.success === false) {
+      return { answers: null, model: null, usage: null, cost: null, billing: null };
+    }
+    if (isPlainObject(rawResponse.result)) {
+      effective = rawResponse.result;
+    }
+  }
+
+  if (!isPlainObject(effective.answers)) {
+    return { answers: null, model: null, usage: null, cost: null, billing: null };
+  }
+
+  const answers = effective.answers;
+  const model = isNonEmptyString(effective.model) ? effective.model : null;
+  const billing = effective.billing ?? null;
+  let cost = null;
+  if (typeof effective.cost === 'number' && Number.isFinite(effective.cost)) {
+    cost = effective.cost;
+  } else if (effective.usage && typeof effective.usage.cost === 'number' && Number.isFinite(effective.usage.cost)) {
+    cost = effective.usage.cost;
+  }
+
+  let usage = null;
+  if (isPlainObject(effective.usage)) {
+    usage = { ...effective.usage };
+    if (cost !== null) usage.cost = cost;
+  } else if (cost !== null) {
+    usage = { cost };
+  }
+
+  return { answers, model, usage, cost, billing };
+}
 // ---- Retry policy (HTTP 429 / 529 only) -----------------------------------
 // Source: docs.typesafe.ai/api.md (fetched 2026-10-07): "When you receive a
 // 429 Too Many Requests or 529 Overloaded response, retry the request with
@@ -232,6 +352,69 @@ function getChoiceOptions(criteria) {
  * (skills/shared/typesafe-integration.md section 3). Returns `{ ok: true }`
  * or `{ ok: false, message }` with a short, specific reason.
  */
+const ASSET_KEY_RE = /^[A-Za-z0-9_-]{1,64}$/;
+const BASE64_RE = /^[A-Za-z0-9+/=]+$/;
+
+const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
+const MAX_TOTAL_ASSETS_BYTES = 8 * 1024 * 1024;
+
+function sanitizeStrictAssets(rawAssets) {
+  if (rawAssets === undefined) return { ok: true, assets: undefined };
+  if (!isPlainObject(rawAssets)) {
+    return { ok: false, code: 'invalid_input', message: 'invalid_input: assets must be an object' };
+  }
+  const sanitized = {};
+  let totalBytes = 0;
+  for (const [key, asset] of Object.entries(rawAssets)) {
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype' || !ASSET_KEY_RE.test(key)) {
+      return { ok: false, code: 'invalid_input', message: `invalid_input: asset key ${key} is invalid` };
+    }
+    if (!isPlainObject(asset)) {
+      return { ok: false, code: 'invalid_input', message: `invalid_input: asset ${key} must be an object` };
+    }
+    const keys = Object.keys(asset);
+    for (const k of keys) {
+      if (k !== 'type' && k !== 'format' && k !== 'data_base64') {
+        return { ok: false, code: 'invalid_input', message: `invalid_input: unsupported asset field ${k}` };
+      }
+    }
+    if (asset.type !== 'image') {
+      return { ok: false, code: 'invalid_input', message: `invalid_input: asset ${key}.type must be 'image'` };
+    }
+    if (asset.format !== 'png' && asset.format !== 'jpeg') {
+      return { ok: false, code: 'invalid_input', message: `invalid_input: asset ${key}.format must be 'png' or 'jpeg'` };
+    }
+    if (typeof asset.data_base64 !== 'string' || !asset.data_base64.length || asset.data_base64.length % 4 !== 0 || !BASE64_RE.test(asset.data_base64)) {
+      return { ok: false, code: 'invalid_input', message: `invalid_input: asset ${key}.data_base64 must be valid base64` };
+    }
+    const buf = Buffer.from(asset.data_base64, 'base64');
+    if (buf.length > MAX_IMAGE_BYTES) {
+      return { ok: false, code: 'invalid_input', message: `invalid_input: asset ${key} exceeds 4MB cap` };
+    }
+    totalBytes += buf.length;
+    if (totalBytes > MAX_TOTAL_ASSETS_BYTES) {
+      return { ok: false, code: 'invalid_input', message: 'invalid_input: total assets exceed 8MB cap' };
+    }
+    if (asset.format === 'png') {
+      const isPng = buf.length >= 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47 && buf[4] === 0x0D && buf[5] === 0x0A && buf[6] === 0x1A && buf[7] === 0x0A;
+      if (!isPng) {
+        return { ok: false, code: 'invalid_input', message: `invalid_input: asset ${key} magic bytes do not match png format` };
+      }
+    } else if (asset.format === 'jpeg') {
+      const isJpeg = buf.length >= 3 && buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF;
+      if (!isJpeg) {
+        return { ok: false, code: 'invalid_input', message: `invalid_input: asset ${key} magic bytes do not match jpeg format` };
+      }
+    }
+    sanitized[key] = {
+      type: 'image',
+      format: asset.format,
+      data_base64: asset.data_base64,
+    };
+  }
+  return { ok: true, assets: Object.keys(sanitized).length ? sanitized : undefined };
+}
+
 function validateInput(args, trustedLimits) {
   if (!isPlainObject(args)) return { ok: false, message: 'invalid_input: arguments must be an object' };
   const { state, questions } = args;
@@ -246,11 +429,11 @@ function validateInput(args, trustedLimits) {
   for (const key of Object.keys(questions)) {
     const q = questions[key];
     if (!isPlainObject(q)) return { ok: false, message: `invalid_input: questions.${key} must be an object` };
-    if (Object.keys(q).some((field) => field !== 'type' && field !== 'instructions' && field !== 'criteria')) {
+    if (Object.keys(q).some((field) => field !== 'type' && field !== 'instructions' && field !== 'criteria' && field !== 'image')) {
       return { ok: false, message: 'invalid_input: unsupported question field' };
     }
     if (!VALID_TYPES.has(q.type)) {
-      return { ok: false, message: `invalid_input: questions.${key}.type must be noul|choice|score` };
+      return { ok: false, message: `invalid_input: questions.${key}.type must be noul|choice|score|box` };
     }
     if (!(isNonEmptyString(q.instructions) || isPlainObject(q.instructions))) {
       return { ok: false, message: `invalid_input: questions.${key}.instructions is required` };
@@ -287,6 +470,15 @@ function validateInput(args, trustedLimits) {
         return { ok: false, message: `invalid_input: questions.${key}.criteria must be {"true": desc, "false": desc} strings for noul` };
       }
     }
+    if (q.type === 'box') {
+      if (!Number.isInteger(q.image) || q.image < 0) {
+        return { ok: false, code: 'invalid_input', message: `invalid_input: questions.${key}.image must be a non-negative integer for box` };
+      }
+    }
+  }
+  if (args.assets !== undefined) {
+    const assetCheck = sanitizeStrictAssets(args.assets);
+    if (!assetCheck.ok) return assetCheck;
   }
   return { ok: true };
 }
@@ -360,7 +552,9 @@ function prepareRequest(args, trustedLimits, redactionOptions = {}) {
   const modelAllowed = Array.isArray(allowed) && (
     allowed.includes(rawModel) ||
     allowed.includes(normalizedModel) ||
-    (normalizedModel.startsWith('jev-') && allowed.some((m) => m === 'jev-latest' || m.startsWith('jev-')))
+    (normalizedModel.startsWith('jev-') && allowed.some((m) => m === 'jev-latest' || m.startsWith('jev-'))) ||
+    (rawModel.startsWith('@cf/') && allowed.some((m) => m.startsWith('@cf/'))) ||
+    (rawModel.startsWith('openrouter/') && allowed.some((m) => m.startsWith('openrouter/')))
   );
   if (!modelAllowed) return { ok: false, code: 'model_not_allowed' };
   const model = normalizedModel;
@@ -370,15 +564,22 @@ function prepareRequest(args, trustedLimits, redactionOptions = {}) {
     const payload = loadPreparePayload()({
       state: projectPublicMessages(args.state), model, questions: args.questions,
     }, { ...redactionOptions, maxBytes: Infinity });
+    if (args.assets !== undefined) {
+      const assetCheck = sanitizeStrictAssets(args.assets);
+      if (!assetCheck.ok) return { ok: false, code: assetCheck.code || 'invalid_input' };
+      if (assetCheck.assets) payload.assets = assetCheck.assets;
+    }
     const preparedValidation = validateInput(payload, trustedLimits);
     if (payload.model !== model) return { ok: false, code: 'model_not_allowed' };
     if (!preparedValidation.ok) return { ok: false, code: preparedValidation.code || 'invalid_input' };
     if (JSON.stringify(Object.keys(payload.questions)) !== JSON.stringify(Object.keys(args.questions))) {
       return { ok: false, code: 'question_identity_changed' };
     }
+    const textBody = JSON.stringify({ state: payload.state, model: payload.model, questions: payload.questions });
+    const textBytes = Buffer.byteLength(textBody, 'utf8');
+    if (textBytes > MAX_BODY_BYTES) return { ok: false, code: 'payload too large' };
     const body = JSON.stringify(payload);
     const bodyBytes = Buffer.byteLength(body, 'utf8');
-    if (bodyBytes > MAX_BODY_BYTES) return { ok: false, code: 'payload too large' };
     const questionIds = Object.keys(payload.questions);
     const bodyDigest = crypto.createHash('sha256').update(body).digest('hex');
     const metadata = {
@@ -387,8 +588,10 @@ function prepareRequest(args, trustedLimits, redactionOptions = {}) {
       maxQuestionsPerRequest: trustedLimits?.maxQuestionsPerRequest ?? 128,
       questionIds, questionCount: questionIds.length, bodyBytes, bodyDigest,
     };
+    const hasAssets = payload.assets !== undefined;
     return { ok: true, body, questions: payload.questions, bodyBytes, bodyDigest,
-      questionCount: questionIds.length, policyIdentity: metadata.policyIdentity, metadata };
+      questionCount: questionIds.length, policyIdentity: metadata.policyIdentity, metadata,
+      ...(hasAssets ? { hasAssets, assetBodyBytes: bodyBytes - textBytes } : {}) };
   } catch (error) {
     return { ok: false, code: error?.message === 'payload rejected: secret in key'
       ? error.message : 'redact_failed' };
@@ -449,6 +652,13 @@ function sanitizeAnswers(questions, rawAnswers) {
       if (raw.score < 0 || raw.score > q.criteria.length - 1) return null;
       if (!isUnitInterval(raw.confidence)) return null;
       answers[key] = { score: raw.score, confidence: raw.confidence };
+    } else if (q.type === 'box') {
+      if (!isPlainObject(raw.box)) return null;
+      const { top, bottom, left, right } = raw.box;
+      if (!isUnitInterval(top) || !isUnitInterval(bottom) || !isUnitInterval(left) || !isUnitInterval(right)) return null;
+      if (top > bottom || left > right) return null;
+      if (!isUnitInterval(raw.confidence)) return null;
+      answers[key] = { box: { top, bottom, left, right }, confidence: raw.confidence };
     } else {
       return null; // unreachable: validateInput already restricted q.type
     }
@@ -588,7 +798,8 @@ async function requestWithRetry(options) {
   const body = o.body;
   if (typeof body !== 'string') return { kind: 'local_error', code: 'invalid_body', attempts: 0, attemptReceipts: [] };
   const bodyBytes = Buffer.byteLength(body, 'utf8');
-  if (bodyBytes > MAX_BODY_BYTES) return { kind: 'local_error', code: 'payload too large', attempts: 0, attemptReceipts: [] };
+  const assetAllowance = o.hasAssets === true && Number.isSafeInteger(o.assetBodyBytes) && o.assetBodyBytes > 0 ? Math.min(o.assetBodyBytes, MAX_ASSET_BODY_BYTES) : 0;
+  if (bodyBytes > MAX_BODY_BYTES + assetAllowance) return { kind: 'local_error', code: 'payload too large', attempts: 0, attemptReceipts: [] };
   const bodyDigest = crypto.createHash('sha256').update(body).digest('hex');
   const attemptReceipts = [];
   const identity = { bodyBytes, bodyDigest,
@@ -647,6 +858,13 @@ async function requestWithRetry(options) {
             nowImpl: now,
             setTimeoutImpl: setTimer,
             clearTimeoutImpl: clearTimer,
+            dialect: o.dialect,
+            endpoint: o.endpoint,
+            baseUrl: o.baseUrl,
+            accountId: o.accountId,
+            headers: o.headers,
+            model: o.model,
+            hasAssets: o.hasAssets === true,
           }),
           controller,
           Math.min(timeoutMs, remaining),
@@ -714,10 +932,20 @@ async function performRequest(fetchImpl, apiKey, body, signal, wallNowImpl, clea
   const cancelOnAbort = () => { void cancelResponseBody().catch(() => {}); };
   signal.addEventListener('abort', cancelOnAbort, { once: true });
   try {
-    response = await fetchImpl(API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    const wire = buildSystemOneWirePayload(cleanupOptions.dialect, {
+      apiKey,
       body,
+      endpoint: cleanupOptions.endpoint,
+      baseUrl: cleanupOptions.baseUrl,
+      accountId: cleanupOptions.accountId,
+      headers: cleanupOptions.headers,
+      model: cleanupOptions.model,
+      hasAssets: cleanupOptions.hasAssets === true,
+    });
+    response = await fetchImpl(wire.url, {
+      method: 'POST',
+      headers: wire.headers,
+      body: wire.body,
       signal,
     });
     if (cancellationRequested) await cancelResponseBody();
@@ -736,7 +964,9 @@ async function performRequest(fetchImpl, apiKey, body, signal, wallNowImpl, clea
       return { kind: 'http_error', status: response.status, retryAfterMs };
     }
     try {
-      return { kind: 'ok', status: response.status, data: await response.json() };
+      const rawJson = await response.json();
+      const decoded = decodeSystemOneResponse(cleanupOptions.dialect, rawJson);
+      return { kind: 'ok', status: response.status, data: rawJson, decoded };
     } catch (error) {
       await cancelResponseBody();
       if (signal.aborted) throw error;
@@ -775,7 +1005,14 @@ async function judgeTypeSafe(options = {}) {
     return { ok: false, code: 'policy_client_missing', authError: false };
   }
   if (!policy.ok) return { ok: false, code: 'policy_invalid', authError: false };
-  const prepared = prepareRequest(args, policy, { homeDirs: homeDir ? [homeDir] : undefined, apiKey });
+  const dialect = options.dialect || SYSTEM_ONE_DIALECTS.TYPESAFE;
+  if (!VALID_DIALECTS.has(dialect)) {
+    return { ok: false, code: 'invalid_dialect', authError: false };
+  }
+  const effectiveArgs = (dialect === SYSTEM_ONE_DIALECTS.WORKERS_AI_SYSTEMONE && !args?.model)
+    ? { ...args, model: '@cf/cloudflare/clef' }
+    : args;
+  const prepared = prepareRequest(effectiveArgs, policy, { homeDirs: homeDir ? [homeDir] : undefined, apiKey });
   if (!prepared.ok) return { ...prepared, authError: false };
   const routing = policyClient.validateRoutingQuestions(prepared.questions, policy);
   if (!routing.ok) return { ...routing, authError: false };
@@ -785,7 +1022,8 @@ async function judgeTypeSafe(options = {}) {
   if (typeof fetchImpl !== 'function') return { ok: false, code: 'no_fetch', authError: false };
   let outcome;
   try {
-    outcome = await requestWithRetry({ ...options, fetchImpl, apiKey, body: prepared.body, signal, preparedMetadata: prepared.metadata });
+    outcome = await requestWithRetry({ ...options, dialect, fetchImpl, apiKey, body: prepared.body, signal, preparedMetadata: prepared.metadata,
+      hasAssets: prepared.hasAssets === true, assetBodyBytes: prepared.assetBodyBytes });
   } catch (error) {
     return { ok: false, code: signal?.aborted || options.reviewJob?.signal.aborted ? 'cancelled'
       : error?.name === 'TimeoutError' ? 'timeout' : error?.name === 'AbortError' ? 'cancelled' : 'network_error',
@@ -800,12 +1038,17 @@ async function judgeTypeSafe(options = {}) {
     return { ok: false, code: `http_${outcome.status}`, authError: outcome.kind === 'auth', metadata };
   }
   if (outcome.kind !== 'ok') return { ok: false, code: 'bad_response', authError: false, metadata };
-  if (isNonEmptyString(outcome.data?.model)) metadata.resolvedModel = outcome.data.model;
-  if (isPlainObject(outcome.data?.usage)) metadata.usage = outcome.data.usage;
-  if (isPlainObject(outcome.data?.billing) || (typeof outcome.data?.billing === 'number' && Number.isFinite(outcome.data.billing))) {
+  const decoded = outcome.decoded || decodeSystemOneResponse(dialect, outcome.data);
+  if (isNonEmptyString(decoded.model)) metadata.resolvedModel = decoded.model;
+  else if (isNonEmptyString(outcome.data?.model)) metadata.resolvedModel = outcome.data.model;
+  if (isPlainObject(decoded.usage)) metadata.usage = decoded.usage;
+  else if (isPlainObject(outcome.data?.usage)) metadata.usage = outcome.data.usage;
+  if (decoded.cost !== null && decoded.cost !== undefined) metadata.cost = decoded.cost;
+  if (decoded.billing !== null && decoded.billing !== undefined) metadata.billing = decoded.billing;
+  else if (isPlainObject(outcome.data?.billing) || (typeof outcome.data?.billing === 'number' && Number.isFinite(outcome.data.billing))) {
     metadata.billing = outcome.data.billing;
   }
-  const answers = sanitizeAnswers(prepared.questions, outcome.data?.answers);
+  const answers = sanitizeAnswers(prepared.questions, decoded.answers);
   if (!answers) return { ok: false, code: 'bad_response', authError: false, metadata };
   const compliance = policyClient.validateRoutingAnswers(prepared.questions, answers, policy);
   if (!compliance.ok) return { ...compliance, authError: false, metadata };
@@ -813,6 +1056,9 @@ async function judgeTypeSafe(options = {}) {
 }
 
 module.exports = {
+  SYSTEM_ONE_DIALECTS,
+  buildSystemOneWirePayload,
+  decodeSystemOneResponse,
   validateInput,
   validateQuestionCount,
   prepareRequest,

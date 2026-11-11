@@ -39,11 +39,17 @@ describe("Autonomous Todo Resolution & Substantive Request Parsing", () => {
   test("trustedNativeTaskKind accurately classifies Vietnamese verbs and goals", () => {
     expect(trustedNativeTaskKind("Nghiên cứu nguyên nhân cốt lõi khiến todo bị đóng băng", "test")).toBe("research");
     expect(trustedNativeTaskKind("Tìm kiếm và phân tích giải pháp tự chủ", "test")).toBe("research");
+    expect(trustedNativeTaskKind("Đọc và phân tích yêu cầu Phase 01 từ file kế hoạch", "test")).toBe("research");
+    expect(trustedNativeTaskKind("Xác định các ca kiểm thử TDD cho Multi-Provider Wire Support", "test")).toBe("research");
     expect(trustedNativeTaskKind("Triển khai giải pháp hỗ trợ Agent tự nghiên cứu", "test")).toBe("implementation");
     expect(trustedNativeTaskKind("Sửa lỗi và khắc phục rào cản preflight", "test")).toBe("implementation");
     expect(trustedNativeTaskKind("Thẩm định kiến trúc và đánh giá rủi ro", "test")).toBe("review");
     expect(trustedNativeTaskKind("Rà soát mã nguồn và đối chiếu tiêu chí", "test")).toBe("review");
     expect(trustedNativeTaskKind("Chạy kiểm thử và đồng bộ hệ thống", "test")).toBe("operations");
+    expect(trustedNativeTaskKind("Triển khai giao dịch sang target", "test")).toBe("operations");
+    expect(trustedNativeTaskKind("Đọc và sửa lỗi mã nguồn", "test")).toBe("implementation");
+    expect(trustedNativeTaskKind("Xác định lỗi và sửa", "test")).toBe("implementation");
+    expect(trustedNativeTaskKind("Phân tích rồi cập nhật tài liệu", "test")).toBe("implementation");
   });
 
   test("resolveTypeSafeProjectExclusion respects excludeProjects configuration", () => {

@@ -95,4 +95,36 @@ diff --git a/tests/sample.test.ts b/tests/sample.test.ts
     expect(result.scores.integrity).toBe(false);
     expect(result.reasons.some(r => r.includes("evasion") || r.includes("assertion"))).toBe(true);
   });
+
+  test("rejects when testExitCode is null and testRequired defaults to true (fail-closed)", async () => {
+    const input: AtomicEvaluationInput = {
+      taskGoal: "Implement critical security patch",
+      gitDiff: `
+diff --git a/src/patch.ts b/src/patch.ts
+--- a/src/patch.ts
++++ b/src/patch.ts
+@@ -1,2 +1,3 @@
++export const patched = true;
+`,
+      testExitCode: null, // No test ran, but tests required by default
+    };
+
+    const result = await evaluateAtomicJevStep(input);
+    expect(result.passed).toBe(false);
+    expect(result.verdict).toBe("REJECT");
+    expect(result.reasons.some(r => r.includes("testExitCode is null") || r.includes("no test exit code"))).toBe(true);
+  });
+
+  test("approves when testExitCode is null for research task where testRequired is explicitly false", async () => {
+    const input: AtomicEvaluationInput = {
+      taskGoal: "Research documentation analysis",
+      gitDiff: "",
+      testExitCode: null,
+      testRequired: false,
+    };
+
+    const result = await evaluateAtomicJevStep(input);
+    expect(result.passed).toBe(true);
+    expect(result.verdict).toBe("APPROVE");
+  });
 });

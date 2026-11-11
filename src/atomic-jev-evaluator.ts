@@ -17,6 +17,7 @@ export interface AtomicEvaluationInput {
   task?: string;
   phase?: string;
   changedFiles?: string[];
+  testRequired?: boolean;
 }
 
 export interface AtomicEvaluationScores {
@@ -58,8 +59,18 @@ export async function evaluateAtomicJevStep(input: AtomicEvaluationInput): Promi
   }
 
   // 3. Test execution check
-  const testPassed = input.testExitCode === null || input.testExitCode === 0;
-  if (!testPassed) {
+  const testRequired = input.testRequired !== false;
+  let testPassed = false;
+  if (!testRequired) {
+    testPassed = input.testExitCode === null || input.testExitCode === 0;
+  } else {
+    testPassed = input.testExitCode === 0;
+    if (input.testExitCode === null) {
+      reasons.push("Test execution required but no test exit code was provided (testExitCode is null).");
+      quality = Math.max(0.0, quality - 1.0);
+    }
+  }
+  if (input.testExitCode !== null && input.testExitCode !== 0) {
     reasons.push(`Test suite failed with exit code ${input.testExitCode}. Test failure must be resolved.`);
     quality = Math.max(0.0, quality - 1.0);
   }

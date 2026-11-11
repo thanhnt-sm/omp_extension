@@ -258,7 +258,21 @@ function realpathOrResolve(p) {
 
 const WILDCARD = '*';
 const UNREADABLE = 'unreadable';
-const KNOWN_TYPESAFE_KEYS = new Set(['enabled', 'projects', 'excludeProjects']);
+const KNOWN_TYPESAFE_KEYS = new Set(['enabled', 'projects', 'excludeProjects', 'dialect', 'endpoint', 'baseUrl']);
+const VALID_DIALECTS = new Set(['typesafe', 'openrouter-decisions', 'workers-ai-systemone']);
+
+function isValidWireUrl(rawUrl) {
+  if (typeof rawUrl !== 'string' || !rawUrl.trim()) return false;
+  try {
+    const u = new URL(rawUrl.trim());
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return false;
+    if (u.protocol === 'http:' && !['localhost', '127.0.0.1', '::1', '[::1]'].includes(u.hostname)) return false;
+    if (u.username || u.password) return false;
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
 
 function hasOwn(obj, key) {
   return Object.prototype.hasOwnProperty.call(obj, key);
@@ -549,13 +563,35 @@ function resolveTypeSafeEnabled(projectDir, { env = process.env, homeDir = os.ho
         return { enabled: false, reason: 'global-excluded' };
       }
     }
+    // 4b. Wire configuration validation (fail-closed)
+    if (ts && (hasOwn(ts, 'dialect') || hasOwn(ts, 'endpoint') || hasOwn(ts, 'baseUrl'))) {
+      if (hasOwn(ts, 'dialect') && (typeof ts.dialect !== 'string' || !VALID_DIALECTS.has(ts.dialect.trim()))) {
+        return { enabled: false, reason: 'global-wire-config-invalid' };
+      }
+      if (hasOwn(ts, 'endpoint') && (typeof ts.endpoint !== 'string' || !isValidWireUrl(ts.endpoint))) {
+        return { enabled: false, reason: 'global-wire-config-invalid' };
+      }
+      if (hasOwn(ts, 'baseUrl') && (typeof ts.baseUrl !== 'string' || !isValidWireUrl(ts.baseUrl))) {
+        return { enabled: false, reason: 'global-wire-config-invalid' };
+      }
+    }
 
     // 5. Global allowlist: on iff typesafe.projects has "*" (any git repo) or
     // lists this project's git root (not raw cwd, so a session started from a
     // subdirectory still resolves to the same root). Project-local configuration
     // is never read here - see the security boundary in the module header.
     if (ts && hasOwn(ts, 'projects') && Array.isArray(ts.projects) && projectListMatches(ts.projects, keys)) {
-      return { enabled: true, reason: 'global-allowlist' };
+      const result = { enabled: true, reason: 'global-allowlist' };
+      if (typeof ts.dialect === 'string' && ts.dialect.trim().length > 0) {
+        result.dialect = ts.dialect.trim();
+      }
+      if (typeof ts.endpoint === 'string' && ts.endpoint.trim().length > 0) {
+        result.endpoint = ts.endpoint.trim();
+      }
+      if (typeof ts.baseUrl === 'string' && ts.baseUrl.trim().length > 0) {
+        result.baseUrl = ts.baseUrl.trim();
+      }
+      return result;
     }
 
     // 6. No key restriction, no kill switch, not allowlisted -> default off.
@@ -565,9 +601,13 @@ function resolveTypeSafeEnabled(projectDir, { env = process.env, homeDir = os.ho
     return { enabled: false, reason: 'default-off' };
   }
 }
+function resolveTypeSafeConfig(projectDir, options) {
+  return resolveTypeSafeEnabled(projectDir, options);
+}
 
 module.exports = {
   resolveTypeSafeEnabled,
+  resolveTypeSafeConfig,
   resolveTypeSafeProjectExclusion,
   findGitRoot,
   readGlobalConfig,

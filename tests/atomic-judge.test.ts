@@ -79,7 +79,7 @@ describe("bounded real atomic packet driver", () => {
     const receipt = await createAtomicJudge({ apiKey: "fixture-key", fetchImpl: transportFixture(bodies) }).review(input, signal);
     expect(bodies).toHaveLength(0); expect(receipt.uncoveredCriterionIds).toHaveLength(1); expect(receipt.status).toBe("unavailable");
   });
-  test("foreign evidence refs, edited packet bytes and dependency cycles reject before dispatch", async () => {
+  test("foreign evidence refs, edited packet bytes, dependency cycles and unsupported box answerType reject before dispatch", async () => {
     for (const kind of ["refs", "packet", "cycle"] as const) {
       const input = structuredClone(inputFixture());
       if (kind === "refs") input.predicates = [{ ...input.predicates[0], evidenceRefs: ["private:unapproved"] }];
@@ -87,6 +87,9 @@ describe("bounded real atomic packet driver", () => {
       if (kind === "cycle") input.predicates = [{ ...input.predicates[0], dependsOn: [input.predicates[0].id] }];
       await expect(createAtomicJudge({ apiKey: "fixture-key", fetchImpl: transportFixture([]) }).review(input)).rejects.toThrow();
     }
+    const boxInput = structuredClone(inputFixture());
+    boxInput.predicates = [{ ...boxInput.predicates[0], answerType: "box" as unknown as "relation" }];
+    await expect(createAtomicJudge({ apiKey: "fixture-key", fetchImpl: transportFixture([]) }).review(boxInput)).rejects.toThrow("atomic_predicate_invalid");
   });
   test("shadow driver reports missing genuine native host rather than fake H judgment", async () => {
     const { request, contract } = advisorFixture("shadow"); const atomic = inputFixture();

@@ -12,7 +12,33 @@ import type { ReviewSnapshot } from "./advisor-protocol";
 import { gitBytes, type EvidenceOmission } from "./evidence-workspace";
 import { isPrivateEvidencePath } from "./evidence-privacy";
 import type { HostToolInvocation, HostToolInvocationRuntime } from "./host-tool-invocation";
+export interface TaskVisualEvidence { imageBase64?: string; mimeType?: string }
 export interface TaskEvidenceCollectParams extends ContractTaskSelector { commandId?: string; artifactPaths?: readonly string[]; selections?: readonly CriterionPacketSelection[] }
+export function isUIFrontendPath(file: string): boolean {
+  return /\.(?:css|tsx|vue|html|svg)$/i.test(file);
+}
+export function detectUIVisualEvidence(
+  changedFiles: readonly string[],
+  sourceEvidence?: readonly { path: string; sha256: string; content?: string; encoding: "utf8" | "base64" }[],
+  snapshot?: WorkspaceSnapshot,
+  readScopePaths?: readonly string[],
+): TaskVisualEvidence | undefined {
+  const hasUI = changedFiles.some(isUIFrontendPath);
+  if (!hasUI || !sourceEvidence?.length) return undefined;
+  // The image is egressed to the judge as an asset, so it must be public and inside the approved read scope.
+  const candidate = sourceEvidence.find((item) =>
+    item.encoding === "base64" &&
+    typeof item.content === "string" &&
+    item.content.length > 0 &&
+    /\.(?:png|jpe?g)$/i.test(item.path) &&
+    !isPrivateEvidencePath(item.path) &&
+    (!readScopePaths || pathInScope(item.path, readScopePaths)) &&
+    (!snapshot || snapshot.files.get(item.path) === item.sha256)
+  );
+  if (!candidate) return undefined;
+  const mimeType = /\.jpe?g$/i.test(candidate.path) ? "image/jpeg" : "image/png";
+  return { imageBase64: candidate.content, mimeType };
+}
 export interface EvidenceBaselineOrigin { kind: "binding" | "first_collection"; capturedAt: string; snapshotId: string; historyCoverage: "from_capture_only" }
 export interface TaskEvidenceProvenance extends CreationProvenance {
   toolName: "typesafe_collect_evidence"; cwd: string; contractDigest: string; sourceContextDigest: string;
@@ -25,6 +51,7 @@ export interface TaskEvidenceRecord {
   packetSet: JudgeEvidencePacketSetResult; artifacts: readonly EvidenceArtifact[]; verificationReceipt?: VerificationReceipt;
   snapshot: WorkspaceSnapshot; reviewSnapshot: ReviewSnapshot; provenance: TaskEvidenceProvenance;
   sourceContext: FrozenContractSourceContext; sourceManifest: EvidencePacketSetManifest; authorizedSources: readonly TaskEvidenceSourceReference[];
+  visualEvidence?: TaskVisualEvidence;
   status: TaskEvidenceCollectionStatus; reasons: readonly string[];
 }
 export interface TaskEvidenceCollectionOutcome { status: TaskEvidenceCollectionStatus; record?: TaskEvidenceRecord; reasons: readonly string[] }
@@ -201,10 +228,12 @@ export function createTaskEvidenceRuntime(options: TaskEvidenceRuntimeOptions): 
       reports.omissions.push(...collectionOmissions);
       const snapshot = evidence.snapshot;
       if (!snapshot || typeof snapshot.treeDigest !== "string") return unavailable("COLLECTED_SOURCE_SNAPSHOT_REQUIRED");
+      const visualEvidence = detectUIVisualEvidence(evidence.changedFiles, evidence.sourceEvidence, snapshot, context.readScope);
       const packetSet = buildJudgeEvidencePacketSet({
         contract, evidence, artifacts: reports.artifacts, requiredArtifactPaths: reports.requiredPaths,
         artifactOmissions: reports.omissions, selections: params.selections,
         artifactSelection: { requiredPaths: reports.requiredPaths, outOfPacketScope: reports.outOfPacketScope, acceptedBytes: reports.artifacts.reduce((total, artifact) => total + Buffer.byteLength(artifact.content, "utf8"), 0), maxBytes: 4940 },
+        visualEvidence,
       });
       const reasons = [...new Set([...reports.omissions.map((omission) => omission.reason), ...(evidence.omissions ?? []).filter((omission) => omission.required).map((omission) => omission.reason), ...packetSet.reasons])];
       const sourceProof = (evidence.sourceEvidence?.length ?? 0) > 0 || reports.artifacts.length > 0 || evidence.gitDiff.length > 0;
@@ -216,7 +245,7 @@ export function createTaskEvidenceRuntime(options: TaskEvidenceRuntimeOptions): 
       const value: TaskEvidenceRecord = {
         id: randomUUID(), contract, baseline, evidence, packetSet, artifacts: reports.artifacts, verificationReceipt, snapshot,
         reviewSnapshot: { contractDigest: canonicalDigest(contract), evidenceDigest: sourceManifest.evidenceDigest, treeDigest: snapshot.treeDigest, testDigest: canonicalDigest(verificationReceipt ?? null), policyDigest: contract.policyDigest, parentDigest: canonicalDigest(contract.parentRequirements), childDigest: canonicalDigest([]), integrationDigest: canonicalDigest([]) },
-        sourceContext: context, sourceManifest,
+        sourceContext: context, sourceManifest, visualEvidence,
         authorizedSources: [...snapshot.files.keys()]
           .filter((file) => pathInScope(file, context.readScope) && !isPrivateEvidencePath(file) && !evidence.sourceEvidence?.some((source) => source.path === file && source.encoding === "base64"))
           .flatMap((file) => {
