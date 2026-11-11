@@ -2,3 +2,6 @@
 # regardless of the machine-wide core.autocrlf setting.
 * text=auto eol=lf
 .omp/config.yml text eol=lf
+# Frozen corpus: corpus.jsonl and protocol.json pin the SHA-256 of these exact (CRLF) bytes; never convert line endings.
+tests/fixtures/jev-paired-evaluation/consumer-*.json -text
+tests/fixtures/jev-paired-evaluation/configuration.txt -text
