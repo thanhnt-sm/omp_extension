@@ -4,8 +4,39 @@ import {
   isSolvableTechnicalFailure,
   formatAdvisorAutoRemediation,
   interceptAskCall,
-  interceptTodoCall,
+  shouldAppendAdvisorRemediation,
 } from "../src/anti-blocking-guards";
+import { createTodoLifecycleAuthority } from "../src/todo-lifecycle-authority";
+import { createTaskVerificationRuntime } from "../src/task-verification-runtime";
+import { createSemanticApprovalPolicy } from "../src/semantic-approval-policy";
+import { canonicalDigest } from "../src/task-contract-source";
+import { readonlyVerificationFixture } from "./task-verification-fixture";
+import { AdvisorHostFixture } from "./advisor-host-fixture";
+import type { HostHistoryEntry } from "../src/host-history";
+import type { ContractHistoryProjection, NativeIncarnationReference } from "../src/types/verification";
+
+/** Live todo-block authority fixture (the path interceptTodoCall used to duplicate). */
+function lifecycleFixture() {
+  const entries: HostHistoryEntry[] = [{ id: "e1", parentId: null, type: "message", message: { role: "user", content: "Task A" } }];
+  const target: NativeIncarnationReference = {
+    incarnationId: canonicalDigest("inc-A"),
+    creation: { sessionId: "sess-1", branchId: "e1", entryId: "e1", callId: "init-1" },
+    target: { phase: "Phase 1", phaseOrdinal: 0, content: "Migrate staging schema", ordinal: 0 },
+    creationKnown: true,
+  };
+  const projection: ContractHistoryProjection = {
+    sessionId: "sess-1", branchId: "e1", nativeStateReliable: true,
+    nativePhases: [{ name: "Phase 1", tasks: [{ content: "Migrate staging schema", status: "in_progress" }] }],
+    incarnations: [target], contracts: [], contractRevisions: [], debt: [], nativeSuccesses: [], nativeFailures: [], issues: [],
+  };
+  const ctx = { cwd: process.cwd(), hasUI: true, ui: { confirm: async () => true }, sessionManager: { getSessionId: () => "sess-1", getBranch: () => entries } };
+  const authority = createTodoLifecycleAuthority({
+    appendEntry(customType, data) { entries.push({ id: `e-${entries.length + 1}`, parentId: entries.at(-1)!.id, type: "custom", customType, data }); },
+    project: () => projection, hasDebt: () => false,
+  });
+  return { ctx, authority };
+}
+const handoff = { owner: "platform-team", nextAction: "Provision credentials", unblockCondition: "Credentials issued", resumeCommand: "todo unblock task=\"Migrate staging schema\"" };
 
 describe("Anti-Blocking & Anti-Spam Middleware Guards", () => {
   describe("isTechnicalImplementationQuestion", () => {
@@ -58,30 +89,53 @@ describe("Anti-Blocking & Anti-Spam Middleware Guards", () => {
       expect(result.blocked).toBe(false);
       expect(result.reason).toBeUndefined();
     });
-  });
 
-  describe("interceptTodoCall", () => {
-    test("blocks todo block operation on solvable test failures and embeds remediation descriptor", () => {
-      const result = interceptTodoCall({
-        op: "block",
-        task: "Sửa lỗi kiểm thử",
-        phase: "Pha 1",
-        reason: "bun test failed with exit code 1: 2 assertions failed",
+    test("every question is checked: harmless first + technical second is blocked", () => {
+      const result = interceptAskCall({
+        questions: [{ question: "Which logo design do you prefer?" }, { question: "Tests are failing in auth.ts. How should I fix this?" }],
       });
       expect(result.blocked).toBe(true);
-      expect(result.reason).toContain("CẤM đóng băng todo vì lỗi kiểm thử");
-      expect(result.reason).toContain("typesafe_prepare_advisor");
-      expect(result.reason).toContain("Sửa lỗi kiểm thử");
+      expect(result.reason).toContain("BLOCKED");
     });
 
-    test("allows todo block operation on genuine external blockers", () => {
-      const result = interceptTodoCall({
-        op: "block",
-        task: "Tích hợp cổng thanh toán",
-        phase: "Pha 2",
-        reason: "Chờ khách hàng bàn giao production API key",
+    test("multiple harmless questions pass; humanOwned exempts a technical later question", () => {
+      expect(interceptAskCall({ questions: [{ question: "Logo A or B?" }, { question: "Which brand colour?" }] }).blocked).toBe(false);
+      const mixed = { questions: [{ question: "Logo A or B?" }, { question: "Tests are failing, how to fix this?" }] };
+      expect(interceptAskCall(mixed, { humanOwned: true }).blocked).toBe(false);
+    });
+  });
+
+  // Live todo-block behavior (moved from the deleted dead-code interceptTodoCall): TodoLifecycleAuthority.prepare.
+  describe("live todo block authority (todo-lifecycle-authority)", () => {
+    test("refuses to park a task on a solvable test failure and points at the Advisor remediation loop", async () => {
+      const { ctx, authority } = lifecycleFixture();
+      const result = await authority.prepare(ctx, {
+        input: { op: "block", task: "Migrate staging schema", reason: "bun test failed with exit code 1: 2 assertions failed" }, handoff,
       });
-      expect(result.blocked).toBe(false);
+      expect(result.status).toBe("EVIDENCE_REQUIRED");
+      const reasons = "reasons" in result ? result.reasons.join("\n") : "";
+      expect(reasons).toContain("CẤM đóng băng todo vì lỗi kiểm thử");
+      expect(reasons).toContain("typesafe_prepare_advisor");
+    });
+
+    test("allows preparing a block for a genuine external blocker", async () => {
+      const { ctx, authority } = lifecycleFixture();
+      const result = await authority.prepare(ctx, {
+        input: { op: "block", task: "Migrate staging schema", reason: "Chờ khách hàng bàn giao production API key" }, handoff,
+      });
+      expect(result.status).toBe("PREPARED");
+    });
+  });
+
+  describe("interceptAskCall human-owned exemption", () => {
+    const technical = { questions: [{ question: "Tests are failing in auth.ts. How should I fix this?" }] };
+    test("ask about a HUMAN_REQUIRED (human-owned) task is not blocked as technical", () => {
+      expect(interceptAskCall(technical, { humanOwned: true })).toEqual({ blocked: false });
+    });
+    test("humanOwned must be an explicit true; absent or false keeps the block", () => {
+      expect(interceptAskCall(technical).blocked).toBe(true);
+      expect(interceptAskCall(technical, {}).blocked).toBe(true);
+      expect(interceptAskCall(technical, { humanOwned: false }).blocked).toBe(true);
     });
   });
 
@@ -91,6 +145,65 @@ describe("Anti-Blocking & Anti-Spam Middleware Guards", () => {
       expect(formatted).toContain("typesafe_prepare_advisor");
       expect(formatted).toContain("Xây dựng module xác thực");
       expect(formatted).toContain("decision\":\"stuck\"");
+    });
+
+    function emittedParams(): Record<string, unknown> {
+      const formatted = formatAdvisorAutoRemediation("Task A", "Phase 1", ["x"]);
+      const line = formatted.split("\n").find(entry => entry.startsWith("typesafe_prepare_advisor "))!;
+      return JSON.parse(line.slice("typesafe_prepare_advisor ".length)) as Record<string, unknown>;
+    }
+
+    test("auto-remediation hint uses consultation purpose accepted by typesafe_prepare_advisor", async () => {
+      const params = emittedParams();
+      expect(params.purpose).toBe("consultation");
+      // Tool-level: the registered tool accepts this purpose (an invented one is UNAVAILABLE) and returns a pending native task.
+      const host = new AdvisorHostFixture(); await host.start();
+      expect((await host.prepare({ purpose: "invented" }, false)).status).toBe("UNAVAILABLE");
+      expect((await host.prepare(params, false)).status).toBe("REVIEW_REQUIRED");
+      // Runtime-level: the real consultation mode prepares a draft for the hint's selector without any task proof...
+      const source = await readonlyVerificationFixture();
+      try {
+        const runtime = createTaskVerificationRuntime({ contracts: source.contracts, evidence: source.evidence, invocations: source.invocations, policyDigest: source.policyDigest,
+          approvalPolicy: createSemanticApprovalPolicy({}), getAdvisorReviews: async () => [], appendEntry: source.appendEntry,
+          createClient() { throw new Error("remediation hint preparation must not dispatch a judge"); } });
+        const selector = { ...params, task: source.task, phase: "Investigation" };
+        const consultation = await runtime.advisorServices.prepareReview(selector, source.context, "consultation");
+        expect("binding" in consultation && consultation.binding.purpose).toBe("consultation");
+        // ...whereas the purpose-less form selects task mode, which the runtime refuses without complete proof.
+        const { purpose: _omitted, ...withoutPurpose } = selector;
+        const taskMode = await runtime.advisorServices.prepareReview(withoutPurpose, source.context, "task");
+        expect("status" in taskMode && taskMode.status).toBe("EVIDENCE_REQUIRED");
+      } finally { await source.dispose(); }
+    });
+  });
+
+  describe("shouldAppendAdvisorRemediation", () => {
+    test("is appended for REJECTED and for EVIDENCE_REQUIRED that names missing criteria (a review exists)", () => {
+      expect(shouldAppendAdvisorRemediation({ status: "REJECTED" })).toBe(true);
+      expect(shouldAppendAdvisorRemediation({ status: "EVIDENCE_REQUIRED", missingCriterionIds: ["c1"] })).toBe(true);
+    });
+
+    test("remediation is not appended for UNAVAILABLE/HUMAN_REQUIRED or missing-review preflight", async () => {
+      expect(shouldAppendAdvisorRemediation({ status: "UNAVAILABLE" })).toBe(false);
+      expect(shouldAppendAdvisorRemediation({ status: "HUMAN_REQUIRED" })).toBe(false);
+      expect(shouldAppendAdvisorRemediation({ status: "EVIDENCE_REQUIRED", reviewMissing: true })).toBe(false);
+      // The runtime's real "no review yet" preflight outcome must be classified as not-appendable.
+      const source = await readonlyVerificationFixture();
+      try {
+        const runtime = createTaskVerificationRuntime({ contracts: source.contracts, evidence: source.evidence, invocations: source.invocations, policyDigest: source.policyDigest,
+          approvalPolicy: createSemanticApprovalPolicy({}), getAdvisorReviews: async () => [], appendEntry: source.appendEntry,
+          createClient() { throw new Error("preflight must not dispatch a judge"); } });
+        const outcome = await runtime.preflight(source.context, { task: source.task, phase: "Investigation" }, "done");
+        expect(outcome.status).toBe("EVIDENCE_REQUIRED");
+        expect("reviewMissing" in outcome && outcome.reviewMissing).toBe(true);
+        expect(shouldAppendAdvisorRemediation(outcome)).toBe(false);
+      } finally { await source.dispose(); }
+    });
+
+    test("post-review EVIDENCE_REQUIRED with an empty missing list (Advisor-owned recovery) still gets the hint", () => {
+      // bicameral-consensus returns EVIDENCE_REQUIRED with [] after a real review; the recovery owner is the Advisor.
+      expect(shouldAppendAdvisorRemediation({ status: "EVIDENCE_REQUIRED" })).toBe(true);
+      expect(shouldAppendAdvisorRemediation({ status: "EVIDENCE_REQUIRED", reviewMissing: false })).toBe(true);
     });
   });
 });

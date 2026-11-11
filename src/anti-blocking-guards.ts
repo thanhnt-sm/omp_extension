@@ -35,8 +35,25 @@ export function isSolvableTechnicalFailure(reason?: string): boolean {
   return solvable.some(pat => pat.test(lower));
 }
 
+/**
+ * Whether a failed `todo done` preflight should carry the Advisor auto-remediation hint.
+ * Only actionable repair/evidence outcomes qualify. The "no review exists yet" answer is
+ * discriminated explicitly by `reviewMissing` (set by task-verification-runtime preflight): its own
+ * reasons already name the next tool, and an Advisor consultation cannot help before a review exists.
+ * An EVIDENCE_REQUIRED outcome with an empty missing list but no `reviewMissing` is a post-review
+ * disposition whose recovery is Advisor-owned (task-recovery), so the hint applies. UNAVAILABLE /
+ * HUMAN_REQUIRED are owned by a service operator or a human, not by an Advisor diagnosis loop.
+ */
+export function shouldAppendAdvisorRemediation(result: { status: string; reviewMissing?: boolean }): boolean {
+  if (result.status === "REJECTED") return true;
+  return result.status === "EVIDENCE_REQUIRED" && result.reviewMissing !== true;
+}
+
 export function formatAdvisorAutoRemediation(task: string, phase?: string, reasons?: string[]): string {
+  // `purpose: "consultation"` is mandatory: without it typesafe_prepare_advisor selects task mode,
+  // which the runtime refuses until complete task proof exists (task-verification-advisor.ts).
   const params = JSON.stringify({
+    purpose: "consultation",
     decision: "stuck",
     task,
     ...(phase ? { phase } : {}),
@@ -46,47 +63,31 @@ export function formatAdvisorAutoRemediation(task: string, phase?: string, reaso
   return `[TỰ ĐỘNG CHỮA LÀNH / AUTO-REMEDIATION]: CẤM đóng băng hoặc bỏ cuộc khi gặp lỗi kiểm thử!${reasonText}\nHãy triệu hồi ngay Cố vấn Độc lập bằng lệnh:\ntypesafe_prepare_advisor ${params}\nsau đó thực thi task native được trả về để nhận kế hoạch sửa chữa toàn diện từ Advisor, sửa mã nguồn và chạy lại bun test.`;
 }
 
-/**
- * Intercepts an `ask` tool call. If the question is about technical implementation or debugging,
- * blocks the tool call and instructs the agent to consult Advisor instead.
- */
-export function interceptAskCall(input: Record<string, unknown>): { blocked: boolean; reason?: string } {
-  const firstQObj =
-    Array.isArray(input.questions) && input.questions[0] && typeof input.questions[0] === "object"
-      ? (input.questions[0] as Record<string, unknown>)
-      : undefined;
-  const primaryQuestionText =
-    (typeof firstQObj?.question === "string" ? firstQObj.question : undefined) ||
-    (typeof input.question === "string" ? input.question : undefined) ||
-    (typeof input.i === "string" ? input.i : "");
+export const TECHNICAL_ASK_BLOCK_REASON =
+  "BLOCKED: Câu hỏi liên quan đến lỗi kỹ thuật, gỡ lỗi hoặc chi tiết triển khai mã nguồn. Tác tử BẮT BUỘC phải tự động triệu hồi Advisor (typesafe_prepare_advisor) và Thẩm phán TypeSafe Jev Judge để tự phân tích và lập giải pháp, KHÔNG ĐƯỢC tra khảo người dùng.";
 
-  if (isTechnicalImplementationQuestion(primaryQuestionText)) {
-    return {
-      blocked: true,
-      reason:
-        "BLOCKED: Câu hỏi liên quan đến lỗi kỹ thuật, gỡ lỗi hoặc chi tiết triển khai mã nguồn. Tác tử BẮT BUỘC phải tự động triệu hồi Advisor (typesafe_prepare_advisor) và Thẩm phán TypeSafe Jev Judge để tự phân tích và lập giải pháp, KHÔNG ĐƯỢC tra khảo người dùng.",
-    };
+/**
+ * Single live `ask` gate (called by typesafe-planner). A technical question is blocked and the
+ * agent is redirected to the Advisor, unless the current task's verification recovery is already
+ * owned by a human (HUMAN_REQUIRED / unchanged rejection): then asking the human is the only
+ * legitimate path and blocking it would deadlock. `humanOwned` must come from host-validated
+ * recovery state, never from the ask payload.
+ */
+export function interceptAskCall(input: Record<string, unknown>, options?: { humanOwned?: boolean }): { blocked: boolean; reason?: string } {
+  // Every question is inspected: a harmless first question must not shield a technical later one.
+  const questionTexts: string[] = [];
+  if (Array.isArray(input.questions)) {
+    for (const entry of input.questions) {
+      if (entry && typeof entry === "object" && typeof (entry as Record<string, unknown>).question === "string") {
+        questionTexts.push((entry as Record<string, string>).question);
+      }
+    }
   }
-  return { blocked: false };
-}
+  if (typeof input.question === "string") questionTexts.push(input.question);
+  if (typeof input.i === "string") questionTexts.push(input.i);
 
-/**
- * Intercepts a `todo` tool call. If the operation is `block` or `drop` due to a solvable
- * technical failure, blocks the operation and forces the agent to use the healing loop.
- */
-export function interceptTodoCall(input: Record<string, unknown>): { blocked: boolean; reason?: string } {
-  const op = typeof input.op === "string" ? input.op : "";
-  const reason = typeof input.reason === "string" ? input.reason : "";
-  const task = typeof input.task === "string" ? input.task : "";
-  const phase = typeof input.phase === "string" ? input.phase : undefined;
-
-  if (op === "block" && isSolvableTechnicalFailure(reason)) {
-    return {
-      blocked: true,
-      reason:
-        `CẤM đóng băng todo vì lỗi kiểm thử hoặc thiếu cài đặt kỹ thuật.\n` +
-        formatAdvisorAutoRemediation(task, phase, [reason]),
-    };
+  if (options?.humanOwned !== true && questionTexts.some(text => isTechnicalImplementationQuestion(text))) {
+    return { blocked: true, reason: TECHNICAL_ASK_BLOCK_REASON };
   }
   return { blocked: false };
 }

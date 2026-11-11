@@ -25,6 +25,8 @@ export interface NativeTaskVerificationStage {
   readonly branchId: string;
 }
 export type TaskVerificationFailure = Exclude<VerificationOutcome, { status: "APPROVED_PENDING_COMMIT" }> & {
+  /** Set only by native preflight when no current task-bound review exists yet (nothing for an Advisor to diagnose). Absent for post-review outcomes, even with an empty missing list. */
+  reviewMissing?: true;
   nextActions?: readonly string[];
   handoff?: { owner: string; action: string; releaseCondition: string };
 };

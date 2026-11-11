@@ -149,7 +149,7 @@ export function createTaskVerificationRuntime(options: TaskVerificationRuntimeOp
     },
     async preflight(context, target, operation, signal) {
       const state = matchingReview(states, options, context, target);
-      if (operation !== "done" || signal?.aborted || !state) return { status: "EVIDENCE_REQUIRED", missingCriterionIds: [], reasons: ["A current task-bound source review and real settled Advisor receipt must exist before native preflight. Run typesafe_review_task outside this short native callback."] };
+      if (operation !== "done" || signal?.aborted || !state) return { status: "EVIDENCE_REQUIRED", missingCriterionIds: [], reviewMissing: true, reasons: ["A current task-bound source review and real settled Advisor receipt must exist before native preflight. Run typesafe_review_task outside this short native callback."] };
       const check = currentSource(context, state); currentChecks.set(state, check);
       try {
         if (!await check || signal?.aborted) return { status: "EVIDENCE_REQUIRED", missingCriterionIds: state.contract.criteria.map(criterion => criterion.id), reasons: ["Current contract/incarnation/tree/test/policy/evidence differs from the actual reviewed snapshot; no native staging."] };

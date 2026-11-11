@@ -9,6 +9,7 @@ import type { ContractHistoryProjection } from "../src/task-contract";
 import { TASK_VERIFICATION_FACTS } from "../src/task-verification-history";
 import { createHostToolInvocationRuntime } from "../src/host-tool-invocation";
 import { createSemanticApprovalPolicy } from "../src/semantic-approval-policy";
+import { approvedPreflightHarness } from "./task-verification-approved-fixture";
 
 // Offline adversarial host-history fixture only. It supplies no live provider, native success,
 // authentic contract, evidence ownership, real child receipt or native staging capability.
@@ -76,7 +77,10 @@ describe("Task verification runtime source/authority boundaries", () => {
     const review = await runtime.review(host.context, "invented-call", target);
     expect(review.status).toBe("EVIDENCE_REQUIRED");
     expect(review.nextActions?.join(" ")).toContain("actual");
-    expect((await runtime.preflight(host.context, target, "done")).status).toBe("EVIDENCE_REQUIRED");
+    const preflight = await runtime.preflight(host.context, target, "done");
+    expect(preflight.status).toBe("EVIDENCE_REQUIRED");
+    // The no-review answer is discriminated explicitly (not by an empty missing list), so post-review outcomes keep the Advisor hint.
+    expect("reviewMissing" in preflight && preflight.reviewMissing).toBe(true);
     expect(host.network()).toBe(0);
     expect(host.appended).toHaveLength(0);
   });
@@ -111,6 +115,38 @@ describe("Task verification runtime source/authority boundaries", () => {
     const runtime = createTaskVerificationRuntime(host.options);
     expect(runtime.hasDebt(host.context, "fake")).toBe(false);
     expect(await runtime.getCurrentPlanPhaseReview(host.context, "plans/investigation.md")).toBeUndefined();
+  });
+  test("approved preflight stages without createClient, test command, or advisor dispatch", async () => {
+    const harness = await approvedPreflightHarness();
+    try {
+      const before = { ...harness.counters };
+      expect(before.judgeClients).toBe(1); // the single outside-preflight M review
+      const outcome = await harness.runtime.preflight(harness.host.context, harness.target, "done");
+      expect(outcome.status, JSON.stringify(outcome)).toBe("APPROVED_PENDING_COMMIT");
+      if (outcome.status !== "APPROVED_PENDING_COMMIT") return;
+      expect(outcome.stage.target.content).toBe(harness.target.task);
+      expect(harness.counters).toEqual(before); // no new judge client, evidence collection (test command) or baseline capture
+      expect(harness.host.entries.filter(entry => entry.type === "message" && entry.message?.role === "assistant"
+        && JSON.stringify(entry.message).includes("\"name\":\"task\""))).toHaveLength(0); // no native Advisor task dispatched
+    } finally { await harness.host.dispose(); }
+  });
+  test("preflight recomputes receipt freshness; invalidated receipt after review is not staged", async () => {
+    const harness = await approvedPreflightHarness();
+    try {
+      expect((await harness.runtime.preflight(harness.host.context, harness.target, "done")).status).toBe("APPROVED_PENDING_COMMIT");
+      // The settled Advisor review disappears (host no longer reports it) after an earlier approving preflight.
+      harness.setReviews([]);
+      const stale = await harness.runtime.preflight(harness.host.context, harness.target, "done");
+      expect(stale.status).not.toBe("APPROVED_PENDING_COMMIT");
+      // A review exists here (only its Advisor receipt vanished), so this is never the "no review yet" answer.
+      expect("reviewMissing" in stale).toBe(false);
+      // A receipt that no longer validates against the bound request/snapshot is equally refused.
+      harness.setReviews([{ request: harness.review.request, receipt: { ...harness.review.receipt, assessmentDigest: "b".repeat(64) } }]);
+      expect((await harness.runtime.preflight(harness.host.context, harness.target, "done")).status).not.toBe("APPROVED_PENDING_COMMIT");
+      // Restoring the genuine settled review re-approves: freshness is recomputed on every preflight, not cached.
+      harness.setReviews([harness.review]);
+      expect((await harness.runtime.preflight(harness.host.context, harness.target, "done")).status).toBe("APPROVED_PENDING_COMMIT");
+    } finally { await harness.host.dispose(); }
   });
   test("plan phase identity includes the full approved phase criteria and master/source context", () => {
     const source = parentSource();

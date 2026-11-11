@@ -7,10 +7,10 @@ import crypto from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { readWorkspaceFile, listWorkspaceFiles } from "./src/typesafe-evidence-file.cjs";
 import { taskArtifactAssociation } from "./src/evidence-artifacts";
-import { fileMutationTargets, requestsPlanCompletion } from "./src/file-mutation-targets";
+import { astEditEntryCovers, astEditTargets, fileMutationTargets, requestsPlanCompletion } from "./src/file-mutation-targets";
 import { writeRecoveryReport } from "./src/typesafe-evidence-file.cjs";
 import type { AdvisorHostServices } from "./src/advisor-host-types";
 import { currentSourceMutationGrant, sourceMutationAllowed, sourceMutationGrantCurrent } from "./src/source-mutation-authority";
@@ -31,6 +31,7 @@ import { createTaskVerificationRuntime, type TaskVerificationRuntime, type Nativ
 import { createTodoLifecycleAuthority, type LifecyclePreparationInput } from "./src/todo-lifecycle-authority";
 import { registerAdvisorHost, type AdvisorHostAPI, type AdvisorHostExecuteContext, type AdvisorHostRegistration } from "./src/advisor-host";
 import { createProjectExclusionPolicy, projectExcludedResult } from "./src/project-exclusion-policy";
+import { selectVerificationTestAssets } from "./src/test-asset-selector";
 import type { ApprovedVerificationCommand } from "./src/verification-receipt";
 import type { SourceRetrievalRequest } from "./src/judge-evidence-packet";
 import {
@@ -45,7 +46,7 @@ import {
   type WorkspaceSnapshot,
 } from "./src/evidence-collector";
 import { clampText } from "./src/payload-safety";
-import { isTechnicalImplementationQuestion, formatAdvisorAutoRemediation } from "./src/anti-blocking-guards";
+import { interceptAskCall, formatAdvisorAutoRemediation, shouldAppendAdvisorRemediation } from "./src/anti-blocking-guards";
 import { sanitizeXmlText } from "./src/xml-enclosure";
 import {
   evaluateScopeArbiter,
@@ -190,6 +191,8 @@ interface TypeSafeJudgeParams {
   state: string | Record<string, unknown>;
   questions: Record<string, TypeSafeQuestion>;
   model?: string;
+  /** Host-verified System One images, forwarded unchanged to the API client, which re-validates format/magic bytes/size caps. */
+  assets?: Record<string, { type: "image"; format: "png" | "jpeg"; data_base64: string }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -257,7 +260,7 @@ interface EnabledResolverModule {
   resolveTypeSafeEnabled: (
     projectDir: string,
     opts?: { env?: Record<string, string | undefined>; homeDir?: string }
-  ) => { enabled: boolean; reason: string };
+  ) => { enabled: boolean; reason: string; dialect?: string; endpoint?: string; baseUrl?: string };
   resolveTypeSafeProjectExclusion: (
     projectDir: string,
     opts?: { homeDir?: string }
@@ -407,7 +410,13 @@ const PROTECTED_INTEGRITY_PATTERNS = [
   "typesafe-policy-client.cjs",
   "typesafe-redact.cjs",
   "typesafe-enabled-resolver.cjs",
+  // Workspace layer: project config can disable the ambient gate; the loader decides fail-closed behavior.
+  ".omp/config.yml",
+  "tools/omp-workspace-loader.ts",
 ];
+function isDirectoryPath(resolved: string): boolean {
+  try { return statSync(resolved).isDirectory(); } catch { return false; }
+}
 function hashToken(token: string): string {
   return crypto.createHash("sha256").update(token).digest("hex").slice(0, 16);
 }
@@ -1226,10 +1235,18 @@ export default function registerExtension(
     try {
       const allAssets = listWorkspaceFiles(cwd, "tests", { maxFiles: 10_000 });
       if (allAssets.length) {
-        const referenced = allAssets.filter(a => contract.target.content.toLowerCase().includes(path.basename(a, path.extname(a)).toLowerCase()));
-        const assets = [...new Set([...referenced, ...allAssets])].slice(0, 8);
+        let changedFiles: string[] = [];
+        try {
+          const { execFileSync } = createRequire(import.meta.url)("node:child_process");
+          const out = execFileSync("git", ["status", "--porcelain", "-uall"], { cwd, encoding: "utf8", windowsHide: true });
+          changedFiles = statusEvidencePaths(out);
+        } catch {
+          changedFiles = contract.allowedMutationScope.paths.filter(p => p !== "**");
+        }
+        const assets = selectVerificationTestAssets(cwd, allAssets, changedFiles);
+        const testCmd = `bun test --timeout 30000 ${assets.map(a => `"${a}"`).join(" ")}`;
         commands.set("workspace-tests", {
-          id: "workspace-tests", command: "bun test --only-failures", cwd, criterionIds: contract.criteria.map(criterion => criterion.id),
+          id: "workspace-tests", command: testCmd, cwd, criterionIds: contract.criteria.map(criterion => criterion.id),
           testAssetPaths: assets, timeoutMs: 300_000, kind: contract.taskKind === "implementation" ? "verification" : "diagnostic",
         });
       }
@@ -1472,7 +1489,8 @@ export default function registerExtension(
     const apiKey = resolverOptions.env.TYPESAFE_API_KEY?.trim() ?? "";
     const resolver = loadResolverModule();
     const healthPolicy = toolPolicies?.health;
-    if (!apiKey || !resolver?.resolveTypeSafeEnabled(getProjectDir(ctx), resolverOptions).enabled || !policyClient || !healthPolicy?.ok) return;
+    const resolvedWire = resolver?.resolveTypeSafeEnabled(getProjectDir(ctx), resolverOptions);
+    if (!apiKey || !resolvedWire?.enabled || !policyClient || !healthPolicy?.ok) return;
     if (loadApiClientModule()?.checkCredentialCooldown(apiKey)) {
       const skipped = "TypeSafe warning: diagnostic probe skipped while the credential is unavailable.";
       try { await Promise.resolve(context?.ui?.notify?.(skipped, "warning")); } catch { /* host UI failure never changes the skip */ }
@@ -1485,6 +1503,7 @@ export default function registerExtension(
         args: { state: "Transport availability diagnostic, not task verification.", questions: { ping: { type: "noul", instructions: "Return whether this diagnostic request was received." } }, model: "jev-latest" },
         purpose: "health", trustedPolicy: healthPolicy, apiKey, fetchImpl: globalThis.fetch,
         timeoutMs: 3000, totalBudgetMs: 3000, maxAttempts: 1,
+        dialect: resolvedWire.dialect, endpoint: resolvedWire.endpoint, baseUrl: resolvedWire.baseUrl,
       });
     } catch {
       await safeSendMessage(pi, { customType: "typesafe-health", content: "TypeSafe diagnostic implementation unavailable; no network diagnosis or task rejection is inferred.", display: true });
@@ -1583,6 +1602,20 @@ export default function registerExtension(
     }
   }
 
+  /** True only when exactly one native task is in progress and its host-recorded recovery plan is owned by a human. Read-only; any doubt returns false (keeps the ask block). */
+  function currentTaskRecoveryIsHumanOwned(ctx: unknown): boolean {
+    if (!verificationRuntime) return false;
+    try {
+      const active = (phasesFromBranch(ctx) ?? state.phases).flatMap(phase =>
+        phase.tasks.filter(task => task.status === "in_progress").map(task => ({ task: task.content, phase: phase.name })));
+      if (active.length !== 1) return false;
+      const recovery = verificationRuntime.getRecovery(ctx, active[0]);
+      return recovery?.kind === "human" && recovery.owner === "human";
+    } catch {
+      return false;
+    }
+  }
+
   function invalidateTodoState(ctx: unknown): void {
     lifecycleAuthority?.invalidate();
     evidenceRuntime?.clear(ctx);
@@ -1645,9 +1678,10 @@ export default function registerExtension(
         for (const target of targetBindings) {
           const result = await verificationRuntime.preflight(ctx, { task: target.content, phase: target.phase }, "done", currentSignal);
           if (result.status !== "APPROVED_PENDING_COMMIT") {
-          const remediation = formatAdvisorAutoRemediation(target.content, target.phase, result.reasons);
-          throw new NativeTodoGuardError(`${JSON.stringify(result)}\n${remediation}`, result);
-        }
+            // Remediation only for actionable REJECTED/EVIDENCE_REQUIRED-with-review; not no-review, UNAVAILABLE or HUMAN_REQUIRED.
+            const remediation = shouldAppendAdvisorRemediation(result) ? `\n${formatAdvisorAutoRemediation(target.content, target.phase, result.reasons)}` : "";
+            throw new NativeTodoGuardError(`${JSON.stringify(result)}${remediation}`, result);
+          }
           if (result.stage.target.phase !== target.phase || result.stage.target.phaseOrdinal !== target.phaseOrdinal
             || result.stage.target.ordinal !== target.index || result.stage.target.content !== target.content) {
             throw new NativeTodoGuardError("todo_review_target_mismatch");
@@ -1683,8 +1717,8 @@ export default function registerExtension(
   async function handleExcludedMutationGuard(event: unknown, ctx: unknown): Promise<void> {
     const evt = event && typeof event === "object" ? event as Record<string, unknown> : {};
     const toolName = typeof evt.toolName === "string" ? evt.toolName : "";
-    if (toolName !== "write" && toolName !== "edit") return;
-    const targets = fileMutationTargets(toolName, evt.input);
+    if (toolName !== "write" && toolName !== "edit" && toolName !== "ast_edit") return;
+    const targets = toolName === "ast_edit" ? astEditTargets(evt.input) : fileMutationTargets(toolName, evt.input);
     if (!targets.length) {
       const raw = evt.input && typeof evt.input === "object" ? evt.input as Record<string, unknown> : {};
       if (typeof raw.path === "string" && /^(?!file:)[a-z][a-z0-9+.-]*:\/\//i.test(raw.path)) return;
@@ -1717,8 +1751,9 @@ export default function registerExtension(
       }
       return;
     }
-    if (toolName === "write" || toolName === "edit") {
-      const targets = fileMutationTargets(toolName, evt.input);
+    if (toolName === "write" || toolName === "edit" || toolName === "ast_edit") {
+      // ast_edit only previews; its apply is a write to xd://resolve, which carries no workspace path. Its `paths` are the only guard point.
+      const targets = toolName === "ast_edit" ? astEditTargets(evt.input) : fileMutationTargets(toolName, evt.input);
       if (!targets.length) {
         const raw = evt.input && typeof evt.input === "object" ? evt.input as Record<string, unknown> : {};
         if (typeof raw.path === "string" && /^(?!file:)[a-z][a-z0-9+.-]*:\/\//i.test(raw.path)) return;
@@ -1728,6 +1763,7 @@ export default function registerExtension(
       const bundleRoot = fileURLToPath(new URL(".", import.meta.url));
       const protectedSources = new Set(["typesafe-planner.ts", ...listWorkspaceFiles(bundleRoot, "src", { maxFiles: 10_000 }),
         ...listWorkspaceFiles(bundleRoot, "tools", { maxFiles: 10_000 })]);
+      const protectedAbsolute = [...protectedSources, ...PROTECTED_INTEGRITY_PATTERNS].map(entry => path.resolve(bundleRoot, entry));
       const direct = contracts && !state.stagedCalls.size ? currentSourceMutationGrant(contracts, ctx, cwd, policyDigest) : undefined;
       const delegated = await advisorRegistration?.delegatedMutationScope(ctx as AdvisorHostExecuteContext);
       for (const target of targets) {
@@ -1752,8 +1788,15 @@ export default function registerExtension(
         if (deployedRelative && !path.isAbsolute(deployedRelative) && !deployedRelative.split(path.sep).includes("..")) {
           throw new NativeTodoGuardError("Direct active deployment writes are prohibited; use the reviewed managed sync transaction.");
         }
-        const protectedFile = protectedSources.has(relative) || PROTECTED_INTEGRITY_PATTERNS.some(pattern =>
-          baseName === pattern.toLowerCase() || normalized.toLowerCase().endsWith("/" + pattern.toLowerCase()));
+        // Windows ignores trailing dots/spaces, and ":" after the drive prefix is an NTFS alternate data stream (config.yml::$DATA): both alias a protected file.
+        const alternateStream = normalized.replace(/^[a-z]:/i, "").includes(":");
+        const matchPath = normalized.toLowerCase().replace(/[. ]+$/, "");
+        const matchBase = path.basename(matchPath);
+        const protectedRelative = relative.replace(/[. ]+$/, "");
+        // Absolute comparison: a cwd-relative entry from an unrelated project must not be matched against bundle-relative names.
+        const coversProtected = toolName === "ast_edit" && astEditEntryCovers(target.path, target.broad !== true && isDirectoryPath(resolved), protectedAbsolute, cwd);
+        const protectedFile = alternateStream || coversProtected || protectedSources.has(protectedRelative) || PROTECTED_INTEGRITY_PATTERNS.some(pattern =>
+          matchBase === pattern.toLowerCase() || matchPath.endsWith("/" + pattern.toLowerCase()));
         const operation = target.operation === "modify" && !existsSync(resolved) ? "create" : target.operation;
         if (protectedFile && !sourceMutationAllowed(direct, cwd, target.path, operation)
           && !sourceMutationAllowed(delegated, cwd, target.path, operation)) {
@@ -1766,16 +1809,9 @@ export default function registerExtension(
     // Human Decision Interception: Automatically evaluate any decision/question before it reaches the human
     if (toolName === "ask") {
       const params = (evt.params || evt.args || evt.input || {}) as Record<string, unknown>;
-      const firstQ = Array.isArray(params.questions) && params.questions[0] && typeof params.questions[0] === "object"
-        ? (params.questions[0] as Record<string, unknown>) : undefined;
-      const qText = (typeof firstQ?.question === "string" ? firstQ.question : undefined) ||
-        (typeof params.question === "string" ? params.question : undefined) ||
-        (typeof params.i === "string" ? params.i : "");
-      if (isTechnicalImplementationQuestion(qText)) {
-        throw new NativeTodoGuardError(
-          "BLOCKED: Câu hỏi liên quan đến lỗi kỹ thuật, gỡ lỗi hoặc chi tiết triển khai mã nguồn. Tác tử BẮT BUỘC phải tự động triệu hồi Advisor (typesafe_prepare_advisor) và Thẩm phán TypeSafe Jev Judge để tự phân tích và lập giải pháp, KHÔNG ĐƯỢC tra khảo người dùng."
-        );
-      }
+      // Single shared gate; exempt only when the sole in-progress task's host-validated recovery owner is human.
+      const askGate = interceptAskCall(params, { humanOwned: currentTaskRecoveryIsHumanOwned(ctx) });
+      if (askGate.blocked) throw new NativeTodoGuardError(askGate.reason ?? "BLOCKED");
       const apiKey = resolverOptions.env.TYPESAFE_API_KEY?.trim() || "";
       const resolverModule = loadResolverModule();
       const projectDir = getProjectDir(ctx);
@@ -2085,7 +2121,8 @@ export default function registerExtension(
   ): Promise<ExtensionToolResult> {
     if (ctx && isProjectExcluded(ctx)) return projectExcludedResult();
     const resolver = loadResolverModule();
-    if (!resolver?.resolveTypeSafeEnabled(getProjectDir(ctx), resolverOptions).enabled) return DISABLED_RESULT;
+    const resolvedWire = resolver?.resolveTypeSafeEnabled(getProjectDir(ctx), resolverOptions);
+    if (!resolvedWire?.enabled) return DISABLED_RESULT;
     const credentialStatus = loadApiClientModule()?.checkCredentialCooldown(apiKey);
     if (credentialStatus) return credentialStatus.authFailed ? DISABLED_RESULT : shortError(`http_${credentialStatus.status}`);
     const boundPolicy = toolPolicies?.[purpose];
@@ -2102,6 +2139,9 @@ export default function registerExtension(
       homeDir: resolverOptions.homeDir,
       signal,
       fetchImpl: globalThis.fetch,
+      dialect: resolvedWire.dialect,
+      endpoint: resolvedWire.endpoint,
+      baseUrl: resolvedWire.baseUrl,
       ...(artifacts === undefined && !validatePrepared ? {} : {
         async validatePrepared(prepared: TypeSafePreparedRequest) {
           if (artifacts !== undefined) {
