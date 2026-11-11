@@ -11,7 +11,9 @@ const ASSERTION = /(?:expect\s*\(|assert(?:\s*\.\s*[a-zA-Z]+)?\s*\()/;
 const SUITE = /(?:describe|it|test)\s*\(/;
 const SKIPPED_SUITE = /(?<![\p{ID_Continue}$])(?:(?:describe|it|test)\s*\.\s*(?:skip|todo)\s*\(|(?:xdescribe|xit|xtest)\s*\()/u;
 const COMMENTED_ASSERTION = /^\s*(?:\/\/|\/\*|\*)\s*.*(?:expect\s*\(|assert(?:\s*\.\s*[a-zA-Z]+)?\s*\()/;
-const LITERAL = /(?:true|false|0|1|"(?:\\.|[^"])*"|'(?:\\.|[^'])*')/;
+// Operands whose self-comparison is always true: any number, null/undefined/booleans, string literals,
+// and a bare identifier or member path (`x`, `a.b`). Calls are excluded: `f()` vs `f()` can legitimately differ.
+const LITERAL = /(?:-?\d+(?:\.\d+)?|"(?:\\.|[^"])*"|'(?:\\.|[^'])*'|[A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*)/;
 const TAUTOLOGY = new RegExp(
   String.raw`expect\s*\(\s*(${LITERAL.source})\s*\)\s*\.\s*(?:toBe|toEqual|toStrictEqual)\s*\(\s*\1\s*\)`
 );

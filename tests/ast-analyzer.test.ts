@@ -73,6 +73,21 @@ describe("AST Analyzer - Test Evasion Prevention", () => {
     expect(result.issues).toContain("Detected trivial tautology assertion (e.g., expect(true).toBe(true)).");
   });
 
+  test("Tautologies over any number, null, or the same identifier are flagged", () => {
+    for (const added of ["expect(2).toBe(2);", "expect(-3.5).toEqual(-3.5);", "expect(null).toBe(null);", "expect(x).toBe(x);", "expect(result.value).toStrictEqual(result.value);"]) {
+      const result = analyzeDiffForTestEvasion(`\n@@ -15,2 +15,3 @@\n   const x = 1;\n+  ${added}\n`);
+      expect(result.isSafe).toBe(false);
+      expect(result.issues).toContain("Detected trivial tautology assertion (e.g., expect(true).toBe(true)).");
+    }
+  });
+
+  test("Non-identical operands are not tautologies", () => {
+    for (const added of ["expect(1).toBe(10);", "expect(x).toBe(xy);", "expect(a.b).toBe(a.c);", "expect(f()).toBe(f());", "expect(result).toBe(expected);"]) {
+      const result = analyzeDiffForTestEvasion(`\n@@ -15,2 +15,3 @@\n   const x = 1;\n+  ${added}\n`);
+      expect(result.issues).not.toContain("Detected trivial tautology assertion (e.g., expect(true).toBe(true)).");
+    }
+  });
+
   test("Legitimate test additions pass", () => {
     const diff = `
 @@ -15,2 +15,3 @@
