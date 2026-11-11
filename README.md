@@ -68,7 +68,7 @@ flowchart TB
 6. **Thẩm phán Nguyên tử Đánh giá Vi hạt (`Atomic TypeSafe Jev Judge`)**:
    - Chia nhỏ bài toán kiểm chứng thành các vị từ vi hạt độc lập qua `src/atomic-judge.ts`, `src/atomic-decision-policy.ts` và `src/atomic-parent.ts`, loại bỏ hiện tượng sai lệch cộng dồn và hỗ trợ chính sách đánh giá thế giới đóng/mở.
 7. **Quản trị Kế hoạch & Sổ cái Trung tâm Chuẩn ClaudeKit (`ck:project-manager`)**:
-   - Bộ công cụ `tools/ck-project-manager.cjs` đảm bảo tính kế thừa bất biến qua các phiên làm việc, tự động đối soát ngược (Sync-Back Guard), phân biệt stubs và tiêu chí chức năng, duy trì trạng thái hoàn tất 100% (41/41 plans) tại `plans/plan-ledger.json` và `plans/README.md`.
+   - Bộ công cụ `tools/ck-project-manager.cjs` đảm bảo tính kế thừa bất biến qua các phiên làm việc, tự động đối soát ngược (Sync-Back Guard), phân biệt stubs và tiêu chí chức năng, duy trì sổ cái trạng thái plan (id lấy từ tên thư mục `plans/<id>/plan.md`) tại `plans/plan-ledger.json` và `plans/README.md`.
 ---
 
 ## ⚡ Bắt đầu Nhanh & Vận hành One-Click (Quick Start)
