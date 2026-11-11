@@ -8,6 +8,7 @@
     "test": "bun test",
     "verify:global": "bun tools/verify-omp-global.cjs",
     "verify:live": "bun tools/verify-omp-global.cjs --live",
+    "verify:workspace": "bun tools/verify-omp-workspace.cjs",
     "sync:dry-run": "bun tools/sync-baseline.cjs --dry-run",
     "sync:global": "bun tools/sync-baseline.cjs",
     "oneclick": "powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File ./tools/oneclick-omp.ps1",

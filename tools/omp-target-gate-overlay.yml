@@ -1,0 +1,4 @@
+# Overlay: run the deployed target gate from the repo root (omp --config tools/omp-target-gate-overlay.yml).
+# Empty arrays replace the project `.omp/config.yml` arrays, so the global (deployed) loader is used.
+extensions: []
+disabledExtensions: []

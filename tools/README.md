@@ -39,3 +39,18 @@ powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File .\tools\promote-omp
 ```
 
 After `DEPLOYED_VERIFIED`, restart OMP. A restarted isolated native scratch-session smoke remains the P6 runtime-proof requirement.
+
+## Lớp Không gian làm việc (Workspace Layer)
+
+Các tệp dưới đây cho phép `omp` khởi động tại gốc kho chạy cấu hình toàn cục cộng với mã đang phát triển, trước khi thăng cấp. Chúng **không** ghi vào `~/.omp` và **không** thay thế `sync-baseline.cjs`. Quyết định: `docs/decisions/ADR-20261106-workspace-layer-fail-closed-loader.md`.
+
+- **`omp-workspace-loader.ts`**: bộ nạp thất bại-đóng (Fail-Closed Loader) được `.omp/config.yml` tham chiếu. Nhập động `typesafe-planner.ts` bằng URL tính toán (không thẻ `?mtime`) rồi gọi `.default(pi)`. Khi lỗi, chặn mọi công cụ ngoài danh sách chỉ-đọc cục bộ (`read`, `grep`, `glob`, `find`, `ast_grep`; mọi `path`/`paths` chứa `://` bị từ chối) và đưa lỗi ra `ui.notify`, thông điệp `typesafe-workspace-loader-error` và `stderr`.
+- **`omp-target-gate-overlay.yml`**: lối thoát ổn định (Escape Hatch). Chạy `omp --config tools/omp-target-gate-overlay.yml` tại gốc kho để dùng cổng **đã triển khai**; dùng khi cổng không gian làm việc hỏng, và để lấy bằng chứng nạp mã sau thăng cấp.
+- **`verify-omp-workspace.cjs`** (cùng `verify-omp-workspace-lib.cjs`, `verify-omp-workspace-runtime.cjs`): `bun run verify:workspace [--runtime] [--json]`. Mặc định ngoại tuyến và chỉ đọc. `--runtime` khởi động `omp` RPC hai lần và có thể gọi HTTP kiểm tra sức khỏe một lần mỗi lần khởi động. Mã thoát: `0` đạt, `1` kiểm tra hỏng, `2` sai cách dùng hoặc chạy ở đích triển khai.
+
+`.omp/config.yml` chỉ tồn tại ở không gian làm việc và không được đồng bộ sang đích; các tệp trong `tools/` ở trên thì có.
+
+Ảnh hưởng tới công cụ khác:
+
+- `native-judge-launch.cjs` kế thừa thư mục hiện tại (`cwd: process.cwd()`): chạy từ gốc kho dùng mã không gian làm việc, chạy từ nơi khác dùng mã đã triển khai.
+- `todo-remediation-smoke.ts` khởi động `omp` với `--cwd` là thư mục tạm cùng `--no-extensions -e <typesafe-planner.ts>` nên không nạp `.omp/config.yml` và không bị ảnh hưởng.

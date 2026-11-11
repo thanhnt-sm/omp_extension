@@ -1,0 +1,4 @@
+disabledExtensions:
+  - extension-module:typesafe-planner
+extensions:
+  - ./tools/omp-workspace-loader.ts
