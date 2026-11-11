@@ -1,8 +1,8 @@
 # Bảng Theo Dõi Kế Hoạch & Tiến Độ (ClaudeKit Project Plan Ledger)
 
 > **Tiêu chuẩn (Standard):** Tuân thủ `ck:project-management` (Sync-Back Guard) và `ck:project-organization` (Lineage & Inheritance Pattern).  
-> **Cập nhật lần cuối (Last Updated):** 2026-11-02  
-> **Tổng số kế hoạch (Total Plans):** 41 | **Đã hoàn thành (Completed):** 41 | **Đang thực hiện (In-Progress):** 0 | **Chờ xử lý (Pending):** 0
+> **Cập nhật lần cuối (Last Updated):** 2026-11-11  
+> **Tổng số kế hoạch (Total Plans):** 37 | **Đã hoàn thành (Completed):** 36 | **Đang thực hiện (In-Progress):** 1 | **Chờ xử lý (Pending):** 0
 
 ---
 
@@ -53,11 +53,7 @@
 | [`261019-research-to-cook-execution`](./261019-research-to-cook-execution/plan.md) | Complete TypeSafe Research Implementation and Atomic Advisor Execution | ✅ **Completed** | [7/7] | [75/75] (10 pha) |
 | [`261027-native-omp-judge-typesafe-migration`](./261027-native-omp-judge-typesafe-migration/plan.md) | Cài Jev vào judge bản địa OMP rồi di chuyển các đánh giá nguyên tử | ✅ **Completed** | [0/0] | [20/20] (5 pha) |
 | [`261102-atomic-judge-proactive-advisor-healing`](./261102-atomic-judge-proactive-advisor-healing/plan.md) | Thẩm phán Nguyên tử Jev, Cố vấn Chữa lành Tự động & Chốt chặn Middleware Chống Treo Todo | ✅ **Completed** | [0/0] | [12/12] (4 pha) |
-| [`omp_extension`](./omp_extension/plan.md) | JEV session forensics across workspaces | ✅ **Completed** | [0/0] | — |
-| [`omp_extension`](./omp_extension/plan.md) | Judge Baseline Audit & Implementation Plan | ✅ **Completed** | [0/0] | — |
-| [`omp_extension`](./omp_extension/plan.md) | Judge Baseline Audit — đặc tả triển khai Gemini 4 / ck:cook / TDD | ✅ **Completed** | [0/0] | — |
-| [`omp_extension`](./omp_extension/plan.md) | Kế hoạch Rà soát, Sửa lỗi Cú pháp và Chuẩn hóa Trực quan Toàn bộ Sơ đồ Mermaid v11 theo Chuẩn UI/UX Pro Max | ✅ **Completed** | [0/0] | — |
-| [`omp_extension`](./omp_extension/plan.md) | TypeSafe Extension: Fix Red-Team Residuals, Upgrade Evidence Performance, Verify Judge/JEV, Close Every Todo | ✅ **Completed** | [15/15] | — |
+| [`261103-unified-judge-jev-standardization`](./261103-unified-judge-jev-standardization/plan.md) | Chuẩn hóa & Triển khai Kiến trúc Thống nhất Vòng lặp Tự trị Tam giác Đa tầng (Autonomous Triad Unified Architecture) theo ADR-13 | 🔄 *In-Progress* | [2/6] | [31/41] (5 pha) |
 
 ---
 *Được tự động sinh bởi `tools/ck-project-manager.cjs`.*

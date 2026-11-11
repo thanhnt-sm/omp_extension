@@ -1,10 +1,10 @@
 {
   "schemaVersion": "2.0.0",
   "standard": "ck:project-management & ck:project-organization",
-  "generatedAt": "2026-11-02T09:04:28.374Z",
-  "totalPlans": 41,
-  "completedCount": 41,
-  "inProgressCount": 0,
+  "generatedAt": "2026-11-11T15:03:56.183Z",
+  "totalPlans": 37,
+  "completedCount": 36,
+  "inProgressCount": 1,
   "pendingCount": 0,
   "plans": [
     {
@@ -1448,144 +1448,50 @@
       "isCompleted": true
     },
     {
-      "id": "omp_extension",
-      "path": "JEV_SESSION_FORENSICS_PLAN_JEV_PLAN.md",
-      "directory": "",
-      "title": "JEV session forensics across workspaces",
-      "status": "completed",
+      "id": "261103-unified-judge-jev-standardization",
+      "path": "plans/261103-unified-judge-jev-standardization/plan.md",
+      "directory": "plans/261103-unified-judge-jev-standardization",
+      "title": "Chuẩn hóa & Triển khai Kiến trúc Thống nhất Vòng lặp Tự trị Tam giác Đa tầng (Autonomous Triad Unified Architecture) theo ADR-13",
+      "status": "in-progress",
       "priority": "P1",
-      "effort": "completed",
+      "effort": "5 phases",
       "frontmatter": {
-        "title": "JEV session forensics across workspaces",
-        "status": "completed",
+        "title": "Chuẩn hóa & Triển khai Kiến trúc Thống nhất Vòng lặp Tự trị Tam giác Đa tầng (Autonomous Triad Unified Architecture) theo ADR-13",
+        "description": "Kế hoạch tổng lực triển khai và cutover toàn bộ các giải pháp nghiên cứu từ ADR-13: Hỗ trợ đa dialect System One (OpenRouter/Cloudflare), Box Question thị giác, Động cơ điều phối đa tầng (Preflight 0ms -> Macro M -> Atomic H -> Proactive Advisor), kiểm thử TDD toàn diện và xác minh 6 tầng toàn cầu.",
+        "status": "in-progress",
         "priority": "P1",
-        "effort": "completed",
-        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
-        "completedInCycle": "2026-11-02",
-        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
+        "effort": "5 phases",
+        "branch": "master",
+        "tags": [
+          "typesafe-jev",
+          "native-judge",
+          "multi-dialect",
+          "box-primitive",
+          "unified-triad",
+          "proactive-advisor",
+          "tdd"
+        ],
+        "blockedBy": [],
+        "blocks": [],
+        "created": "2026-11-03",
+        "verificationSuite": "tests/box-primitive.test.ts, tests/visual-evidence-*.test.ts, tests/task-verification-runtime.test.ts, tests/anti-blocking-middleware.test.ts, tests/h-authority-boundary.test.ts"
       },
       "planCheckboxes": {
-        "checked": 0,
-        "unchecked": 0
+        "checked": 2,
+        "unchecked": 4
       },
       "phaseCheckboxes": {
-        "checked": 0,
-        "unchecked": 0
+        "checked": 31,
+        "unchecked": 10
       },
-      "phaseFiles": [],
-      "isCompleted": true
-    },
-    {
-      "id": "omp_extension",
-      "path": "JUDGE_BASELINE_AUDIT_PLAN.md",
-      "directory": "",
-      "title": "Judge Baseline Audit & Implementation Plan",
-      "status": "completed",
-      "priority": "P1",
-      "effort": "completed",
-      "frontmatter": {
-        "title": "Judge Baseline Audit & Implementation Plan",
-        "status": "completed",
-        "priority": "P1",
-        "effort": "completed",
-        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
-        "completedInCycle": "2026-11-02",
-        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
-      },
-      "planCheckboxes": {
-        "checked": 0,
-        "unchecked": 0
-      },
-      "phaseCheckboxes": {
-        "checked": 0,
-        "unchecked": 0
-      },
-      "phaseFiles": [],
-      "isCompleted": true
-    },
-    {
-      "id": "omp_extension",
-      "path": "JUDGE_BASELINE_COOK_PLAN.md",
-      "directory": "",
-      "title": "Judge Baseline Audit — đặc tả triển khai Gemini 4 / ck:cook / TDD",
-      "status": "completed",
-      "priority": "P1",
-      "effort": "completed",
-      "frontmatter": {
-        "title": "Judge Baseline Audit — đặc tả triển khai Gemini 4 / ck:cook / TDD",
-        "status": "completed",
-        "priority": "P1",
-        "effort": "completed",
-        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
-        "completedInCycle": "2026-11-02",
-        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
-      },
-      "planCheckboxes": {
-        "checked": 0,
-        "unchecked": 0
-      },
-      "phaseCheckboxes": {
-        "checked": 0,
-        "unchecked": 0
-      },
-      "phaseFiles": [],
-      "isCompleted": true
-    },
-    {
-      "id": "omp_extension",
-      "path": "MERMAID_UI_UX_OVERHAUL_PLAN.md",
-      "directory": "",
-      "title": "Kế hoạch Rà soát, Sửa lỗi Cú pháp và Chuẩn hóa Trực quan Toàn bộ Sơ đồ Mermaid v11 theo Chuẩn UI/UX Pro Max",
-      "status": "completed",
-      "priority": "P1",
-      "effort": "completed",
-      "frontmatter": {
-        "title": "Kế hoạch Rà soát, Sửa lỗi Cú pháp và Chuẩn hóa Trực quan Toàn bộ Sơ đồ Mermaid v11 theo Chuẩn UI/UX Pro Max",
-        "status": "completed",
-        "priority": "P1",
-        "effort": "completed",
-        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
-        "completedInCycle": "2026-11-02",
-        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
-      },
-      "planCheckboxes": {
-        "checked": 0,
-        "unchecked": 0
-      },
-      "phaseCheckboxes": {
-        "checked": 0,
-        "unchecked": 0
-      },
-      "phaseFiles": [],
-      "isCompleted": true
-    },
-    {
-      "id": "omp_extension",
-      "path": "TYPESAFE_REVIEW_FIX_JEV_TEST_PLAN.md",
-      "directory": "",
-      "title": "TypeSafe Extension: Fix Red-Team Residuals, Upgrade Evidence Performance, Verify Judge/JEV, Close Every Todo",
-      "status": "completed",
-      "priority": "P1",
-      "effort": "completed",
-      "frontmatter": {
-        "title": "TypeSafe Extension: Fix Red-Team Residuals, Upgrade Evidence Performance, Verify Judge/JEV, Close Every Todo",
-        "status": "completed",
-        "priority": "P1",
-        "effort": "completed",
-        "supersededBy": "261102-atomic-judge-proactive-advisor-healing",
-        "completedInCycle": "2026-11-02",
-        "verificationSuite": "tests/atomic-jev-judge.test.ts, tests/proactive-advisor-dispatch.test.ts"
-      },
-      "planCheckboxes": {
-        "checked": 15,
-        "unchecked": 0
-      },
-      "phaseCheckboxes": {
-        "checked": 0,
-        "unchecked": 0
-      },
-      "phaseFiles": [],
-      "isCompleted": true
+      "phaseFiles": [
+        "phase-01-multi-provider-wire-support.md",
+        "phase-02-box-primitive-and-visual-evidence.md",
+        "phase-03-unified-triad-runtime-escalation.md",
+        "phase-04-tdd-edge-case-scenarios.md",
+        "phase-05-sync-baseline-and-global-verification.md"
+      ],
+      "isCompleted": false
     }
   ]
 }
